@@ -128,6 +128,19 @@ Ignore `data/`, compiled binary, IDE files, OS files.
 
 4. **Database driver name**: `modernc.org/sqlite` registers as driver `"sqlite"` (not `"sqlite3"`). The import is `_ "modernc.org/sqlite"` and open call is `sql.Open("sqlite", dbPath)`.
 
+## Future: Automated Deployment
+
+Currently deployment is manual — build locally, copy binary via `scp`, restart the service.
+The goal is to automate this so a push to `main` triggers a deploy to EC2 automatically.
+
+**Planned approach:** GitHub Actions workflow that:
+1. Builds the binary (`go build -o go-full-stack .`)
+2. Copies it to EC2 via `scp` (using a stored SSH key secret)
+3. SSHs in and runs `sudo systemctl restart go-full-stack`
+
+This requires adding an SSH private key as a GitHub Actions secret and is straightforward
+to add once it becomes a requirement.
+
 ## Verification
 
 1. Run `go build -o go-full-stack .` — should compile without errors
