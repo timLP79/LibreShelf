@@ -14,7 +14,7 @@ This survey compares three different full-stack web development stacks as altern
 ## Stack 1: Go + Gin (My Choice for Final Project)
 
 ### Backend Language
-**Go 1.22+**
+**Go 1.24+**
 - Statically-typed, compiled language developed by Google
 - Built-in concurrency support with goroutines
 - Fast compilation and execution

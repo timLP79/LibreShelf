@@ -27,7 +27,7 @@ This is a solo developer project.
 
 ## Project Status
 
-**Current Sprint:** Sprint 1 - Foundation (Week 1-2)
+**Current Sprint:** Week 6 - Deployment
 
 **Completed Milestones:**
 - ✅ Milestone 1: Hello World App ([Issue #1](https://github.com/timLP79/cs408-go-stack/issues/1))
@@ -45,7 +45,7 @@ This is a solo developer project.
 - Issue #9: Write unit tests for database layer
 - Issue #4: Add database integration (SQLite)
 
-**Overall Progress:** 2/11 issues completed
+**Overall Progress:** 8/17 issues completed
 
 ## Documentation Directory
 
@@ -98,12 +98,14 @@ This is a solo developer project.
 
 ## Sprint Plan
 
-### Sprint 1: Foundation (Week 1-2) 🔵 CURRENT
+### Sprint 1: Foundation (Week 1-2) ✅ COMPLETE
 **Focus:** Get basic web app working with styling
 - [x] Issue #1: ✅ Hello World App (COMPLETE)
 - [x] Issue #8: ✅ Set up testing infrastructure (COMPLETE)
+- [x] Issue #12: ✅ Add automated test for index route (COMPLETE)
+- [x] Issue #3: ✅ Enhance templates with Bootstrap styling (COMPLETE)
+- [x] Issue #13: ✅ Integrate Bootstrap 5 styling (COMPLETE)
 - [ ] Issue #2: Add static file serving (Priority: High)
-- [ ] Issue #3: Enhance templates with Bootstrap styling
 - [ ] Issue #7: Add error page template
 
 ### Sprint 2: Database (Week 3)
@@ -120,6 +122,11 @@ This is a solo developer project.
 **Focus:** Complete the application
 - [ ] Issue #6: Create todo list UI page
 - [ ] Issue #11: Add end-to-end testing (Optional)
+
+### Week 6: Deployment 🔵 CURRENT
+**Focus:** Deploy app to EC2
+- [x] Issue #16: ✅ Deploy app to Ubuntu EC2 with systemd and nginx (COMPLETE)
+- [ ] Issue #17: Automate deployment via GitHub Actions (Future)
 
 ## GitHub Labels
 
@@ -182,7 +189,7 @@ go-full-stack/
 1. Clone the repository:
    ```bash
    git clone <your-repo-url>
-   cd go-full-stack
+   cd cs408-go-stack
    ```
 
 2. Install dependencies:
