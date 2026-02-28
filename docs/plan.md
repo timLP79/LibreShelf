@@ -1,153 +1,255 @@
-# Plan: Rebuild Full-Stack Starter in Go
+# Plan: LibreShelf — Library Management System
+
+## Overview
+
+LibreShelf is a self-hostable library management system built for CS408 Spring 2026.
+It replaces the earlier Hello World / todo-app demo and uses the same proven tech stack
+and deployment infrastructure.
+
+LibreShelf lets a small library (school, office, personal collection) manage books,
+patrons, and loans through a simple web UI. A kiosk mode allows self-service check-in
+and check-out with real-time availability updates.
+
+---
 
 ## Tech Stack
 
-| Layer | Original (Node.js) | Go Replacement |
-|-------|-------------------|----------------|
-| Framework | Express.js | **Gin** (`github.com/gin-gonic/gin`) |
-| Templating | EJS + express-ejs-layouts | **Go `html/template`** with layout pattern |
-| Database | better-sqlite3 | **modernc.org/sqlite** (pure Go, no CGo) |
-| CSS | Bootstrap 5 CDN | Same (no change) |
-| Static files | `express.static()` | `gin.Static()` / `gin.StaticFile()` |
+| Layer | Technology |
+|-------|-----------|
+| Language | **Go 1.24** |
+| Web framework | **Gin** (`github.com/gin-gonic/gin`) |
+| Templating | **Go `html/template`** with layout pattern |
+| Database | **SQLite** via `modernc.org/sqlite` (pure Go, no CGo) |
+| CSS | **Bootstrap 5** (CDN) |
+| Deployment | **EC2 + systemd + nginx** |
+| CI | **GitHub Actions** |
 
-## Target Directory Structure
+---
+
+## Routes
+
+| Route | Page | Description |
+|-------|------|-------------|
+| `GET /` | Dashboard | Stats, recent activity, quick-add book |
+| `GET /catalog` | Catalog | Searchable/filterable book list |
+| `GET /books/:id` | Book Detail | Book info, availability, loan history |
+| `GET /patrons` | Patrons | Patron list and management |
+| `GET /admin` | Admin | Settings, ZIP export/import |
+| `GET /kiosk` | Kiosk | Self-service check-in / check-out |
+
+---
+
+## Database Schema
+
+```sql
+CREATE TABLE books (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    isbn TEXT,
+    cover_url TEXT,
+    published_year INTEGER,
+    available INTEGER DEFAULT 1  -- boolean: 0 or 1
+);
+
+CREATE TABLE authors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL
+);
+
+CREATE TABLE book_authors (
+    book_id INTEGER REFERENCES books(id),
+    author_id INTEGER REFERENCES authors(id),
+    PRIMARY KEY (book_id, author_id)
+);
+
+CREATE TABLE patrons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT
+);
+
+CREATE TABLE loans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_id INTEGER REFERENCES books(id),
+    patron_id INTEGER REFERENCES patrons(id),
+    checked_out_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    due_date DATETIME,
+    returned_at DATETIME
+);
+```
+
+---
+
+## Directory Structure
 
 ```
 go-full-stack/
-├── main.go              # Entry point: config, router, template loading, server
-├── db.go                # DatabaseManager struct + all 10 helper methods
-├── handlers.go          # HTTP handler functions (HandleIndex, HandleNotFound)
+├── main.go                    # Entry point: router, template loading, middleware, server
+├── db.go                      # DatabaseManager: schema creation + all CRUD methods
+├── handlers.go                # HTTP handler functions for all 6 pages
+├── handlers_books.go          # Book-specific handlers (catalog, detail, CRUD)
+├── handlers_patrons.go        # Patron handlers
+├── handlers_loans.go          # Loan/kiosk handlers + SSE endpoint
+├── handlers_admin.go          # Admin handlers (ZIP export, import, Open Library proxy)
 ├── templates/
-│   ├── layout.html      # Base layout (replaces layout.ejs)
-│   ├── index.html       # Landing page content block
-│   └── error.html       # Error page content block
+│   ├── layout.html            # Base layout with nav (Dashboard, Catalog, Patrons, Admin, Kiosk)
+│   ├── index.html             # Dashboard page
+│   ├── catalog.html           # Book catalog list
+│   ├── book_detail.html       # Single book view
+│   ├── patrons.html           # Patron list
+│   ├── admin.html             # Admin panel
+│   ├── kiosk.html             # Kiosk check-in/out
+│   └── error.html             # 404/500 error page
 ├── static/
-│   ├── lab0.html        # Copied from original
-│   ├── favicon.svg      # Copied from original
-│   ├── images/
-│   │   └── dependency_2x.png
+│   ├── stylesheets/
+│   │   └── style.css          # Custom styles (minimal, Bootstrap handles most)
 │   ├── javascripts/
-│   │   └── myscript.js
-│   └── stylesheets/
-│       ├── style.css
-│       └── lab0.css
+│   │   └── app.js             # Client JS (SSE listener for availability updates)
+│   ├── images/
+│   └── favicon.svg
+├── scripts/
+│   ├── install.sh             # EC2 install script
+│   └── configure.sh           # EC2 configure script
+├── deploy/
+│   └── go-full-stack.service  # systemd unit
+├── docs/
+│   ├── plan.md                # This file
+│   └── week6/deployment.md    # EC2 + nginx + systemd deployment guide
 ├── go.mod
 ├── go.sum
 └── .gitignore
 ```
 
-## Implementation Steps
+---
 
-### Step 1: Project skeleton
+## Checkpoint Plan
 
-- Run `go mod init go-full-stack` in the `go-full-stack/` directory
-- Run `go get github.com/gin-gonic/gin` and `go get modernc.org/sqlite`
-- Create directory structure: `templates/`, `static/`, `static/images/`, `static/javascripts/`, `static/stylesheets/`
+### CP1 — Project Skeleton: Routes, Nav, Schema
+**Goal:** Working skeleton with all 6 routes returning placeholder pages; DB schema created on startup.
 
-### Step 2: Copy static assets verbatim
+- Add all 6 routes to `main.go`
+- Update `templates/layout.html` with nav links to all 6 pages
+- Create placeholder templates for all pages (including `error.html`)
+- Implement LibreShelf schema (5 tables) in `db.go`
+- Add stub handlers in `handlers.go`
 
-Copy these files from the original app unchanged:
+**Verification:**
+- `go build -o go-full-stack .` compiles cleanly
+- All 6 routes return 200 with the nav bar visible
+- `data/database.sqlite` created with correct 5-table schema
+- `go test ./...` passes
 
-| Source | Destination |
-|--------|-------------|
-| `app/src/static/lab0.html` | `static/lab0.html` |
-| `app/src/public/images/favicon.svg` | `static/favicon.svg` |
-| `app/src/public/images/dependency_2x.png` | `static/images/dependency_2x.png` |
-| `app/src/public/javascripts/myscript.js` | `static/javascripts/myscript.js` |
-| `app/src/public/stylesheets/style.css` | `static/stylesheets/style.css` |
+---
 
-Also check for `lab0.css` and copy if present.
+### CP2 — Book Catalog & Detail Pages
+**Goal:** `/catalog` shows real books from DB; `/books/:id` shows full book detail.
 
-### Step 3: Create templates
+- `handlers_books.go`: `HandleCatalog`, `HandleBookDetail`
+- `db.go`: `GetAllBooks()`, `GetBookByID()`
+- `templates/catalog.html`: searchable/filterable book list
+- `templates/book_detail.html`: book info, availability, loan history
 
-**`templates/layout.html`** - Go equivalent of `layout.ejs`:
-- Define a `{{define "layout"}}` block wrapping the full HTML document
-- Use `{{block "content" .}}{{end}}` where `<%- body %>` was
-- Keep identical Bootstrap 5 CDN links, footer, year script, and myscript.js include
-- Use `{{.Title}}` instead of `<%= title %>`
+---
 
-**`templates/index.html`** - Go equivalent of `index.ejs`:
-- Define only `{{define "content"}}...{{end}}`
-- Keep identical hero section HTML, just replace `<%= title %>` with `{{.Title}}`
+### CP3 — Book CRUD + Open Library API
+**Goal:** Admin can add, edit, and delete books. ISBN lookup auto-fills metadata.
 
-**`templates/error.html`**:
-- Define `{{define "content"}}...{{end}}` with error message and status
+- `handlers_books.go`: `POST /books`, `PUT /books/:id`, `DELETE /books/:id`
+- `handlers_admin.go`: `GET /api/openlibrary?isbn=...` (server-side proxy)
+- `db.go`: `CreateBook()`, `UpdateBook()`, `DeleteBook()`
 
-### Step 4: Create `main.go`
+**Open Library API:**
+```
+GET https://openlibrary.org/api/books?bibkeys=ISBN:<isbn>&format=json&jscmd=data
+```
+Returns: title, authors, cover URL, publish year. Called server-side; result forwarded as JSON to client JS for form pre-fill.
 
-Key responsibilities:
-- Read `PORT` env var (default `"3000"`), `DATA_DIR` (default `"data"`), `DB_NAME` (default `"database.sqlite"`)
-- Initialize `DatabaseManager`
-- Load templates using a `map[string]*template.Template` — parse each page paired with `layout.html`
-- Provide `renderTemplate()` helper that calls `tmpl.ExecuteTemplate(c.Writer, "layout", data)`
-- Set up Gin router:
-  - `router.Static("/stylesheets", "static/stylesheets")`
-  - `router.Static("/javascripts", "static/javascripts")`
-  - `router.Static("/images", "static/images")`
-  - `router.StaticFile("/favicon.svg", "static/favicon.svg")`
-  - `router.StaticFile("/lab0.html", "static/lab0.html")`
-  - `router.GET("/", HandleIndex)`
-  - `router.NoRoute(HandleNotFound)`
-- Add `DatabaseMiddleware` that stores `*DatabaseManager` in Gin context
-- Start server on configured port
+---
 
-### Step 5: Create `handlers.go`
+### CP4 — Patron Management
+**Goal:** `/patrons` shows patron list with full CRUD.
 
-- `HandleIndex`: renders "index" template with `Title: "Full Stack Starter Code"`
-- `HandleNotFound`: renders "error" template with 404 status
-- `DatabaseMiddleware`: Gin middleware that calls `c.Set("db", dm)`
-- `getDB` helper: retrieves `*DatabaseManager` from context
+- `handlers_patrons.go`: list, add, edit, delete
+- `db.go`: `GetAllPatrons()`, `GetPatronByID()`, `CreatePatron()`, `UpdatePatron()`, `DeletePatron()`
+- `templates/patrons.html`: patron list with inline forms
 
-### Step 6: Create `db.go`
+---
 
-- `Todo` struct with `ID int64`, `Task string`, `Completed bool`
-- `DatabaseManager` struct wrapping `*sql.DB`
-- `NewDatabaseManager(dbPath)`: opens SQLite, enables foreign keys, creates `todos` table
-- 10 methods matching the original JS helpers:
-  - `GetAllTodos()`, `GetTodoByID()`, `CreateTodo()`, `UpdateTodo()`, `DeleteTodo()`
-  - `ToggleTodo()`, `GetTotalTodos()`, `GetCompletedTodos()`
-  - `ClearDatabase()`, `SeedTestData()` (both gated on `GO_ENV=test`)
-- Handle SQLite `INTEGER` <-> Go `bool` conversion when scanning `completed`
+### CP5 — Loans & Kiosk + SSE
+**Goal:** Kiosk enables self-service check-in/out. SSE pushes live availability updates to the Catalog.
 
-### Step 7: Create `.gitignore`
+- `handlers_loans.go`: `HandleKiosk`, `POST /loans`, `PUT /loans/:id/return`, `GET /events`
+- `db.go`: `CreateLoan()`, `ReturnLoan()`, `GetActiveLoans()`, `GetLoanHistory()`
+- `templates/kiosk.html`: self-service UI
 
-Ignore `data/`, compiled binary, IDE files, OS files.
+**SSE protocol:**
+- Endpoint: `GET /events`
+- Message format: `data: book_id=N available=0\n\n`
+- Catalog page JS listens and updates availability badges without page reload
 
-### Step 8: Final tidying
+---
 
-- Run `go mod tidy`
-- Run `go vet ./...`
+### CP6 — Admin Panel (ZIP Export/Import)
+**Goal:** Admin can export the entire DB as a ZIP and import it back.
+
+- `handlers_admin.go`: `GET /admin/export`, `POST /admin/import`
+- `templates/admin.html`: export button, import file picker, system stats
+- Uses Go standard library `archive/zip` — no extra dependencies
+
+ZIP contains: SQLite database file + cover images from `static/images/covers/`
+
+---
+
+### CP7 — Testing, Polish & Deploy
+**Goal:** Test coverage, UI cleanup, final EC2 redeploy.
+
+- `db_test.go`: unit tests for all DB methods
+- `handlers_test.go`: integration tests for all HTTP handlers
+- `scripts/install.sh`, `scripts/configure.sh`: EC2 automation scripts
+
+---
 
 ## Key Design Decisions
 
-1. **Template layout pattern**: Since Gin's `LoadHTMLGlob` doesn't support template inheritance, we manually parse each page template paired with `layout.html` and store them in a `map[string]*template.Template`. The `renderTemplate` helper executes the `"layout"` template, which pulls in the page's `"content"` block. No extra dependency needed.
+### 1. Flat package structure
+All `.go` files in `package main`, split by concern using filename suffix
+(`handlers_books.go`, `handlers_patrons.go`, etc.) rather than sub-packages.
+The app is medium-sized — sub-packages would add indirection without benefit.
 
-2. **Static file routing**: Can't mount `router.Static("/", "static/")` because it conflicts with `router.GET("/", ...)`. Instead, mount each subdirectory and individual root-level file separately.
+### 2. SSE for real-time availability
+On kiosk check-out/in, the server pushes a Server-Sent Events message to all
+connected catalog clients. SSE is one-way (server → browser) and fits the use
+case exactly. No WebSocket needed.
 
-3. **Flat package structure**: All `.go` files in `package main`. The app is small enough that splitting into `internal/` packages would be premature.
+### 3. Open Library API (server-side proxy)
+ISBN metadata is fetched server-side to avoid CORS issues and to keep the client
+JS simple. The handler proxies the request and returns clean JSON to the form.
 
-4. **Database driver name**: `modernc.org/sqlite` registers as driver `"sqlite"` (not `"sqlite3"`). The import is `_ "modernc.org/sqlite"` and open call is `sql.Open("sqlite", dbPath)`.
+### 4. ZIP export using standard library
+`archive/zip` (standard library) is sufficient. No third-party dependency needed
+for backup/restore.
 
-## Future: Automated Deployment
+### 5. Template loading
+Same pattern as the current codebase: `map[string]*template.Template`, one entry
+per page, each paired with `layout.html`. The `renderTemplate()` helper executes
+the `"layout"` template, which pulls in the page's `"content"` block.
 
-Currently deployment is manual — build locally, copy binary via `scp`, restart the service.
-The goal is to automate this so a push to `main` triggers a deploy to EC2 automatically.
+### 6. SQLite driver
+`modernc.org/sqlite` registers as driver `"sqlite"` (not `"sqlite3"`). Pure Go —
+no CGo, no system library dependency.
 
-**Planned approach:** GitHub Actions workflow that:
-1. Builds the binary (`go build -o go-full-stack .`)
-2. Copies it to EC2 via `scp` (using a stored SSH key secret)
-3. SSHs in and runs `sudo systemctl restart go-full-stack`
+---
 
-This requires adding an SSH private key as a GitHub Actions secret and is straightforward
-to add once it becomes a requirement.
+## Verification (end of CP1)
 
-## Verification
-
-1. Run `go build -o go-full-stack .` — should compile without errors
-2. Run `./go-full-stack` — server starts on port 3000
-3. Visit `http://localhost:3000` — landing page renders with Bootstrap styling, gradient background, hero section
-4. Click "Go to Lab 0 Page" — `lab0.html` loads correctly with its own styling
-5. Click "Hello World" button on lab0 page — JavaScript alert fires
-6. Check browser dev tools — favicon, CSS, JS, and image all load (no 404s)
-7. Visit a non-existent route like `/foobar` — error page renders with 404
-8. Verify `data/database.sqlite` was created with correct schema: `sqlite3 data/database.sqlite ".schema"`
+```bash
+go build -o go-full-stack .         # must compile cleanly
+go run .                             # server starts on port 3000
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/          # 200
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/catalog   # 200
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/patrons   # 200
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/admin     # 200
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/kiosk     # 200
+sqlite3 data/database.sqlite ".schema"   # shows 5 tables
+go test ./...                            # passes
+```

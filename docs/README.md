@@ -1,16 +1,21 @@
-# Go Full-Stack Web Application
+# LibreShelf — Project Documentation
 
-A simple full-stack web application built with Go, Gin web framework, and SQLite database.
+A self-hostable library management system built with Go.
 
 **CS408 Spring 2026 Project** | [GitHub Issues](https://github.com/timLP79/cs408-go-stack/issues) | [Project Board](https://github.com/timLP79/cs408-go-stack/projects)
+
+---
 
 ## Technology Stack
 
 - **Language**: Go 1.24+
 - **Web Framework**: [Gin](https://github.com/gin-gonic/gin)
-- **Database**: SQLite (via [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) - pure Go, no CGo)
+- **Database**: SQLite (via [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) — pure Go, no CGo)
 - **Templating**: Go `html/template` with layout pattern
-- **CSS**: Bootstrap 5 (CDN)
+- **CSS**: Bootstrap 5.3 (CDN)
+- **Deployment**: EC2 + systemd + nginx
+
+---
 
 ## Team Workflow
 
@@ -20,62 +25,66 @@ This is a solo developer project.
 
 ### Workflow
 - **GitHub Issues** — every feature, bug, and task is tracked as an issue with labels and milestones
-- **GitHub Projects (Kanban)** — issues are organized on a board with columns: Backlog → In Progress → Done
-- **Feature Branches** — new work is done on a branch (e.g. `feature/database-layer`), then merged to `main` via pull request
+- **GitHub Projects (Kanban)** — issues are organized on a board: Backlog → In Progress → Done
+- **Feature Branches** — new work is done on a branch (e.g. `feature/book-catalog`), then merged to `main` via pull request
 - **CI on merge** — GitHub Actions runs all tests automatically on every push to `main`
 - **Commit references** — commits use `Closes #N` syntax to auto-close issues on merge
 
+---
+
 ## Project Status
 
-**Current Sprint:** Week 6 - Deployment
+**Current Sprint:** Week 7 — LibreShelf CP1
 
-**Completed Milestones:**
-- ✅ Milestone 1: Hello World App ([Issue #1](https://github.com/timLP79/cs408-go-stack/issues/1))
-  - Basic Gin web server setup
-  - Template rendering with layout pattern
-  - Bootstrap CDN integration
-  - Clean project structure
-- ✅ Testing Infrastructure ([Issue #8](https://github.com/timLP79/cs408-go-stack/issues/8))
-  - First test written (`main_test.go`)
-  - Testing documentation created
-  - Debugging approaches documented
+**Project history:**
+- ✅ Milestone 1: Hello World App ([Issue #1](https://github.com/timLP79/cs408-go-stack/issues/1)) — Gin server, template layout, Bootstrap
+- ✅ Testing Infrastructure ([Issue #8](https://github.com/timLP79/cs408-go-stack/issues/8)) — `main_test.go`, httptest, debugging docs
+- ✅ Deployment ([Issue #16](https://github.com/timLP79/cs408-go-stack/issues/16)) — EC2, systemd, nginx reverse proxy
+- 🔄 **Project pivot to LibreShelf** (Week 7) — todo-app issues closed; LibreShelf CPs created
 
-**Next Up:**
-- Issue #2: Add static file serving (Priority: High)
-- Issue #9: Write unit tests for database layer
-- Issue #4: Add database integration (SQLite)
+**Current focus:** [CP1 — Project skeleton: routes, nav, and schema](https://github.com/timLP79/cs408-go-stack/issues/18)
 
-**Overall Progress:** 8/17 issues completed
+**Open milestones:**
+- [CP1 #18](https://github.com/timLP79/cs408-go-stack/issues/18) — Project skeleton: routes, nav, schema
+- [CP2 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog: list and detail pages
+- [CP3 #20](https://github.com/timLP79/cs408-go-stack/issues/20) — Book CRUD and Open Library API
+- [CP4 #21](https://github.com/timLP79/cs408-go-stack/issues/21) — Patron management
+- [CP5 #22](https://github.com/timLP79/cs408-go-stack/issues/22) — Loan system: kiosk + SSE
+- [CP6 #23](https://github.com/timLP79/cs408-go-stack/issues/23) — Admin panel: ZIP export/import
+- [CP7 #24](https://github.com/timLP79/cs408-go-stack/issues/24) — Testing, polish, deploy
+
+---
 
 ## Documentation Directory
 
 | File | Description |
 |------|-------------|
-| [`plan.md`](./plan.md) | Technical implementation plan |
-| [`week6/deployment.md`](./week6/deployment.md) | EC2 deployment guide (systemd) |
+| [`plan.md`](./plan.md) | LibreShelf architecture, schema, routes, and checkpoint plan |
+| [`week7/LibreShelf - Product Specification.pdf`](./week7/LibreShelf%20-%20Product%20Specification.pdf) | LibreShelf product specification (Week 7 assignment) |
+| [`week7/wire-frames/`](./week7/wire-frames/) | UI wire frames for all 6 pages |
+| [`week6/deployment.md`](./week6/deployment.md) | EC2 deployment guide (systemd + nginx) |
 | [`tutorials/GO_LEARNING_GUIDE.md`](./tutorials/GO_LEARNING_GUIDE.md) | Go syntax reference |
 | [`week3/BOOTSTRAP_INTEGRATION_GUIDE.md`](./week3/BOOTSTRAP_INTEGRATION_GUIDE.md) | Bootstrap 5 integration guide |
 | [`week3/TESTING_AND_DEBUGGING_GUIDE.md`](./week3/TESTING_AND_DEBUGGING_GUIDE.md) | Testing and debugging tutorial |
-| [`week3/tech-stack-survey.md`](./week3/tech-stack-survey.md) | Tech stack comparison |
+| [`week3/tech-stack-survey.md`](./week3/tech-stack-survey.md) | Tech stack comparison and rationale |
 | [`week3/CANVAS_DISCUSSION_POST.md`](./week3/CANVAS_DISCUSSION_POST.md) | Hello World assignment submission |
 
-### What I've Learned So Far
+---
 
-**Milestone 1 - Hello World Accomplishments:**
+## What I've Learned So Far
+
+**Milestone 1 — Hello World:**
 - ✅ Set up Go module with `go.mod` and dependency management
 - ✅ Configured Gin web framework for HTTP routing
 - ✅ Implemented Go template rendering with layout pattern
 - ✅ Integrated Bootstrap 5 via CDN for styling
 - ✅ Created clean project structure following Go conventions
-- ✅ Learned Git workflow with issue tracking
-- ✅ Used `Closes #N` syntax to auto-close GitHub issues
+- ✅ Learned Git workflow with issue tracking and `Closes #N` syntax
 
-**Testing Infrastructure Accomplishments:**
+**Testing Infrastructure:**
 - ✅ Wrote first test using Go's `testing` package
 - ✅ Learned `httptest` for testing HTTP handlers
-- ✅ Used `t.Logf()` for debugging test failures
 - ✅ Documented debugging approaches (print debugging, Delve, GoLand)
-- ✅ Created comprehensive testing and debugging guide
 
 **Key Go Concepts Mastered:**
 - Package structure and imports
@@ -85,97 +94,85 @@ This is a solo developer project.
 - Struct types and data passing to templates
 - Environment configuration with `os.Getenv()`
 - Testing with `testing` package and `httptest`
-- Test function structure (Arrange, Act, Assert)
 
 **Development Tools:**
-- `go run .` - Run without building
-- `go build` - Compile to executable
-- `go mod download` - Install dependencies
-- `go test -v` - Run tests with verbose output
+- `go run .` — run without building
+- `go build` — compile to executable
+- `go mod download` — install dependencies
+- `go test -v` — run tests with verbose output
 - Git commit messages with issue references
-- JetBrains GoLand IDE for development
+- JetBrains GoLand IDE
 - Delve debugger for advanced debugging
 
-## Sprint Plan
+---
 
-### Sprint 1: Foundation (Week 1-2) ✅ COMPLETE
-**Focus:** Get basic web app working with styling
-- [x] Issue #1: ✅ Hello World App (COMPLETE)
-- [x] Issue #8: ✅ Set up testing infrastructure (COMPLETE)
-- [x] Issue #12: ✅ Add automated test for index route (COMPLETE)
-- [x] Issue #3: ✅ Enhance templates with Bootstrap styling (COMPLETE)
-- [x] Issue #13: ✅ Integrate Bootstrap 5 styling (COMPLETE)
-- [ ] Issue #2: Add static file serving (Priority: High)
-- [ ] Issue #7: Add error page template
+## Checkpoint Plan
 
-### Sprint 2: Database (Week 3)
-**Focus:** Add data persistence
-- [ ] Issue #4: Add database integration (SQLite)
-- [ ] Issue #9: Write unit tests for database layer
+See [`plan.md`](./plan.md) for the full LibreShelf architecture. Summary:
 
-### Sprint 3: API & Handlers (Week 4)
-**Focus:** Build the API
-- [ ] Issue #5: Create HTTP handlers for todo routes
-- [ ] Issue #10: Write integration tests for HTTP handlers
+| CP | Issue | Goal |
+|----|-------|------|
+| CP1 | [#18](https://github.com/timLP79/cs408-go-stack/issues/18) | Project skeleton — all 6 routes, nav, DB schema |
+| CP2 | [#19](https://github.com/timLP79/cs408-go-stack/issues/19) | Book catalog and detail pages |
+| CP3 | [#20](https://github.com/timLP79/cs408-go-stack/issues/20) | Book CRUD + Open Library API lookup |
+| CP4 | [#21](https://github.com/timLP79/cs408-go-stack/issues/21) | Patron management |
+| CP5 | [#22](https://github.com/timLP79/cs408-go-stack/issues/22) | Loans, kiosk, and SSE availability |
+| CP6 | [#23](https://github.com/timLP79/cs408-go-stack/issues/23) | Admin panel: ZIP export/import |
+| CP7 | [#24](https://github.com/timLP79/cs408-go-stack/issues/24) | Testing, polish, final deploy |
 
-### Sprint 4: UI & Polish (Week 5)
-**Focus:** Complete the application
-- [ ] Issue #6: Create todo list UI page
-- [ ] Issue #11: Add end-to-end testing (Optional)
-
-### Week 6: Deployment 🔵 CURRENT
-**Focus:** Deploy app to EC2
-- [x] Issue #16: ✅ Deploy app to Ubuntu EC2 with systemd and nginx (COMPLETE)
-- [ ] Issue #17: Automate deployment via GitHub Actions (Future)
-
-## GitHub Labels
-
-Issues are organized with these labels:
-- `testing` - Test-related work
-- `database` - Database work
-- `frontend` - UI/templates
-- `backend` - Server-side logic
-- `priority-high` - Important tasks
-- `priority-low` - Can wait
-- `learning` - Educational value
-- `blocked` - Waiting on dependencies
-- `milestone` - Major deliverables
+---
 
 ## Project Structure
 
 ```
 go-full-stack/
-├── main.go                          # Entry point: router, templates, server
+├── main.go                          # Entry point: router, templates, middleware, server
 ├── main_test.go                     # HTTP handler tests
-├── handlers.go                      # HTTP handler functions (future)
-├── db.go                            # Database manager (future)
+├── db.go                            # DatabaseManager: schema + CRUD methods (CP1)
+├── handlers.go                      # HTTP handler stubs for all 6 pages (CP1)
+├── handlers_books.go                # Book handlers (CP2/CP3)
+├── handlers_patrons.go              # Patron handlers (CP4)
+├── handlers_loans.go                # Loan/kiosk handlers + SSE (CP5)
+├── handlers_admin.go                # Admin handlers: ZIP export/import (CP6)
 ├── templates/
-│   ├── layout.html                  # Base layout template
-│   └── index.html                   # Landing page content
+│   ├── layout.html                  # Base layout with nav
+│   ├── index.html                   # Dashboard page
+│   ├── catalog.html                 # Book catalog (CP2)
+│   ├── book_detail.html             # Single book view (CP2)
+│   ├── patrons.html                 # Patron list (CP4)
+│   ├── admin.html                   # Admin panel (CP6)
+│   ├── kiosk.html                   # Kiosk check-in/out (CP5)
+│   └── error.html                   # 404/500 error page (CP1)
 ├── static/
-│   ├── stylesheets/                 # CSS files
-│   ├── javascripts/                 # JS files
-│   └── images/                      # Image assets
+│   ├── stylesheets/style.css        # Custom styles
+│   ├── javascripts/app.js           # SSE listener + client JS
+│   └── images/                      # Cover images, favicon
 ├── screenshots/                     # Project screenshots for documentation
 ├── data/                            # SQLite database (gitignored)
+├── scripts/
+│   ├── install.sh                   # EC2 install script (CP7)
+│   └── configure.sh                 # EC2 configure script (CP7)
 ├── deploy/
-│   └── go-full-stack.service        # systemd unit file for EC2
+│   └── go-full-stack.service        # systemd unit file
 ├── docs/
-│   ├── README.md                    # This file (full project documentation)
-│   ├── plan.md                      # Technical implementation plan
-│   ├── tutorials/
-│   │   └── GO_LEARNING_GUIDE.md     # Go syntax reference
+│   ├── README.md                    # This file
+│   ├── plan.md                      # LibreShelf architecture and checkpoint plan
+│   ├── tutorials/GO_LEARNING_GUIDE.md
 │   ├── week3/
 │   │   ├── BOOTSTRAP_INTEGRATION_GUIDE.md
 │   │   ├── TESTING_AND_DEBUGGING_GUIDE.md
 │   │   ├── tech-stack-survey.md
 │   │   └── CANVAS_DISCUSSION_POST.md
 │   └── week6/
-│       └── deployment.md            # EC2 deployment guide
-├── go.mod                           # Go module definition
-├── go.sum                           # Dependency checksums
+│       └── deployment.md
+├── go.mod
+├── go.sum
 └── README.md                        # Project intro and quick start
 ```
+
+> **Note:** Handler files and templates beyond `layout.html` and `index.html` are planned — they will be created in CP1 and beyond.
+
+---
 
 ## Getting Started
 
@@ -186,160 +183,18 @@ go-full-stack/
 
 ### Installation
 
-1. Clone the repository:
-   ```bash
-   git clone <your-repo-url>
-   cd cs408-go-stack
-   ```
-
-2. Install dependencies:
-   ```bash
-   go mod download
-   ```
-
-3. Build the application:
-   ```bash
-   go build -o go-full-stack .
-   ```
-
-4. Run the application:
-   ```bash
-   ./go-full-stack
-   ```
-
-5. Visit `http://localhost:3000` in your browser
-
-### Development
-
-To run without building:
 ```bash
+git clone https://github.com/timLP79/cs408-go-stack.git
+cd cs408-go-stack
+go mod download
 go run .
 ```
 
-To run with live reload, use [air](https://github.com/cosmtrek/air):
-```bash
-go install github.com/cosmtrek/air@latest
-air
-```
+Visit `http://localhost:3000` in your browser.
 
-## Configuration
+### Development
 
-The application uses environment variables for configuration:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `3000` | HTTP server port |
-| `DATA_DIR` | `data` | Directory for SQLite database |
-| `DB_NAME` | `database.sqlite` | Database filename |
-| `GO_ENV` | (none) | Set to `test` to enable test utilities |
-
-Example:
-```bash
-PORT=8080 DATA_DIR=/var/data ./go-full-stack
-```
-
-## Database
-
-The application uses SQLite with the following schema:
-
-### `todos` table
-
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | INTEGER | PRIMARY KEY AUTOINCREMENT |
-| task | TEXT | NOT NULL |
-| completed | INTEGER | DEFAULT 0 (boolean: 0 or 1) |
-
-### Database Methods (when implemented)
-
-- `GetAllTodos()` - Retrieve all todos
-- `GetTodoByID(id)` - Retrieve a specific todo
-- `CreateTodo(task)` - Create a new todo
-- `UpdateTodo(id, task, completed)` - Update a todo
-- `DeleteTodo(id)` - Delete a todo
-- `ToggleTodo(id)` - Toggle completion status
-- `GetTotalTodos()` - Count total todos
-- `GetCompletedTodos()` - Count completed todos
-- `ClearDatabase()` - Delete all todos (test mode only)
-- `SeedTestData()` - Insert test data (test mode only)
-
-## Routes
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | Landing page (Hello World) |
-| GET | `/favicon.svg` | Favicon (when static assets added) |
-| GET | `/stylesheets/*` | CSS files (when static assets added) |
-| GET | `/javascripts/*` | JavaScript files (when static assets added) |
-| GET | `/images/*` | Image files (when static assets added) |
-
-More routes will be added as the application grows.
-
-## Templates
-
-The application uses Go's `html/template` package with a layout pattern:
-
-- **`layout.html`** - Base template with HTML structure, Bootstrap CDN, header, footer
-- **`index.html`** - Defines `{{define "content"}}` block for the landing page
-- **`error.html`** - Defines `{{define "content"}}` block for error pages
-
-### Template Syntax
-
-Go templates use `{{ }}` for expressions:
-
-| Syntax | Description |
-|--------|-------------|
-| `{{.Title}}` | Output a variable |
-| `{{define "name"}}...{{end}}` | Define a template block |
-| `{{block "name" .}}{{end}}` | Insert a block (with fallback) |
-| `{{template "name" .}}` | Include another template |
-
-## Learning Resources
-
-### Project Documentation
-- [GO_LEARNING_GUIDE.md](./tutorials/GO_LEARNING_GUIDE.md) - Go syntax guide with examples from this project
-- [TESTING_AND_DEBUGGING_GUIDE.md](./week3/TESTING_AND_DEBUGGING_GUIDE.md) - Comprehensive testing and debugging tutorial
-- [BOOTSTRAP_INTEGRATION_GUIDE.md](./week3/BOOTSTRAP_INTEGRATION_GUIDE.md) - Bootstrap integration guide
-- [tech-stack-survey.md](./week3/tech-stack-survey.md) - Tech stack comparison and rationale
-
-### External Resources
-- [Gin Documentation](https://gin-gonic.com/docs/)
-- [Go Templates Documentation](https://pkg.go.dev/html/template)
-- [Go Testing Documentation](https://pkg.go.dev/testing)
-- [Tour of Go](https://go.dev/tour/)
-
-## Development Workflow
-
-### Agile/Scrum Process
-
-This project follows Agile/Scrum methodology:
-
-1. **Sprint Planning**: Work is organized into 2-week sprints
-2. **GitHub Issues**: Each feature/task has a labeled issue
-3. **Git Workflow**: Commits reference and close issues
-4. **Testing**: TDD approach with unit, integration, and E2E tests
-
-### Git Workflow with Issue Tracking
-
-1. Pick an issue from the [GitHub Issues board](https://github.com/timLP79/cs408-go-stack/issues)
-2. Make your changes to `.go` files or templates
-3. Test locally: `go run .` and visit `http://localhost:3000`
-4. Stage and commit with issue reference:
-   ```bash
-   git add <files>
-   git commit -m "Description of changes
-
-   Closes #<issue-number>"
-   ```
-5. Push to GitHub:
-   ```bash
-   git push origin main
-   ```
-6. Issue automatically closes and links to your commit
-
-### Local Development
-
-**Quick run (no build):**
+**Quick run:**
 ```bash
 go run .
 ```
@@ -356,64 +211,126 @@ go install github.com/cosmtrek/air@latest
 air
 ```
 
-### Example Commit Message
+---
 
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | HTTP server port |
+| `DATA_DIR` | `data` | Directory for SQLite database |
+| `DB_NAME` | `database.sqlite` | Database filename |
+| `GO_ENV` | (none) | Set to `test` to enable test utilities |
+
+---
+
+## Database
+
+LibreShelf uses a 5-table SQLite schema. The database file is created automatically at startup in the `data/` directory.
+
+### Schema
+
+```sql
+CREATE TABLE books (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    isbn TEXT,
+    cover_url TEXT,
+    published_year INTEGER,
+    available INTEGER DEFAULT 1
+);
+
+CREATE TABLE authors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL
+);
+
+CREATE TABLE book_authors (
+    book_id INTEGER REFERENCES books(id),
+    author_id INTEGER REFERENCES authors(id),
+    PRIMARY KEY (book_id, author_id)
+);
+
+CREATE TABLE patrons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT
+);
+
+CREATE TABLE loans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_id INTEGER REFERENCES books(id),
+    patron_id INTEGER REFERENCES patrons(id),
+    checked_out_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    due_date DATETIME,
+    returned_at DATETIME
+);
 ```
-Clean up layout.html template
 
-Remove duplicate content and instructional text from layout.html:
-- Removed extra {{define "content"}} block (belongs in index.html)
-- Removed "Step 4: Create templates/index.html" instruction text
-- Layout template now properly ends at line 12
+---
 
-This completes the Hello World milestone with clean template structure.
+## Routes
 
-Closes #1
-```
+| Method | Path | Page | Description |
+|--------|------|------|-------------|
+| GET | `/` | Dashboard | Stats, recent activity |
+| GET | `/catalog` | Catalog | Searchable/filterable book list |
+| GET | `/books/:id` | Book Detail | Book info, availability, loan history |
+| GET | `/patrons` | Patrons | Patron management |
+| GET | `/admin` | Admin | ZIP export/import, settings |
+| GET | `/kiosk` | Kiosk | Self-service check-in/out |
+| GET | `/events` | SSE | Availability updates stream (CP5) |
+| GET | `/stylesheets/*` | — | CSS static files |
+| GET | `/javascripts/*` | — | JS static files |
+| GET | `/images/*` | — | Image static files |
+| GET | `/favicon.svg` | — | Favicon |
+
+---
+
+## Templates
+
+| Template | Description |
+|----------|-------------|
+| `layout.html` | Base layout with Bootstrap CDN and nav bar |
+| `index.html` | Dashboard — stats and recent activity |
+| `catalog.html` | Book catalog with search/filter |
+| `book_detail.html` | Single book view with loan history |
+| `patrons.html` | Patron list and management |
+| `admin.html` | Admin panel |
+| `kiosk.html` | Self-service check-in/out |
+| `error.html` | 404/500 error page |
+
+### Template Syntax
+
+| Syntax | Description |
+|--------|-------------|
+| `{{.Title}}` | Output a variable |
+| `{{define "name"}}...{{end}}` | Define a template block |
+| `{{block "name" .}}{{end}}` | Insert a block (with fallback) |
+| `{{template "name" .}}` | Include another template |
+
+---
 
 ## Testing
 
-This project follows Test-Driven Development (TDD) practices.
+### Strategy
 
-### Testing Strategy
-
-**Test Pyramid:**
-1. **Unit Tests** ([Issue #9](https://github.com/timLP79/cs408-go-stack/issues/9))
-   - Test individual functions in isolation
-   - Database layer tests
-   - Files: `db_test.go`, `handlers_test.go`
-
-2. **Integration Tests** ([Issue #10](https://github.com/timLP79/cs408-go-stack/issues/10))
-   - Test HTTP handlers with real requests
-   - Test database interactions
-   - Files: `main_test.go`
-
-3. **End-to-End Tests** ([Issue #11](https://github.com/timLP79/cs408-go-stack/issues/11))
-   - Test complete user workflows
-   - Optional: Browser automation
+1. **Unit tests** — individual DB methods (`db_test.go`)
+2. **Integration tests** — HTTP handlers with real requests (`main_test.go`, `handlers_test.go`)
 
 ### Running Tests
 
 ```bash
-# Run all tests
-go test ./...
-
-# Run with verbose output
-go test -v ./...
-
-# Run with coverage report
-go test -cover ./...
-
-# Run specific test file
-go test -v db_test.go db.go
+go test ./...           # run all tests
+go test -v ./...        # verbose output
+go test -cover ./...    # coverage report
 ```
 
-### Test File Naming Convention
+### Test File Convention
 
-Go automatically finds test files:
-- `main.go` → tests in `main_test.go`
-- `db.go` → tests in `db_test.go`
-- `handlers.go` → tests in `handlers_test.go`
+- `main.go` → `main_test.go`
+- `db.go` → `db_test.go`
+- `handlers.go` → `handlers_test.go`
 
 ### Basic Test Structure
 
@@ -432,39 +349,90 @@ func TestSomething(t *testing.T) {
 }
 ```
 
-**Status:** ✅ Testing infrastructure set up - see [TESTING_AND_DEBUGGING_GUIDE.md](./week3/TESTING_AND_DEBUGGING_GUIDE.md) for complete tutorial
+See [TESTING_AND_DEBUGGING_GUIDE.md](./week3/TESTING_AND_DEBUGGING_GUIDE.md) for a complete tutorial.
 
-### Debugging Tools
+---
 
-This project uses multiple debugging approaches:
+## Debugging Tools
 
-1. **Print Debugging** (Simplest)
-   - `t.Logf()` in tests - only shows with `-v` flag
-   - `fmt.Println()` for quick debugging in code
-   - `log.Printf()` for timestamped logging
+1. **Print debugging** — `fmt.Println()` in code; `t.Logf()` in tests (only shows with `-v`)
+2. **Delve** — official Go debugger: `dlv debug` or `dlv test`
+3. **GoLand** — visual breakpoints, built-in Delve integration (F7 step in, F8 step over, F9 resume)
 
-2. **Delve Debugger** (Official Go Debugger)
-   - Command-line debugger: `dlv debug` or `dlv test`
-   - Set breakpoints, inspect variables, step through code
-   - Install: `go install github.com/go-delve/delve/cmd/dlv@latest`
+See [TESTING_AND_DEBUGGING_GUIDE.md](./week3/TESTING_AND_DEBUGGING_GUIDE.md) for examples.
 
-3. **JetBrains GoLand IDE** (Visual Debugging)
-   - Visual breakpoints and variable inspection
-   - Built-in Delve integration
-   - Debug tests with right-click "Debug" option
-   - Keyboard shortcuts: F7 (Step Into), F8 (Step Over), F9 (Resume)
+---
 
-See [TESTING_AND_DEBUGGING_GUIDE.md](./week3/TESTING_AND_DEBUGGING_GUIDE.md) for detailed debugging tutorials and examples.
+## GitHub Labels
+
+| Label | Use |
+|-------|-----|
+| `milestone` | Major deliverable |
+| `backend` | Server-side logic, handlers, API |
+| `frontend` | UI, templates, client-side |
+| `database` | Schema, migrations, DB methods |
+| `testing` | Test-related work |
+| `priority-high` | Do this soon |
+| `priority-low` | Can wait |
+| `learning` | Educational value |
+| `blocked` | Waiting on a dependency |
+
+---
+
+## Git Workflow
+
+1. Pick an issue from the [GitHub Issues board](https://github.com/timLP79/cs408-go-stack/issues)
+2. Make changes on a branch or directly on `main` for small fixes
+3. Test locally: `go run .` then visit `http://localhost:3000`
+4. Commit with issue reference:
+   ```bash
+   git add <files>
+   git commit -m "Brief description
+
+   Closes #<issue-number>"
+   ```
+5. Push — CI runs automatically; issue closes on merge
+
+### Example commit message
+
+```
+Add LibreShelf DB schema and route stubs
+
+Create db.go with 5-table schema (books, authors, book_authors, patrons, loans).
+Add stub handlers in handlers.go for all 6 pages. Register routes in main.go.
+
+Closes #18
+```
+
+---
 
 ## Deployment
 
-The app is deployed to an Ubuntu EC2 instance as a systemd service. See the full guide:
+The app runs as a systemd service behind an nginx reverse proxy on Ubuntu EC2.
 
-- [docs/week6/deployment.md](./week6/deployment.md) — step-by-step EC2 setup, systemd config, and verification
+- Full guide: [docs/week6/deployment.md](./week6/deployment.md)
+- systemd unit: [`deploy/go-full-stack.service`](../deploy/go-full-stack.service)
+- Architecture: Browser → nginx (port 80) → Go app (port 3000)
 
-## Contributing
+---
 
-This is a student project for CS408.
+## Learning Resources
+
+### Project docs
+- [plan.md](./plan.md) — LibreShelf architecture and design decisions
+- [GO_LEARNING_GUIDE.md](./tutorials/GO_LEARNING_GUIDE.md) — Go syntax reference
+- [TESTING_AND_DEBUGGING_GUIDE.md](./week3/TESTING_AND_DEBUGGING_GUIDE.md) — Testing tutorial
+- [BOOTSTRAP_INTEGRATION_GUIDE.md](./week3/BOOTSTRAP_INTEGRATION_GUIDE.md) — Bootstrap guide
+- [tech-stack-survey.md](./week3/tech-stack-survey.md) — Tech stack comparison
+
+### External
+- [Gin Documentation](https://gin-gonic.com/docs/)
+- [Go Templates](https://pkg.go.dev/html/template)
+- [Go Testing](https://pkg.go.dev/testing)
+- [Tour of Go](https://go.dev/tour/)
+- [Open Library API](https://openlibrary.org/dev/docs/api)
+
+---
 
 ## License
 
@@ -472,5 +440,5 @@ This is a student project for CS408.
 
 ## Acknowledgments
 
-- Based on the [Full Stack Starter](https://github.com/shanep/fullstack-starter) Node.js application
-- Built as a learning exercise to understand Go web development
+- Original starter: [Full Stack Starter](https://github.com/shanep/fullstack-starter) (Node.js)
+- Built as a learning exercise for CS408 Go web development

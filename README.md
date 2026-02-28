@@ -1,8 +1,12 @@
-# Go Full-Stack Web Application
+# LibreShelf
 
-A simple full-stack web application built with Go, Gin web framework, and SQLite database.
+A self-hostable library management system built with Go.
 
 **CS408 Spring 2026 Project** | [GitHub Issues](https://github.com/timLP79/cs408-go-stack/issues) | [Project Board](https://github.com/timLP79/cs408-go-stack/projects)
+
+LibreShelf lets a small library (school, office, personal collection) manage books,
+patrons, and loans through a simple web UI. A kiosk mode supports self-service
+check-in and check-out with real-time availability updates via Server-Sent Events.
 
 ## Tech Stack
 
@@ -10,6 +14,7 @@ A simple full-stack web application built with Go, Gin web framework, and SQLite
 - **SQLite** via [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) (pure Go, no CGo)
 - **Go `html/template`** with layout pattern
 - **Bootstrap 5** (CDN)
+- **EC2 + systemd + nginx** (deployment)
 
 ## Quick Start
 
@@ -22,17 +27,24 @@ go run .
 
 Visit `http://localhost:3000` in your browser.
 
+## Pages
+
+| Route | Page |
+|-------|------|
+| `/` | Dashboard — stats and recent activity |
+| `/catalog` | Book catalog — searchable and filterable |
+| `/books/:id` | Book detail — info, availability, loan history |
+| `/patrons` | Patron management |
+| `/admin` | Admin panel — ZIP export/import |
+| `/kiosk` | Self-service check-in / check-out |
+
 ## Documentation
 
-Full project documentation is in the [`docs/`](./docs/) folder, including:
-
-- Project status, sprint plan, and learning notes
-- [Technical implementation plan](./docs/plan.md)
-- [Deployment guide (EC2 + systemd)](./docs/week6/deployment.md)
+- [Technical plan and architecture](./docs/plan.md)
+- [Product specification](./docs/week7/LibreShelf%20-%20Product%20Specification.pdf)
+- [UI wire frames](./docs/week7/wire-frames/)
+- [Deployment guide (EC2 + systemd + nginx)](./docs/week6/deployment.md)
 - [Go learning guide](./docs/tutorials/GO_LEARNING_GUIDE.md)
-- [Bootstrap integration guide](./docs/week3/BOOTSTRAP_INTEGRATION_GUIDE.md)
-- [Testing and debugging guide](./docs/week3/TESTING_AND_DEBUGGING_GUIDE.md)
-- [Tech stack survey](./docs/week3/tech-stack-survey.md)
 
 ## License
 
