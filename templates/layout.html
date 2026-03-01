@@ -5,29 +5,38 @@
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{.Title}} - LibreShelf</title>
-    <!-- Bootstrap CSS -->
     <link href="/stylesheets/bootstrap.min.css" rel="stylesheet">
     <link href="/stylesheets/style.css" rel="stylesheet">
 </head>
-<body>
+<body class="bg-light">
 
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
-    <div class="container">
-        <a class="navbar-brand" href="/">&#128218; LibreShelf</a>
-        <div class="navbar-nav">
-            <a class="nav-link" href="/">Dashboard</a>
-            <a class="nav-link" href="/catalog">Catalog</a>
-            <a class="nav-link" href="/patrons">Patrons</a>
-            <a class="nav-link" href="/kiosk">Kiosk</a>
-            <a class="nav-link" href="/admin">Admin</a>
+<div class="d-flex min-vh-100">
+
+    <!-- Sidebar -->
+    <div class="d-flex flex-column bg-dark text-white p-3" style="width: 200px; min-width: 200px;">
+        <div class="mb-4">
+            <div class="fw-bold fs-5">&#128218; LibreShelf</div>
+            <div class="text-white-50 small">Staff Portal</div>
+        </div>
+        <nav class="nav flex-column flex-grow-1 gap-1">
+            <a class="nav-link text-white rounded" href="/">Dashboard</a>
+            <a class="nav-link text-white rounded" href="/catalog">Catalog</a>
+            <a class="nav-link text-white rounded" href="/patrons">Patrons</a>
+            <a class="nav-link text-white rounded" href="/admin">Admin</a>
+            <a class="nav-link text-white rounded" href="/kiosk">Kiosk View</a>
+        </nav>
+        <div class="text-white-50 small mt-auto pt-3 border-top border-secondary">
+            Logged in as Staff
         </div>
     </div>
-</nav>
 
-<div class="container">
-    {{block "content" .}}{{end}}
+    <!-- Main Content -->
+    <div class="flex-grow-1 p-4">
+        {{block "content" .}}{{end}}
+    </div>
+
 </div>
-<!-- Bootstrap JS Bundle -->
+
 <script src="/javascripts/bootstrap.bundle.min.js"></script>
 </body>
 </html>

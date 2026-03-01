@@ -326,7 +326,7 @@ CREATE TABLE loans (
 
 | Template | Description |
 |----------|-------------|
-| `layout.html` | Base layout with Bootstrap CDN and nav bar |
+| `layout.html` | Base layout with sidebar navigation (Bootstrap flexbox, local — no CDN) |
 | `index.html` | Dashboard — stats and recent activity |
 | `catalog.html` | Book catalog with search/filter |
 | `book_detail.html` | Single book view with loan history |

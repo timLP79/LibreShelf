@@ -121,7 +121,7 @@ go-full-stack/
 ├── handlers_loans.go          # Loan/kiosk handlers + SSE endpoint
 ├── handlers_admin.go          # Admin handlers (ZIP export, import, Open Library proxy)
 ├── templates/
-│   ├── layout.html            # Base layout with nav
+│   ├── layout.html            # Base layout with sidebar nav (wireframe-based)
 │   ├── login.html             # Login page
 │   ├── index.html             # Dashboard page
 │   ├── catalog.html           # Book catalog list
@@ -176,6 +176,7 @@ go-full-stack/
 ### CP2 — Authentication & Session Management
 **Goal:** All routes protected by login. Admin and patron roles enforced. Seed accounts created on first run.
 
+- `layout.html`: Updated to sidebar navigation based on wireframes (replaces top navbar)
 - `handlers_auth.go`: `HandleLogin` (GET/POST), `HandleLogout`
 - `db.go`: `users` and `sessions` tables, `CreateUser()`, `GetUserByUsername()`, `CreateSession()`, `GetSession()`, `DeleteSession()`, `SeedDefaultUsers()`
 - `templates/login.html`: login form
