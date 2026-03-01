@@ -4,56 +4,91 @@ import (
 	"html/template"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 )
 
-// TestIndexRoute tests the main index route
-func TestIndexRoute(t *testing.T) {
-	templates := make(map[string]*template.Template)
-	templates["index"] = template.Must(template.ParseFiles(
-		"templates/layout.html",
-		"templates/index.html"))
+func setupTestRouter(t *testing.T) *gin.Engine {
+	t.Helper()
+
+	// Create a temp database
+	tmpDir, err := os.MkdirTemp("", "librashelf-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	dm := NewDatabaseManager(tmpDir + "/test.sqlite")
+
+	templates = make(map[string]*template.Template)
+	templateNames := []string{
+		"index", "catalog", "book_detail",
+		"patrons", "admin", "kiosk", "error",
+	}
+
+	for _, name := range templateNames {
+		templates[name] = template.Must(template.ParseFiles(
+			"templates/layout.html",
+			"templates/"+name+".html",
+		))
+	}
 
 	gin.SetMode(gin.TestMode)
 	router := gin.Default()
+	router.Use(DatabaseMiddleware(dm))
+	router.GET("/", HandleIndex)
+	router.GET("/catalog", HandleCatalog)
+	router.GET("/books/:id", HandleBookDetail)
+	router.GET("/patrons", HandlePatrons)
+	router.GET("/admin", HandleAdmin)
+	router.GET("/kiosk", HandleKiosk)
+	router.NoRoute(HandleNotFound)
 
-	router.GET("/", func(c *gin.Context) {
-		c.Writer.WriteHeader(200)
-		templates["index"].ExecuteTemplate(c.Writer, "layout", gin.H{
-			"Title": "Hello World",
-		})
-	})
+	return router
+}
 
-	req, err := http.NewRequest("GET", "/", nil)
-	if err != nil {
-		t.Fatalf("Failed to create request: %v", err)
-	}
+func TestIndexRoute(t *testing.T) {
+	router := setupTestRouter(t)
 
+	req, _ := http.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
-	/*// DEBUG: let's see what is in the body
-	t.Logf("========== DEBUGGING ==========")
-	t.Logf("Status Code: %d", rr.Code)
-	t.Logf("\n========== FULL RESPONSE BODY ==========")
-	t.Logf("%s", rr.Body.String())
-	t.Logf("========== END RESPONSE ==========\n")*/
-
-	// check status 200 is OK
-	if status := rr.Code; status != http.StatusOK {
-		t.Errorf("Handler returned wrong status code: got %v want %v",
-			status, http.StatusOK)
+	if rr.Code != http.StatusOK {
+		t.Errorf("Expected status 200, got %d", rr.Code)
 	}
-
-	expectedText := "Hello World"
-	if !strings.Contains(rr.Body.String(), expectedText) {
-		t.Errorf("Handler returned unexpected body: expected to contain %q",
-			expectedText)
+	if !strings.Contains(rr.Body.String(), "Dashboard") {
+		t.Errorf("Expected body to contain 'Dashboard'")
 	}
-
-	// Success
 	t.Log("Index route test passed!")
+}
+
+func TestAllRoutesReturn200(t *testing.T) {
+	router := setupTestRouter(t)
+
+	routes := []string{"/", "/catalog", "/patrons", "/admin", "/kiosk", "/books/1"}
+	for _, route := range routes {
+		req, _ := http.NewRequest("GET", route, nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("Route %s: expected 200, got %d", route, rr.Code)
+		}
+	}
+}
+
+func TestNotFoundReturns404(t *testing.T) {
+	router := setupTestRouter(t)
+
+	req, _ := http.NewRequest("GET", "/doesnotexist", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", rr.Code)
+	}
 }
