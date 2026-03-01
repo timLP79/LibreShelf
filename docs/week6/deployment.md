@@ -139,12 +139,22 @@ sudo systemctl restart nginx
 ## Redeploying After Code Changes
 
 ```bash
-# 1. Build locally
-go build -o go-full-stack .
+# 1. Build locally (explicit Linux target for deployment)
+GOOS=linux GOARCH=amd64 go build -o go-full-stack .
 
-# 2. Copy binary to EC2
+# 2. Stop the service on EC2 first — scp cannot overwrite a running binary
+ssh -i your-key.pem ubuntu@<ec2-public-ip> "sudo systemctl stop go-full-stack"
+
+# 3. Pull new templates/static files on EC2
+ssh -i your-key.pem ubuntu@<ec2-public-ip> "cd cs408-go-stack && git pull"
+
+# 4. Copy the new binary to EC2
 scp -i your-key.pem go-full-stack ubuntu@<ec2-public-ip>:~/cs408-go-stack/
 
-# 3. Restart the service on EC2
-sudo systemctl restart go-full-stack
+# 5. Start the service again
+ssh -i your-key.pem ubuntu@<ec2-public-ip> "sudo systemctl start go-full-stack"
 ```
+
+> **Note:** The service must be stopped before copying the binary — Linux will return a
+> "dest open: Failure" error if you try to overwrite a running executable. Always stop
+> first, copy, then start.
