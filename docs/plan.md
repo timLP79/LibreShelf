@@ -169,7 +169,7 @@ go-full-stack/
 - ✅ All 6 routes return 200 with the nav bar visible
 - ✅ `data/database.sqlite` created with correct 5-table schema
 - ✅ `go test ./...` passes — 3 tests: `TestIndexRoute`, `TestAllRoutesReturn200`, `TestNotFoundReturns404`
-- ✅ Deployed to EC2 at `http://18.237.205.236`
+- ✅ Deployed to EC2 (URL available on request)
 
 ---
 

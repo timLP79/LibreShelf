@@ -52,7 +52,7 @@ This is a solo developer project.
 - ✅ `main.go` — all 6 routes, static file serving, DB middleware
 - ✅ All routes return 200, schema verified in SQLite
 - ✅ `main_test.go` — 3 real tests: index, all routes 200, 404 handler
-- ✅ Deployed to EC2 — live at `http://18.237.205.236`
+- ✅ Deployed to EC2 (URL available on request)
 
 **Next up:** [CP2 #25](https://github.com/timLP79/cs408-go-stack/issues/25) — Authentication, sessions, and role-based access
 
