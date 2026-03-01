@@ -8,13 +8,12 @@ See [`plan.md`](./plan.md) for the per-checkpoint security schedule.
 ## Threat Model
 
 LibreShelf is designed for **trusted internal networks** — a school, office, or home library.
-It is not designed to be exposed directly to the public internet without additional hardening
-(authentication, rate limiting, TLS).
 
 **Assumed environment:**
 - Deployed behind nginx on a private or semi-private network
-- Users are trusted staff or patrons who have physical access to the location
-- The kiosk is publicly accessible within the building — not on the open internet
+- All routes require login — unauthenticated users are redirected to `/login`
+- Two roles: **admin** (full access) and **patron** (catalog + kiosk only)
+- The kiosk requires patron login — it is not fully public
 
 ---
 
@@ -205,9 +204,44 @@ by external clients.
 
 ---
 
-## If Authentication Is Added
+## Authentication (CP2)
 
-LibreShelf v1 has no authentication. If it is added in a future version:
+LibreShelf uses server-side sessions with two roles: `admin` and `patron`.
+
+### Password Hashing — bcrypt
+
+Passwords are hashed with `bcrypt` from `golang.org/x/crypto/bcrypt`.
+**Never store plain text, MD5, or SHA passwords.**
+
+```go
+import "golang.org/x/crypto/bcrypt"
+
+// Hashing (on account creation or password change)
+hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+
+// Verification (on login)
+err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(inputPassword))
+if err != nil {
+    // wrong password — err is bcrypt.ErrMismatchedHashAndPassword
+}
+```
+
+`bcrypt.DefaultCost` (currently 10) makes hashing intentionally slow — it takes ~100ms.
+This is a feature: it makes brute-force attacks expensive.
+
+### Session Flow
+
+1. User POSTs credentials to `/login`
+2. Server verifies password with `bcrypt.CompareHashAndPassword`
+3. On success: generate a cryptographically random session token:
+   ```go
+   token := make([]byte, 32)
+   _, err := crypto_rand.Read(token)
+   sessionToken := hex.EncodeToString(token)
+   ```
+4. Store `(token, user_id, expires_at)` in the `sessions` table
+5. Set cookie on the response (see Cookie Security below)
+6. On subsequent requests: read cookie, look up token in `sessions`, load user
 
 ### Cookie Security
 ```go
@@ -229,17 +263,72 @@ c.SetCookie(
 | `SameSite=Strict` | Cookie not sent on cross-site requests — prevents CSRF |
 
 ### Session Hijacking Prevention
-- Generate session tokens using `crypto/rand` (cryptographically secure), not `math/rand`
-- Store sessions server-side — invalidate them on logout
-- Regenerate the session token after login (prevents session fixation)
-- Set short timeouts (e.g. 8 hours) with sliding renewal on activity
+- Tokens generated with `crypto/rand` (cryptographically secure) — never `math/rand`
+- Sessions stored server-side in the `sessions` DB table — invalidated on logout
+- Session token regenerated after login — prevents session fixation attacks
+- 8-hour expiry — user must re-login after expiry
+- On logout: delete the session row from the DB immediately
 
 ### CSRF Protection
 Every state-changing form (`POST`, `PUT`, `DELETE`) needs a CSRF token:
 - Server generates a random token and stores it in the session
-- Token is embedded as a hidden field in each form
+- Token is embedded as a hidden field in each form:
+  ```html
+  <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+  ```
 - Server validates the token before processing the form
 - Requests without a valid token are rejected with `403 Forbidden`
+
+### Auth Middleware
+
+Two middleware functions protect routes in `main.go`:
+
+```go
+// RequireAuth — any logged-in user
+func RequireAuth(c *gin.Context) {
+    session := getSession(c)
+    if session == nil {
+        c.Redirect(http.StatusFound, "/login")
+        c.Abort()
+        return
+    }
+    c.Set("user", session.User)
+    c.Next()
+}
+
+// RequireAdmin — admin role only
+func RequireAdmin(c *gin.Context) {
+    user := c.MustGet("user").(*User)
+    if user.Role != "admin" {
+        c.Status(http.StatusForbidden)
+        renderTemplate(c, "error", gin.H{
+            "Status":  403,
+            "Message": "Admin access required",
+        })
+        c.Abort()
+        return
+    }
+    c.Next()
+}
+```
+
+Applied in `main.go`:
+```go
+auth := router.Group("/")
+auth.Use(RequireAuth)
+{
+    auth.GET("/", HandleIndex)
+    auth.GET("/catalog", HandleCatalog)
+    auth.GET("/kiosk", HandleKiosk)
+
+    admin := auth.Group("/")
+    admin.Use(RequireAdmin)
+    {
+        admin.GET("/patrons", HandlePatrons)
+        admin.GET("/admin", HandleAdmin)
+    }
+}
+```
 
 ---
 

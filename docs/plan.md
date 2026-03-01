@@ -28,14 +28,18 @@ and check-out with real-time availability updates.
 
 ## Routes
 
-| Route | Page | Description |
-|-------|------|-------------|
-| `GET /` | Dashboard | Stats, recent activity, quick-add book |
-| `GET /catalog` | Catalog | Searchable/filterable book list |
-| `GET /books/:id` | Book Detail | Book info, availability, loan history |
-| `GET /patrons` | Patrons | Patron list and management |
-| `GET /admin` | Admin | Settings, ZIP export/import |
-| `GET /kiosk` | Kiosk | Self-service check-in / check-out |
+| Route | Page | Access |
+|-------|------|--------|
+| `GET /login` | Login | Public |
+| `POST /login` | Login action | Public |
+| `POST /logout` | Logout action | Any logged-in user |
+| `GET /` | Dashboard | Any logged-in user |
+| `GET /catalog` | Catalog | Any logged-in user |
+| `GET /books/:id` | Book Detail | Any logged-in user |
+| `GET /kiosk` | Kiosk | Any logged-in user |
+| `GET /patrons` | Patrons | Admin only |
+| `GET /admin` | Admin | Admin only |
+| `GET /events` | SSE stream | Any logged-in user |
 
 ---
 
@@ -76,7 +80,31 @@ CREATE TABLE loans (
     due_date DATETIME,
     returned_at DATETIME
 );
+
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,         -- bcrypt hash
+    role TEXT NOT NULL CHECK(role IN ('admin', 'patron')),
+    patron_id INTEGER REFERENCES patrons(id),  -- NULL for admin users
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE sessions (
+    token TEXT PRIMARY KEY,              -- crypto/rand generated
+    user_id INTEGER REFERENCES users(id),
+    expires_at DATETIME NOT NULL
+);
 ```
+
+### Seed accounts
+
+Created automatically on first startup if they don't exist:
+
+| Username | Password | Role | Notes |
+|----------|----------|------|-------|
+| `admin` | `admin123` | admin | Overridable via `ADMIN_PASSWORD` env var |
+| `patron1` | `patron123` | patron | Linked to a seed patron record |
 
 ---
 
@@ -86,13 +114,15 @@ CREATE TABLE loans (
 go-full-stack/
 ├── main.go                    # Entry point: router, template loading, middleware, server
 ├── db.go                      # DatabaseManager: schema creation + all CRUD methods
-├── handlers.go                # HTTP handler functions for all 6 pages
+├── handlers.go                # HTTP handler functions for all pages
+├── handlers_auth.go           # Login, logout, session management
 ├── handlers_books.go          # Book-specific handlers (catalog, detail, CRUD)
 ├── handlers_patrons.go        # Patron handlers
 ├── handlers_loans.go          # Loan/kiosk handlers + SSE endpoint
 ├── handlers_admin.go          # Admin handlers (ZIP export, import, Open Library proxy)
 ├── templates/
-│   ├── layout.html            # Base layout with nav (Dashboard, Catalog, Patrons, Admin, Kiosk)
+│   ├── layout.html            # Base layout with nav
+│   ├── login.html             # Login page
 │   ├── index.html             # Dashboard page
 │   ├── catalog.html           # Book catalog list
 │   ├── book_detail.html       # Single book view
@@ -143,7 +173,35 @@ go-full-stack/
 
 ---
 
-### CP2 — Book Catalog & Detail Pages
+### CP2 — Authentication & Session Management
+**Goal:** All routes protected by login. Admin and patron roles enforced. Seed accounts created on first run.
+
+- `handlers_auth.go`: `HandleLogin` (GET/POST), `HandleLogout`
+- `db.go`: `users` and `sessions` tables, `CreateUser()`, `GetUserByUsername()`, `CreateSession()`, `GetSession()`, `DeleteSession()`, `SeedDefaultUsers()`
+- `templates/login.html`: login form
+- `main.go`: `RequireAuth()` and `RequireAdmin()` middleware applied to all routes
+- Dependency: `golang.org/x/crypto/bcrypt` for password hashing
+
+**Access control applied:**
+| Middleware | Routes |
+|-----------|--------|
+| `RequireAuth` | `/`, `/catalog`, `/books/:id`, `/kiosk`, `/events` |
+| `RequireAdmin` | `/patrons`, `/admin`, all CRUD endpoints |
+| Public | `/login`, `/logout`, static files |
+
+**Seed accounts (created on first run):**
+- `admin` / `admin123` (role: admin) — password overridable via `ADMIN_PASSWORD` env var
+- `patron1` / `patron123` (role: patron) — linked to a seed patron record
+
+**Verification:**
+- `GET /` redirects to `/login` when not logged in
+- Admin can log in and access all routes
+- Patron can log in and access catalog/kiosk but gets 403 on `/patrons` and `/admin`
+- `POST /logout` clears session and redirects to `/login`
+
+---
+
+### CP3 — Book Catalog & Detail Pages
 **Goal:** `/catalog` shows real books from DB; `/books/:id` shows full book detail.
 
 - `handlers_books.go`: `HandleCatalog`, `HandleBookDetail`
@@ -153,7 +211,7 @@ go-full-stack/
 
 ---
 
-### CP3 — Book CRUD + Open Library API
+### CP4 — Book CRUD + Open Library API
 **Goal:** Admin can add, edit, and delete books. ISBN lookup auto-fills metadata.
 
 - `handlers_books.go`: `POST /books`, `PUT /books/:id`, `DELETE /books/:id`
@@ -168,21 +226,22 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 
 ---
 
-### CP4 — Patron Management
-**Goal:** `/patrons` shows patron list with full CRUD.
+### CP5 — Patron Management
+**Goal:** `/patrons` shows patron list with full CRUD. Admin only.
 
 - `handlers_patrons.go`: list, add, edit, delete
 - `db.go`: `GetAllPatrons()`, `GetPatronByID()`, `CreatePatron()`, `UpdatePatron()`, `DeletePatron()`
 - `templates/patrons.html`: patron list with inline forms
+- Creating a patron also creates a linked `users` record (patron role)
 
 ---
 
-### CP5 — Loans & Kiosk + SSE
+### CP6 — Loans & Kiosk + SSE
 **Goal:** Kiosk enables self-service check-in/out. SSE pushes live availability updates to the Catalog.
 
 - `handlers_loans.go`: `HandleKiosk`, `POST /loans`, `PUT /loans/:id/return`, `GET /events`
 - `db.go`: `CreateLoan()`, `ReturnLoan()`, `GetActiveLoans()`, `GetLoanHistory()`
-- `templates/kiosk.html`: self-service UI
+- `templates/kiosk.html`: patron logs in, selects book, checks out/in
 
 **SSE protocol:**
 - Endpoint: `GET /events`
@@ -191,7 +250,7 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 
 ---
 
-### CP6 — Admin Panel (ZIP Export/Import)
+### CP7 — Admin Panel (ZIP Export/Import)
 **Goal:** Admin can export the entire DB as a ZIP and import it back.
 
 - `handlers_admin.go`: `GET /admin/export`, `POST /admin/import`
@@ -202,12 +261,13 @@ ZIP contains: SQLite database file + cover images from `static/images/covers/`
 
 ---
 
-### CP7 — Testing, Polish & Deploy
-**Goal:** Test coverage, UI cleanup, final EC2 redeploy.
+### CP8 — Testing, Polish & Deploy
+**Goal:** Test coverage, UI cleanup, security hardening, final EC2 redeploy.
 
-- `db_test.go`: unit tests for all DB methods
-- `handlers_test.go`: integration tests for all HTTP handlers
+- `db_test.go`: unit tests for all DB methods including auth
+- `handlers_test.go`: integration tests for all HTTP handlers including auth flows
 - `scripts/install.sh`, `scripts/configure.sh`: EC2 automation scripts
+- Security headers middleware, trusted proxies config, HTTPS setup
 
 ---
 
@@ -225,29 +285,32 @@ For full details see [`docs/security.md`](./security.md).
 
 | CP | Risk | Mitigation |
 |----|------|-----------|
-| CP2 | SQL injection via book/patron IDs | Always use parameterized queries (`?` placeholders) — never string concatenation |
-| CP3 | File upload (cover images) | Validate MIME type, restrict extensions, limit file size, sanitize filename |
-| CP3 | Open Library proxy | Validate ISBN format server-side before making outbound request |
-| CP4 | PII exposure (patron emails) | Never log patron data; keep `email` field optional |
-| CP5 | Kiosk abuse / rate limiting | Validate book and patron IDs server-side; consider rate limiting on checkout |
-| CP5 | SSE data exposure | Event stream must not include patron PII — book ID and availability only |
-| CP6 | Zip Slip (path traversal) | Validate every file path in uploaded ZIP before extracting; reject `../` paths |
-| CP6 | Malicious ZIP import | Validate DB schema after import before bringing app back online |
-| CP7 | HTTP security headers | Add middleware for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` |
-| CP7 | Gin proxy warning | Configure `router.SetTrustedProxies([]string{"127.0.0.1"})` for EC2/nginx setup |
-| CP7 | HTTPS | Configure nginx TLS (Let's Encrypt or self-signed); redirect HTTP → HTTPS |
-| CP7 | Dependency audit | Run `go mod verify` and check for known CVEs before final deploy |
+| CP2 | Weak password storage | Use `bcrypt` — never store plain text or MD5/SHA passwords |
+| CP2 | Session hijacking | `HttpOnly`, `Secure`, `SameSite=Strict` cookie; server-side session store |
+| CP2 | Session fixation | Regenerate session token after successful login |
+| CP2 | Brute force login | Bcrypt's cost factor adds natural delay; rate limit `/login` POST in CP8 |
+| CP3 | SQL injection via book/patron IDs | Always use parameterized queries (`?` placeholders) — never string concatenation |
+| CP4 | File upload (cover images) | Validate MIME type, restrict extensions, limit file size, sanitize filename |
+| CP4 | Open Library proxy | Validate ISBN format server-side before making outbound request |
+| CP5 | PII exposure (patron emails) | Never log patron data; keep `email` field optional |
+| CP6 | Kiosk abuse / rate limiting | Validate book and patron IDs server-side; consider rate limiting on checkout |
+| CP6 | SSE data exposure | Event stream must not include patron PII — book ID and availability only |
+| CP7 | Zip Slip (path traversal) | Validate every file path in uploaded ZIP before extracting; reject `../` paths |
+| CP7 | Malicious ZIP import | Validate DB schema after import before bringing app back online |
+| CP8 | HTTP security headers | Add middleware for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` |
+| CP8 | Gin proxy warning | Configure `router.SetTrustedProxies([]string{"127.0.0.1"})` for EC2/nginx setup |
+| CP8 | HTTPS | Configure nginx TLS (Let's Encrypt or self-signed); redirect HTTP → HTTPS |
+| CP8 | Dependency audit | Run `go mod verify` and check for known CVEs before final deploy |
 
-### Session hijacking — current posture
-LibreShelf v1 has **no authentication** — it is designed for a trusted internal network
-(office, school, home). All routes are publicly accessible.
+### Session hijacking — design (implemented in CP2)
+LibreShelf uses server-side sessions with secure cookies.
 
-If authentication is added in the future:
-- Use `HttpOnly`, `Secure`, `SameSite=Strict` cookie attributes
-- Regenerate session ID on login
-- Add CSRF tokens to all state-changing forms (`POST`, `PUT`, `DELETE`)
-- Use short session timeouts with sliding renewal
-- Store sessions server-side (not in a signed cookie), so they can be invalidated
+- Session tokens generated with `crypto/rand` (cryptographically secure)
+- Cookie attributes: `HttpOnly`, `Secure`, `SameSite=Strict`
+- Session token regenerated after login (prevents session fixation)
+- Sessions stored in the `sessions` DB table — can be invalidated server-side
+- Short expiry (8 hours) with no sliding renewal — re-login required
+- CSRF tokens on all state-changing forms (`POST`, `PUT`, `DELETE`)
 
 ### Sensitive data at rest
 - `data/database.sqlite` is gitignored — never committed to the repo

@@ -54,15 +54,16 @@ This is a solo developer project.
 - ✅ `main_test.go` — 3 real tests: index, all routes 200, 404 handler
 - ✅ Deployed to EC2 — live at `http://18.237.205.236`
 
-**Next up:** [CP2 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog with real data from DB
+**Next up:** [CP2 #25](https://github.com/timLP79/cs408-go-stack/issues/25) — Authentication, sessions, and role-based access
 
 **Open milestones:**
-- 🔄 [CP2 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog: list and detail pages
-- [CP3 #20](https://github.com/timLP79/cs408-go-stack/issues/20) — Book CRUD and Open Library API
-- [CP4 #21](https://github.com/timLP79/cs408-go-stack/issues/21) — Patron management
-- [CP5 #22](https://github.com/timLP79/cs408-go-stack/issues/22) — Loan system: kiosk + SSE
-- [CP6 #23](https://github.com/timLP79/cs408-go-stack/issues/23) — Admin panel: ZIP export/import
-- [CP7 #24](https://github.com/timLP79/cs408-go-stack/issues/24) — Testing, polish, deploy
+- 🔄 [CP2 #25](https://github.com/timLP79/cs408-go-stack/issues/25) — Authentication: login, sessions, roles
+- [CP3 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog: list and detail pages
+- [CP4 #20](https://github.com/timLP79/cs408-go-stack/issues/20) — Book CRUD and Open Library API
+- [CP5 #21](https://github.com/timLP79/cs408-go-stack/issues/21) — Patron management
+- [CP6 #22](https://github.com/timLP79/cs408-go-stack/issues/22) — Loan system: kiosk + SSE
+- [CP7 #23](https://github.com/timLP79/cs408-go-stack/issues/23) — Admin panel: ZIP export/import
+- [CP8 #24](https://github.com/timLP79/cs408-go-stack/issues/24) — Testing, polish, deploy
 
 ---
 
@@ -140,13 +141,14 @@ See [`plan.md`](./plan.md) for the full LibreShelf architecture. Summary:
 
 | CP | Issue | Goal |
 |----|-------|------|
-| CP1 | [#18](https://github.com/timLP79/cs408-go-stack/issues/18) | Project skeleton — all 6 routes, nav, DB schema |
-| CP2 | [#19](https://github.com/timLP79/cs408-go-stack/issues/19) | Book catalog and detail pages |
-| CP3 | [#20](https://github.com/timLP79/cs408-go-stack/issues/20) | Book CRUD + Open Library API lookup |
-| CP4 | [#21](https://github.com/timLP79/cs408-go-stack/issues/21) | Patron management |
-| CP5 | [#22](https://github.com/timLP79/cs408-go-stack/issues/22) | Loans, kiosk, and SSE availability |
-| CP6 | [#23](https://github.com/timLP79/cs408-go-stack/issues/23) | Admin panel: ZIP export/import |
-| CP7 | [#24](https://github.com/timLP79/cs408-go-stack/issues/24) | Testing, polish, final deploy |
+| CP1 ✅ | [#18](https://github.com/timLP79/cs408-go-stack/issues/18) | Project skeleton — all 6 routes, nav, DB schema |
+| CP2 🔄 | [#25](https://github.com/timLP79/cs408-go-stack/issues/25) | Authentication — login, sessions, role-based access |
+| CP3 | [#19](https://github.com/timLP79/cs408-go-stack/issues/19) | Book catalog and detail pages |
+| CP4 | [#20](https://github.com/timLP79/cs408-go-stack/issues/20) | Book CRUD + Open Library API lookup |
+| CP5 | [#21](https://github.com/timLP79/cs408-go-stack/issues/21) | Patron management |
+| CP6 | [#22](https://github.com/timLP79/cs408-go-stack/issues/22) | Loans, kiosk, and SSE availability |
+| CP7 | [#23](https://github.com/timLP79/cs408-go-stack/issues/23) | Admin panel: ZIP export/import |
+| CP8 | [#24](https://github.com/timLP79/cs408-go-stack/issues/24) | Testing, polish, final deploy |
 
 ---
 
