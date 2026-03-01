@@ -285,9 +285,211 @@ func handleIndex(c *gin.Context) {
 
 ---
 
-## Next Steps
+---
 
-- Template syntax (HTML templates with Go)
-- Adding more routes
-- Working with the database
-- Error handling in Go
+## Structs — Grouping Related Data
+
+A **struct** is Go's equivalent of a class — it groups related data together.
+
+```go
+type DatabaseManager struct {
+    db *sql.DB
+}
+```
+
+- `type DatabaseManager struct` — declares a new type named `DatabaseManager`
+- `db *sql.DB` — one field: a pointer to a database connection
+- The lowercase `db` means it's **unexported** (private to the package)
+
+In Go, uppercase = public (accessible from anywhere), lowercase = private (only within the package). This is the entire visibility system — no `public`/`private` keywords needed.
+
+---
+
+## Constructor Pattern — `NewDatabaseManager`
+
+Go doesn't have constructors. The convention is a function named `New<Type>`:
+
+```go
+func NewDatabaseManager(dbPath string) *DatabaseManager {
+    db, err := sql.Open("sqlite", dbPath)
+    if err != nil {
+        log.Fatalf("Failed to open database: %v", err)
+    }
+    return &DatabaseManager{db: db}
+}
+```
+
+- Takes a `string` parameter, returns a `*DatabaseManager` (pointer)
+- `&DatabaseManager{db: db}` — creates the struct and returns its address
+- The `&` operator takes the address of a value (creates a pointer)
+
+---
+
+## Error Handling — The Go Idiom
+
+Go functions that can fail return an `error` as their last value. The idiom is:
+
+```go
+db, err := sql.Open("sqlite", dbPath)
+if err != nil {
+    log.Fatalf("Failed to open database: %v", err)
+}
+```
+
+- `err != nil` means an error occurred (`nil` = no error)
+- `log.Fatalf` prints the error message and immediately exits the program
+- `%v` in the format string means "print this value in its default format"
+
+You'll see this pattern constantly in Go. Every function that can fail follows it. There are no exceptions — errors are just values you check explicitly.
+
+**`Fatalf` vs `Errorf`:**
+- `log.Fatalf` — print and exit (use for unrecoverable errors at startup)
+- `t.Errorf` — report test failure but keep running
+- `t.Fatalf` — report test failure and stop the test immediately
+
+---
+
+## Methods — Functions Attached to Types
+
+A **method** is a function with a receiver — it's attached to a type:
+
+```go
+func (dm *DatabaseManager) createSchema() {
+    // dm is the DatabaseManager this method is called on
+    dm.db.Exec(schema)
+}
+```
+
+- `(dm *DatabaseManager)` is the **receiver** — like `self` in Python or `this` in JS
+- `dm` is just a name (convention: 1-2 letters matching the type)
+- Called as: `dm.createSchema()`
+
+The receiver is a pointer (`*DatabaseManager`) so the method can modify the struct. If it were a value receiver (`DatabaseManager`), it would get a copy and changes wouldn't persist.
+
+---
+
+## Underscore Imports — Side-Effect Imports
+
+```go
+import _ "modernc.org/sqlite"
+```
+
+The `_` means: "import this package only for its side effects — I won't call anything from it directly."
+
+SQLite drivers register themselves with Go's `database/sql` package when they load. Without the `_` import, the driver never loads and `sql.Open("sqlite", ...)` fails at runtime. Without the `_`, the compiler rejects it as an unused import.
+
+---
+
+## Type Assertions
+
+When you store a value as an interface (any type), you need a type assertion to get the concrete type back:
+
+```go
+return c.MustGet("db").(*DatabaseManager)
+```
+
+- `c.MustGet("db")` returns `interface{}` — Go's "any type"
+- `.(*DatabaseManager)` asserts "I know this is actually a `*DatabaseManager`"
+- If it's the wrong type at runtime, Go panics — so only use this when you're sure
+
+---
+
+## Closures — Functions That Capture Variables
+
+```go
+func DatabaseMiddleware(dm *DatabaseManager) gin.HandlerFunc {
+    return func(c *gin.Context) {
+        c.Set("db", dm)
+        c.Next()
+    }
+}
+```
+
+`DatabaseMiddleware` is a **factory function** — it returns another function. The inner function "closes over" `dm`, capturing it from the outer scope. Every time the inner function runs (on each HTTP request), it still has access to `dm` even though `DatabaseMiddleware` has already returned.
+
+This is a **closure**. It's how Go passes configuration into middleware without global variables.
+
+---
+
+## Range Loops — Iterating Over Slices
+
+```go
+templateNames := []string{"index", "catalog", "book_detail"}
+for _, name := range templateNames {
+    templates[name] = template.Must(template.ParseFiles(
+        "templates/layout.html",
+        "templates/"+name+".html",
+    ))
+}
+```
+
+- `[]string{...}` is a **slice** — Go's dynamic array
+- `for _, name := range templateNames` — loop over every element
+- `_` discards the index (0, 1, 2...) — we only need the value
+- String concatenation uses `+` like most languages
+
+---
+
+## Environment Variables
+
+```go
+port := os.Getenv("PORT")
+if port == "" {
+    port = "3000"
+}
+```
+
+`os.Getenv` returns the value of an environment variable, or an empty string if it's not set. This is how you configure an app differently in development vs production without changing code:
+
+```bash
+PORT=8080 ./go-full-stack   # uses 8080
+./go-full-stack              # uses 3000 (default)
+```
+
+---
+
+## URL Parameters
+
+```go
+router.GET("/books/:id", HandleBookDetail)
+
+func HandleBookDetail(c *gin.Context) {
+    id := c.Param("id")
+    // id = "42" when URL is /books/42
+}
+```
+
+The `:id` in the route is a **wildcard parameter**. Gin captures whatever comes after `/books/` and makes it available via `c.Param("id")`.
+
+---
+
+## Go Syntax Summary (Updated)
+
+| Concept | Syntax | Example |
+|---------|--------|---------|
+| Package declaration | `package name` | `package main` |
+| Import | `import "path"` | `import "html/template"` |
+| Side-effect import | `import _ "path"` | `import _ "modernc.org/sqlite"` |
+| Variable declaration | `var name type` | `var templates map[string]*template.Template` |
+| Short declaration | `name := value` | `router := gin.Default()` |
+| Struct declaration | `type Name struct { }` | `type DatabaseManager struct { db *sql.DB }` |
+| Method | `func (r *Type) Name() { }` | `func (dm *DatabaseManager) createSchema()` |
+| Constructor | `func NewType(...) *Type` | `func NewDatabaseManager(path string) *DatabaseManager` |
+| Error check | `if err != nil { }` | `if err != nil { log.Fatalf(...) }` |
+| Slice literal | `[]Type{values}` | `[]string{"index", "catalog"}` |
+| Range loop | `for i, v := range slice` | `for _, name := range templateNames` |
+| Type assertion | `value.(Type)` | `c.MustGet("db").(*DatabaseManager)` |
+| Address of | `&value` | `&DatabaseManager{db: db}` |
+| Environment var | `os.Getenv("NAME")` | `os.Getenv("PORT")` |
+| URL parameter | `c.Param("name")` | `c.Param("id")` |
+
+---
+
+## Complete File Reference
+
+| File | Key Concepts |
+|------|-------------|
+| `main.go` | Package, imports, `var`, `func main`, router setup, range loop, env vars |
+| `db.go` | Struct, constructor, methods, error handling, underscore import |
+| `handlers.go` | Functions, closures, middleware, type assertions, URL params |
+| `main_test.go` | Test functions, `t.Helper`, `t.Cleanup`, `httptest`, table-driven testing |

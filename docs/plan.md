@@ -132,13 +132,14 @@ go-full-stack/
 - ✅ Placeholder templates created for all pages including `error.html`
 - ✅ LibreShelf 5-table schema implemented in `db.go`
 - ✅ Stub handlers in `handlers.go` with `DatabaseMiddleware` and `renderTemplate`
-- ⬜ `main_test.go` — update test to use real `HandleIndex` and check for "Dashboard"
+- ✅ `main_test.go` — 3 real tests using `setupTestRouter` helper and temp database
 
 **Verification:**
 - ✅ `go build -o go-full-stack .` compiles cleanly
 - ✅ All 6 routes return 200 with the nav bar visible
 - ✅ `data/database.sqlite` created with correct 5-table schema
-- ✅ `go test ./...` passes (test update pending)
+- ✅ `go test ./...` passes — 3 tests: `TestIndexRoute`, `TestAllRoutesReturn200`, `TestNotFoundReturns404`
+- ✅ Deployed to EC2 at `http://18.237.205.236`
 
 ---
 

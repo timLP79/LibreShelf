@@ -533,13 +533,63 @@ func TestWithSetup(t *testing.T) {
     defer db.Close() // Teardown after test
 
     // Test code
-    result := db.Query("SELECT * FROM todos")
+    result := db.Query("SELECT * FROM books")
 
     if result == nil {
         t.Error("Query failed")
     }
 }
 ```
+
+### Pattern 6: Shared Test Router with `t.Cleanup`
+
+When multiple tests need the same router setup, extract it into a helper:
+
+```go
+func setupTestRouter(t *testing.T) *gin.Engine {
+    t.Helper() // errors report at the caller, not inside this function
+
+    // Create a temp database — never touches your real data
+    tmpDir, err := os.MkdirTemp("", "librashelf-test-*")
+    if err != nil {
+        t.Fatalf("Failed to create temp dir: %v", err)
+    }
+    t.Cleanup(func() { os.RemoveAll(tmpDir) }) // runs automatically when test ends
+
+    dm := NewDatabaseManager(tmpDir + "/test.sqlite")
+
+    // load templates, register routes...
+    return router
+}
+
+func TestIndexRoute(t *testing.T) {
+    router := setupTestRouter(t) // reuse the helper
+    // ...
+}
+
+func TestCatalogRoute(t *testing.T) {
+    router := setupTestRouter(t) // each test gets its own fresh router
+    // ...
+}
+```
+
+**`t.Helper()`** — marks the function as a test helper. If an assertion fails inside it, Go reports the line number in the *calling* test, not inside the helper. Makes failure messages much easier to read.
+
+**`t.Cleanup(func)`** — registers a function to run automatically when the test finishes, even if it panics or fails. Prefer this over `defer` in helpers because `defer` only runs when the current function exits, while `t.Cleanup` runs when the *test* exits.
+
+### Pattern 7: Temp Databases in Tests
+
+Never use your real database in tests. Create a fresh one each time:
+
+```go
+tmpDir, _ := os.MkdirTemp("", "prefix-*")
+t.Cleanup(func() { os.RemoveAll(tmpDir) })
+dm := NewDatabaseManager(tmpDir + "/test.sqlite")
+```
+
+- `os.MkdirTemp` creates a unique temp directory (the `*` is replaced with random chars)
+- `t.Cleanup` deletes it automatically after the test
+- Each test gets a fresh, empty database — no shared state between tests
 
 ---
 
@@ -671,14 +721,31 @@ go test ./...        # All packages
 
 ---
 
+## False Positives — Tests That Pass for the Wrong Reason
+
+A **false positive** is a test that passes but doesn't actually verify what you think it does. It's often worse than a failing test because it gives false confidence.
+
+**Example from this project:**
+
+The original `TestIndexRoute` checked for `"Hello World"` in the response. After we updated `index.html` to show the Dashboard, the test still passed — because `"Hello World"` appeared in the `<title>` tag (passed as the template title variable), not the page body.
+
+**How to avoid false positives:**
+1. Always test the **real handler**, not a duplicate inline version
+2. Check for content that **only exists if the real page rendered** (e.g. "Dashboard", not a generic string)
+3. When you change a page, update its test to match
+
+---
+
 ## Next Steps
 
 1. ✅ Write your first test (`main_test.go`)
 2. ✅ Run the test: `go test -v`
 3. ✅ Practice debugging with `t.Logf()`
-4. ⏭️ Add tests for database layer (Issue #9)
-5. ⏭️ Add tests for HTTP handlers (Issue #10)
-6. ⏭️ Integrate tests into CI/CD pipeline
+4. ✅ Refactor tests to use real handlers and `setupTestRouter` helper
+5. ✅ Add `TestAllRoutesReturn200` and `TestNotFoundReturns404`
+6. ⏭️ Add database layer tests in `db_test.go` (CP7)
+7. ⏭️ Add handler tests in `handlers_test.go` (CP7)
+8. ⏭️ Integrate tests into CI/CD pipeline (Issue #17)
 
 ---
 

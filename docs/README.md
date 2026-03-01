@@ -34,15 +34,16 @@ This is a solo developer project.
 
 ## Project Status
 
-**Current Sprint:** Week 7 — LibreShelf CP1 (wrapping up)
+**Current Sprint:** Week 7 — LibreShelf CP2
 
 **Project history:**
 - ✅ Milestone 1: Hello World App ([Issue #1](https://github.com/timLP79/cs408-go-stack/issues/1)) — Gin server, template layout, Bootstrap
 - ✅ Testing Infrastructure ([Issue #8](https://github.com/timLP79/cs408-go-stack/issues/8)) — `main_test.go`, httptest, debugging docs
 - ✅ Deployment ([Issue #16](https://github.com/timLP79/cs408-go-stack/issues/16)) — EC2, systemd, nginx reverse proxy
-- 🔄 **Project pivot to LibreShelf** (Week 7) — todo-app issues closed; LibreShelf CPs created
+- ✅ **Project pivot to LibreShelf** (Week 7) — todo-app issues closed; LibreShelf CPs created
+- ✅ **CP1 complete** ([Issue #18](https://github.com/timLP79/cs408-go-stack/issues/18)) — skeleton deployed to EC2
 
-**CP1 status:** Nearly complete — see [Issue #18](https://github.com/timLP79/cs408-go-stack/issues/18)
+**CP1 — complete:**
 - ✅ All 6 template stubs created
 - ✅ `layout.html` — nav bar, Bootstrap served locally (offline-ready)
 - ✅ `index.html` — Dashboard placeholder with stat cards
@@ -50,13 +51,13 @@ This is a solo developer project.
 - ✅ `handlers.go` — stub handlers, `DatabaseMiddleware`, `renderTemplate`
 - ✅ `main.go` — all 6 routes, static file serving, DB middleware
 - ✅ All routes return 200, schema verified in SQLite
-- ⬜ `main_test.go` — needs update (false-positive Hello World test → real Dashboard test)
+- ✅ `main_test.go` — 3 real tests: index, all routes 200, 404 handler
+- ✅ Deployed to EC2 — live at `http://18.237.205.236`
 
 **Next up:** [CP2 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog with real data from DB
 
 **Open milestones:**
-- 🔄 [CP1 #18](https://github.com/timLP79/cs408-go-stack/issues/18) — Project skeleton: routes, nav, schema
-- [CP2 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog: list and detail pages
+- 🔄 [CP2 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog: list and detail pages
 - [CP3 #20](https://github.com/timLP79/cs408-go-stack/issues/20) — Book CRUD and Open Library API
 - [CP4 #21](https://github.com/timLP79/cs408-go-stack/issues/21) — Patron management
 - [CP5 #22](https://github.com/timLP79/cs408-go-stack/issues/22) — Loan system: kiosk + SSE
@@ -95,6 +96,22 @@ This is a solo developer project.
 - ✅ Wrote first test using Go's `testing` package
 - ✅ Learned `httptest` for testing HTTP handlers
 - ✅ Documented debugging approaches (print debugging, Delve, GoLand)
+
+**CP1 — LibreShelf Skeleton:**
+- ✅ Structs and methods with receivers (`type DatabaseManager struct`, `func (dm *DatabaseManager) ...`)
+- ✅ Constructor pattern (`NewDatabaseManager`)
+- ✅ Go error handling idiom (`if err := ...; err != nil { log.Fatalf(...) }`)
+- ✅ Side-effect imports (`import _ "modernc.org/sqlite"`)
+- ✅ Type assertions (`c.MustGet("db").(*DatabaseManager)`)
+- ✅ Closures and middleware factories (`DatabaseMiddleware` returns `gin.HandlerFunc`)
+- ✅ Range loops over slices (`for _, name := range templateNames`)
+- ✅ Environment variables (`os.Getenv` with fallback defaults)
+- ✅ URL parameters (`c.Param("id")`)
+- ✅ False positives in testing and how to avoid them
+- ✅ `t.Helper()`, `t.Cleanup()`, and `os.MkdirTemp` for isolated test databases
+- ✅ Static file serving locally (offline Bootstrap — no CDN dependency)
+- ✅ Many-to-many database relationships (junction table pattern)
+- ✅ Deploying: stop service before `scp`, `git pull` for templates
 
 **Key Go Concepts Mastered:**
 - Package structure and imports
