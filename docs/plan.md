@@ -20,7 +20,7 @@ and check-out with real-time availability updates.
 | Web framework | **Gin** (`github.com/gin-gonic/gin`) |
 | Templating | **Go `html/template`** with layout pattern |
 | Database | **SQLite** via `modernc.org/sqlite` (pure Go, no CGo) |
-| CSS | **Bootstrap 5** (CDN) |
+| CSS | **Bootstrap 5.3** (served locally — no CDN dependency) |
 | Deployment | **EC2 + systemd + nginx** |
 | CI | **GitHub Actions** |
 
@@ -124,20 +124,21 @@ go-full-stack/
 
 ## Checkpoint Plan
 
-### CP1 — Project Skeleton: Routes, Nav, Schema
+### CP1 — Project Skeleton: Routes, Nav, Schema ✅
 **Goal:** Working skeleton with all 6 routes returning placeholder pages; DB schema created on startup.
 
-- Add all 6 routes to `main.go`
-- Update `templates/layout.html` with nav links to all 6 pages
-- Create placeholder templates for all pages (including `error.html`)
-- Implement LibreShelf schema (5 tables) in `db.go`
-- Add stub handlers in `handlers.go`
+- ✅ All 6 routes added to `main.go`
+- ✅ `templates/layout.html` — nav bar with links to all 6 pages; Bootstrap served locally
+- ✅ Placeholder templates created for all pages including `error.html`
+- ✅ LibreShelf 5-table schema implemented in `db.go`
+- ✅ Stub handlers in `handlers.go` with `DatabaseMiddleware` and `renderTemplate`
+- ⬜ `main_test.go` — update test to use real `HandleIndex` and check for "Dashboard"
 
 **Verification:**
-- `go build -o go-full-stack .` compiles cleanly
-- All 6 routes return 200 with the nav bar visible
-- `data/database.sqlite` created with correct 5-table schema
-- `go test ./...` passes
+- ✅ `go build -o go-full-stack .` compiles cleanly
+- ✅ All 6 routes return 200 with the nav bar visible
+- ✅ `data/database.sqlite` created with correct 5-table schema
+- ✅ `go test ./...` passes (test update pending)
 
 ---
 

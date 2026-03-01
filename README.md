@@ -13,7 +13,7 @@ check-in and check-out with real-time availability updates via Server-Sent Event
 - **Go 1.24+** with [Gin](https://github.com/gin-gonic/gin) web framework
 - **SQLite** via [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) (pure Go, no CGo)
 - **Go `html/template`** with layout pattern
-- **Bootstrap 5** (CDN)
+- **Bootstrap 5.3** (served locally — no CDN dependency)
 - **EC2 + systemd + nginx** (deployment)
 
 ## Quick Start

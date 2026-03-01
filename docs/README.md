@@ -12,7 +12,7 @@ A self-hostable library management system built with Go.
 - **Web Framework**: [Gin](https://github.com/gin-gonic/gin)
 - **Database**: SQLite (via [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) — pure Go, no CGo)
 - **Templating**: Go `html/template` with layout pattern
-- **CSS**: Bootstrap 5.3 (CDN)
+- **CSS**: Bootstrap 5.3 (served locally — no CDN dependency)
 - **Deployment**: EC2 + systemd + nginx
 
 ---
@@ -34,7 +34,7 @@ This is a solo developer project.
 
 ## Project Status
 
-**Current Sprint:** Week 7 — LibreShelf CP1
+**Current Sprint:** Week 7 — LibreShelf CP1 (wrapping up)
 
 **Project history:**
 - ✅ Milestone 1: Hello World App ([Issue #1](https://github.com/timLP79/cs408-go-stack/issues/1)) — Gin server, template layout, Bootstrap
@@ -42,10 +42,20 @@ This is a solo developer project.
 - ✅ Deployment ([Issue #16](https://github.com/timLP79/cs408-go-stack/issues/16)) — EC2, systemd, nginx reverse proxy
 - 🔄 **Project pivot to LibreShelf** (Week 7) — todo-app issues closed; LibreShelf CPs created
 
-**Current focus:** [CP1 — Project skeleton: routes, nav, and schema](https://github.com/timLP79/cs408-go-stack/issues/18)
+**CP1 status:** Nearly complete — see [Issue #18](https://github.com/timLP79/cs408-go-stack/issues/18)
+- ✅ All 6 template stubs created
+- ✅ `layout.html` — nav bar, Bootstrap served locally (offline-ready)
+- ✅ `index.html` — Dashboard placeholder with stat cards
+- ✅ `db.go` — `DatabaseManager`, 5-table schema created on startup
+- ✅ `handlers.go` — stub handlers, `DatabaseMiddleware`, `renderTemplate`
+- ✅ `main.go` — all 6 routes, static file serving, DB middleware
+- ✅ All routes return 200, schema verified in SQLite
+- ⬜ `main_test.go` — needs update (false-positive Hello World test → real Dashboard test)
+
+**Next up:** [CP2 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog with real data from DB
 
 **Open milestones:**
-- [CP1 #18](https://github.com/timLP79/cs408-go-stack/issues/18) — Project skeleton: routes, nav, schema
+- 🔄 [CP1 #18](https://github.com/timLP79/cs408-go-stack/issues/18) — Project skeleton: routes, nav, schema
 - [CP2 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog: list and detail pages
 - [CP3 #20](https://github.com/timLP79/cs408-go-stack/issues/20) — Book CRUD and Open Library API
 - [CP4 #21](https://github.com/timLP79/cs408-go-stack/issues/21) — Patron management
@@ -126,29 +136,33 @@ See [`plan.md`](./plan.md) for the full LibreShelf architecture. Summary:
 
 ```
 go-full-stack/
-├── main.go                          # Entry point: router, templates, middleware, server
-├── main_test.go                     # HTTP handler tests
-├── db.go                            # DatabaseManager: schema + CRUD methods (CP1)
-├── handlers.go                      # HTTP handler stubs for all 6 pages (CP1)
+├── main.go                          # Entry point: router, templates, middleware, server ✅
+├── main_test.go                     # HTTP handler tests (update pending)
+├── db.go                            # DatabaseManager: schema + CRUD methods ✅
+├── handlers.go                      # Stub handlers for all 6 pages ✅
 ├── handlers_books.go                # Book handlers (CP2/CP3)
 ├── handlers_patrons.go              # Patron handlers (CP4)
 ├── handlers_loans.go                # Loan/kiosk handlers + SSE (CP5)
 ├── handlers_admin.go                # Admin handlers: ZIP export/import (CP6)
 ├── templates/
-│   ├── layout.html                  # Base layout with nav
-│   ├── index.html                   # Dashboard page
-│   ├── catalog.html                 # Book catalog (CP2)
-│   ├── book_detail.html             # Single book view (CP2)
-│   ├── patrons.html                 # Patron list (CP4)
-│   ├── admin.html                   # Admin panel (CP6)
-│   ├── kiosk.html                   # Kiosk check-in/out (CP5)
-│   └── error.html                   # 404/500 error page (CP1)
+│   ├── layout.html                  # Base layout with nav bar ✅
+│   ├── index.html                   # Dashboard page ✅
+│   ├── catalog.html                 # Book catalog placeholder ✅
+│   ├── book_detail.html             # Book detail placeholder ✅
+│   ├── patrons.html                 # Patrons placeholder ✅
+│   ├── admin.html                   # Admin placeholder ✅
+│   ├── kiosk.html                   # Kiosk placeholder ✅
+│   └── error.html                   # 404/500 error page ✅
 ├── static/
-│   ├── stylesheets/style.css        # Custom styles
-│   ├── javascripts/app.js           # SSE listener + client JS
+│   ├── stylesheets/
+│   │   ├── bootstrap.min.css        # Bootstrap 5.3 (local, offline-ready) ✅
+│   │   └── style.css                # Custom styles ✅
+│   ├── javascripts/
+│   │   ├── bootstrap.bundle.min.js  # Bootstrap JS (local) ✅
+│   │   └── app.js                   # SSE listener + client JS (CP5)
 │   └── images/                      # Cover images, favicon
+├── data/                            # SQLite database (gitignored) ✅
 ├── screenshots/                     # Project screenshots for documentation
-├── data/                            # SQLite database (gitignored)
 ├── scripts/
 │   ├── install.sh                   # EC2 install script (CP7)
 │   └── configure.sh                 # EC2 configure script (CP7)
@@ -163,14 +177,15 @@ go-full-stack/
 │   │   ├── TESTING_AND_DEBUGGING_GUIDE.md
 │   │   ├── tech-stack-survey.md
 │   │   └── CANVAS_DISCUSSION_POST.md
-│   └── week6/
-│       └── deployment.md
+│   ├── week6/
+│   │   └── deployment.md
+│   └── week7/
+│       ├── LibreShelf - Product Specification.pdf
+│       └── wire-frames/
 ├── go.mod
 ├── go.sum
 └── README.md                        # Project intro and quick start
 ```
-
-> **Note:** Handler files and templates beyond `layout.html` and `index.html` are planned — they will be created in CP1 and beyond.
 
 ---
 
