@@ -211,6 +211,51 @@ ZIP contains: SQLite database file + cover images from `static/images/covers/`
 
 ---
 
+## Security Plan
+
+Security is addressed incrementally as each feature is built — not as an afterthought in CP7.
+For full details see [`docs/security.md`](./security.md).
+
+### Already protected by design
+- **XSS** — Go's `html/template` auto-escapes all output by default. Unlike string concatenation, templates cannot inject raw HTML unless you explicitly use `template.HTML`. No extra work needed.
+- **CDN supply chain** — Bootstrap is served locally, not from a CDN. No third-party script can be injected by compromising an external server.
+- **Foreign keys** — SQLite foreign key enforcement is enabled on startup, preventing orphaned records.
+
+### Per-checkpoint security work
+
+| CP | Risk | Mitigation |
+|----|------|-----------|
+| CP2 | SQL injection via book/patron IDs | Always use parameterized queries (`?` placeholders) — never string concatenation |
+| CP3 | File upload (cover images) | Validate MIME type, restrict extensions, limit file size, sanitize filename |
+| CP3 | Open Library proxy | Validate ISBN format server-side before making outbound request |
+| CP4 | PII exposure (patron emails) | Never log patron data; keep `email` field optional |
+| CP5 | Kiosk abuse / rate limiting | Validate book and patron IDs server-side; consider rate limiting on checkout |
+| CP5 | SSE data exposure | Event stream must not include patron PII — book ID and availability only |
+| CP6 | Zip Slip (path traversal) | Validate every file path in uploaded ZIP before extracting; reject `../` paths |
+| CP6 | Malicious ZIP import | Validate DB schema after import before bringing app back online |
+| CP7 | HTTP security headers | Add middleware for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` |
+| CP7 | Gin proxy warning | Configure `router.SetTrustedProxies([]string{"127.0.0.1"})` for EC2/nginx setup |
+| CP7 | HTTPS | Configure nginx TLS (Let's Encrypt or self-signed); redirect HTTP → HTTPS |
+| CP7 | Dependency audit | Run `go mod verify` and check for known CVEs before final deploy |
+
+### Session hijacking — current posture
+LibreShelf v1 has **no authentication** — it is designed for a trusted internal network
+(office, school, home). All routes are publicly accessible.
+
+If authentication is added in the future:
+- Use `HttpOnly`, `Secure`, `SameSite=Strict` cookie attributes
+- Regenerate session ID on login
+- Add CSRF tokens to all state-changing forms (`POST`, `PUT`, `DELETE`)
+- Use short session timeouts with sliding renewal
+- Store sessions server-side (not in a signed cookie), so they can be invalidated
+
+### Sensitive data at rest
+- `data/database.sqlite` is gitignored — never committed to the repo
+- Patron emails are optional and never logged
+- The `data/` directory should have restricted permissions on the server (`chmod 700 data/`)
+
+---
+
 ## Key Design Decisions
 
 ### 1. Flat package structure

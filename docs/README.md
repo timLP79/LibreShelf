@@ -71,6 +71,7 @@ This is a solo developer project.
 | File | Description |
 |------|-------------|
 | [`plan.md`](./plan.md) | LibreShelf architecture, schema, routes, and checkpoint plan |
+| [`security.md`](./security.md) | Security model, threat mitigations, and per-CP security checklist |
 | [`week7/LibreShelf - Product Specification.pdf`](./week7/LibreShelf%20-%20Product%20Specification.pdf) | LibreShelf product specification (Week 7 assignment) |
 | [`week7/wire-frames/`](./week7/wire-frames/) | UI wire frames for all 6 pages |
 | [`week6/deployment.md`](./week6/deployment.md) | EC2 deployment guide (systemd + nginx) |
