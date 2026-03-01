@@ -1,7 +1,32 @@
 {{define "content"}}
-<div class="text-center">
-    <h1 class="display-1 text-primary mb-4">{{.Title}}</h1>
-    <p class="lead mb-4">Welcome to my Go full-stack web application!</p>
-    <button class="btn btn-success btn-lg">Click Me!</button>
+<h1 class="mb-4">Dashboard</h1>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card text-bg-primary mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Books</h5>
+                <p class="card-text display-6">—</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-bg-success mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Patrons</h5>
+                <p class="card-text display-6">—</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-bg-warning mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Active Loans</h5>
+                <p class="card-text display-6">—</p>
+            </div>
+        </div>
+    </div>
 </div>
+
+<p class="text-muted">Stats and recent activity coming soon.</p>
 {{end}}
