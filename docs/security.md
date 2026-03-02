@@ -157,11 +157,23 @@ router.Use(SecurityHeaders())
 
 ---
 
-## HTTPS / TLS (CP7)
+## HTTPS / TLS
 
-All traffic should be encrypted in transit. nginx handles TLS termination.
+**Not available for this class deployment.**
 
-**nginx config addition:**
+Let's Encrypt does not issue certificates for bare IP addresses — a domain name is
+required. The current EC2 instance uses a raw IP address assigned by the professor,
+so HTTPS is not configurable in this environment.
+
+**What this means in practice:**
+- The app runs on HTTP only — traffic is not encrypted in transit
+- The `Secure` cookie flag must be disabled (see Cookie Security below) — otherwise
+  the session cookie is never sent back to the server and login breaks entirely
+- This is acceptable for a class project demo; it would not be acceptable in production
+
+**If a domain name becomes available in the future**, nginx TLS termination with
+Let's Encrypt would look like this (kept for reference):
+
 ```nginx
 server {
     listen 443 ssl;
@@ -183,8 +195,6 @@ server {
     return 301 https://$host$request_uri;
 }
 ```
-
-For a free certificate, use [Let's Encrypt](https://letsencrypt.org/) via `certbot`.
 
 ---
 
@@ -245,22 +255,31 @@ This is a feature: it makes brute-force attacks expensive.
 
 ### Cookie Security
 ```go
+// Secure flag requires HTTPS — must be false for HTTP-only deployments.
+// If set to true on an HTTP server, the browser will never send the cookie
+// back and login will silently break.
+secure := os.Getenv("APP_ENV") == "production"
+
 c.SetCookie(
     "session",     // name
     sessionToken,  // value
-    3600,          // max age (seconds)
+    28800,         // max age (8 hours)
     "/",           // path
     "",            // domain
-    true,          // Secure — HTTPS only
-    true,          // HttpOnly — not accessible to JavaScript
+    secure,        // Secure — true only when HTTPS is available
+    true,          // HttpOnly — always true, blocks JS access
 )
 ```
 
 | Attribute | Purpose |
 |-----------|---------|
 | `HttpOnly` | Prevents JavaScript from reading the cookie — blocks XSS-based session theft |
-| `Secure` | Cookie only sent over HTTPS — prevents interception on plain HTTP |
+| `Secure` | Cookie only sent over HTTPS — disabled here since we are HTTP-only |
 | `SameSite=Strict` | Cookie not sent on cross-site requests — prevents CSRF |
+
+> **Note:** `Secure: false` is a known limitation of this deployment. The `HttpOnly`
+> and `SameSite=Strict` attributes still protect against XSS-based theft and CSRF.
+> If HTTPS becomes available, set `APP_ENV=production` and the flag enables automatically.
 
 ### Session Hijacking Prevention
 - Tokens generated with `crypto/rand` (cryptographically secure) — never `math/rand`
@@ -373,10 +392,10 @@ Keep `go.sum` committed to the repository — it ensures reproducible, tamper-ev
 ### CP6
 - [ ] ZIP import: path traversal check on every extracted file, size limits enforced
 
-### CP7
+### CP8
 - [ ] Security headers middleware added
 - [ ] Trusted proxies configured
-- [ ] HTTPS configured in nginx
+- [ ] HTTPS configured in nginx (if domain name becomes available)
 - [ ] `go mod verify` passes
 - [ ] `govulncheck ./...` clean
 - [ ] `data/` directory permissions set to `700` on server

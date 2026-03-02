@@ -300,14 +300,14 @@ For full details see [`docs/security.md`](./security.md).
 | CP7 | Malicious ZIP import | Validate DB schema after import before bringing app back online |
 | CP8 | HTTP security headers | Add middleware for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` |
 | CP8 | Gin proxy warning | Configure `router.SetTrustedProxies([]string{"127.0.0.1"})` for EC2/nginx setup |
-| CP8 | HTTPS | Configure nginx TLS (Let's Encrypt or self-signed); redirect HTTP → HTTPS |
+| CP8 | HTTPS | Optional — requires a domain name; Let's Encrypt does not issue certs for bare IP addresses. HTTP-only is acceptable for this class deployment. |
 | CP8 | Dependency audit | Run `go mod verify` and check for known CVEs before final deploy |
 
 ### Session hijacking — design (implemented in CP2)
 LibreShelf uses server-side sessions with secure cookies.
 
 - Session tokens generated with `crypto/rand` (cryptographically secure)
-- Cookie attributes: `HttpOnly`, `Secure`, `SameSite=Strict`
+- Cookie attributes: `HttpOnly`, `SameSite=Strict`; `Secure` flag is environment-aware (disabled for HTTP-only deployments)
 - Session token regenerated after login (prevents session fixation)
 - Sessions stored in the `sessions` DB table — can be invalidated server-side
 - Short expiry (8 hours) with no sliding renewal — re-login required
