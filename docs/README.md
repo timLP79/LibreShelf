@@ -313,7 +313,7 @@ CREATE TABLE loans (
 | GET | `/books/:id` | Book Detail | Book info, availability, loan history |
 | GET | `/patrons` | Patrons | Patron management |
 | GET | `/admin` | Admin | ZIP export/import, settings |
-| GET | `/kiosk` | Kiosk | Self-service check-in/out |
+| GET | `/kiosk` | Kiosk | Public browse; optional login for favorites and holds |
 | GET | `/events` | SSE | Availability updates stream (CP5) |
 | GET | `/stylesheets/*` | — | CSS static files |
 | GET | `/javascripts/*` | — | JS static files |

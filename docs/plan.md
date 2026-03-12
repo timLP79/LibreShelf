@@ -7,8 +7,9 @@ It replaces the earlier Hello World / todo-app demo and uses the same proven tec
 and deployment infrastructure.
 
 LibreShelf lets a small library (school, office, personal collection) manage books,
-patrons, and loans through a simple web UI. A kiosk mode allows self-service check-in
-and check-out with real-time availability updates.
+patrons, and loans through a simple web UI. A public kiosk lets anyone browse the
+catalog without logging in; patrons may optionally log in to save searches, favorite
+books, and request holds.
 
 ---
 
@@ -36,7 +37,9 @@ and check-out with real-time availability updates.
 | `GET /` | Dashboard | Any logged-in user |
 | `GET /catalog` | Catalog | Any logged-in user |
 | `GET /books/:id` | Book Detail | Any logged-in user |
-| `GET /kiosk` | Kiosk | Any logged-in user |
+| `GET /kiosk` | Kiosk | **Public** (login optional) |
+| `POST /kiosk/favorites` | Save favorite | Login optional (silently no-op if not logged in) |
+| `POST /kiosk/holds` | Request hold | Requires login |
 | `GET /patrons` | Patrons | Admin only |
 | `GET /admin` | Admin | Admin only |
 | `GET /events` | SSE stream | Any logged-in user |
@@ -242,7 +245,7 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 
 - `handlers_loans.go`: `HandleKiosk`, `POST /loans`, `PUT /loans/:id/return`, `GET /events`
 - `db.go`: `CreateLoan()`, `ReturnLoan()`, `GetActiveLoans()`, `GetLoanHistory()`
-- `templates/kiosk.html`: patron logs in, selects book, checks out/in
+- `templates/kiosk.html`: public browse page; optional login to save favorites and request holds
 
 **SSE protocol:**
 - Endpoint: `GET /events`

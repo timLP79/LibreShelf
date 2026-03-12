@@ -36,7 +36,7 @@ Visit `http://localhost:3000` in your browser.
 | `/books/:id` | Book detail — info, availability, loan history |
 | `/patrons` | Patron management |
 | `/admin` | Admin panel — ZIP export/import |
-| `/kiosk` | Self-service check-in / check-out |
+| `/kiosk` | Public browse — optional login for favorites and holds |
 
 ## Documentation
 

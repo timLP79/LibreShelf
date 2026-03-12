@@ -11,9 +11,9 @@ LibreShelf is designed for **trusted internal networks** — a school, office, o
 
 **Assumed environment:**
 - Deployed behind nginx on a private or semi-private network
-- All routes require login — unauthenticated users are redirected to `/login`
-- Two roles: **admin** (full access) and **patron** (catalog + kiosk only)
-- The kiosk requires patron login — it is not fully public
+- Staff-facing routes require login — unauthenticated users are redirected to `/login`
+- Two roles: **admin** (full access) and **patron** (optional login for kiosk features)
+- The kiosk is fully public — no login required to browse; patrons may optionally log in to save searches, favorite books, and request holds
 
 ---
 
@@ -333,12 +333,14 @@ func RequireAdmin(c *gin.Context) {
 
 Applied in `main.go`:
 ```go
+// Public routes — no login required
+router.GET("/kiosk", HandleKiosk)
+
 auth := router.Group("/")
 auth.Use(RequireAuth)
 {
     auth.GET("/", HandleIndex)
     auth.GET("/catalog", HandleCatalog)
-    auth.GET("/kiosk", HandleKiosk)
 
     admin := auth.Group("/")
     admin.Use(RequireAdmin)
@@ -347,6 +349,11 @@ auth.Use(RequireAuth)
         admin.GET("/admin", HandleAdmin)
     }
 }
+
+// Kiosk optional-auth actions — LoadUser attaches session if present, but does not redirect
+router.GET("/kiosk/favorites", LoadUser, HandleKioskFavorites)
+router.POST("/kiosk/favorites", LoadUser, HandleKioskAddFavorite)
+router.POST("/kiosk/holds", LoadUser, RequireAuth, HandleKioskRequestHold)
 ```
 
 ---
