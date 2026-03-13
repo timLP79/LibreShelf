@@ -50,39 +50,48 @@ books, and request holds.
 
 ```sql
 CREATE TABLE books (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    isbn TEXT,
-    cover_url TEXT,
-    published_year INTEGER,
-    available INTEGER DEFAULT 1  -- boolean: 0 or 1
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    isbn               TEXT UNIQUE,              -- null for books without ISBN
+    title              TEXT NOT NULL,
+    publisher          TEXT,
+    year               INTEGER,
+    description        TEXT,
+    cover_filename     TEXT,                     -- filename only, file in static/covers/
+    genre              TEXT,
+    quantity_total     INTEGER DEFAULT 1,
+    quantity_available INTEGER DEFAULT 1         -- decremented on checkout, incremented on return
 );
 
 CREATE TABLE authors (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE book_authors (
-    book_id INTEGER REFERENCES books(id),
+    book_id   INTEGER REFERENCES books(id),
     author_id INTEGER REFERENCES authors(id),
     PRIMARY KEY (book_id, author_id)
 );
 
 CREATE TABLE patrons (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    email TEXT
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    email       TEXT,
+    phone       TEXT,
+    joined_date TEXT    -- ISO 8601 date string
 );
 
 CREATE TABLE loans (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    book_id INTEGER REFERENCES books(id),
-    patron_id INTEGER REFERENCES patrons(id),
-    checked_out_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    due_date DATETIME,
-    returned_at DATETIME
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_id        INTEGER REFERENCES books(id),
+    patron_id      INTEGER REFERENCES patrons(id),
+    checked_out_at TEXT,   -- ISO 8601 timestamp
+    due_date       TEXT,   -- ISO 8601 date string
+    returned_at    TEXT    -- NULL if still checked out
 );
+
+-- Overdue status is never stored — always computed at query time:
+-- returned_at IS NULL AND due_date < CURRENT_TIMESTAMP
 
 CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -182,6 +191,7 @@ go-full-stack/
 - `layout.html`: Updated to sidebar navigation based on wireframes (replaces top navbar)
 - `handlers_auth.go`: `HandleLogin` (GET/POST), `HandleLogout`
 - `db.go`: `users` and `sessions` tables, `CreateUser()`, `GetUserByUsername()`, `CreateSession()`, `GetSession()`, `DeleteSession()`, `SeedDefaultUsers()`
+- `db.go`: Enable WAL mode (`PRAGMA journal_mode=WAL`) — required by spec
 - `templates/login.html`: login form
 - `main.go`: `RequireAuth()` and `RequireAdmin()` middleware applied to all routes
 - Dependency: `golang.org/x/crypto/bcrypt` for password hashing
@@ -208,6 +218,8 @@ go-full-stack/
 ### CP3 — Book Catalog & Detail Pages
 **Goal:** `/catalog` shows real books from DB; `/books/:id` shows full book detail.
 
+- `db.go`: Update `books` schema to match spec — `quantity_total`, `quantity_available`, `cover_filename`, `publisher`, `description`, `genre` (replaces CP1 stub columns). Delete existing `data/database.sqlite` before first run to apply changes.
+- `db.go`: Update `patrons` schema — add `phone` and `joined_date` columns
 - `handlers_books.go`: `HandleCatalog`, `HandleBookDetail`
 - `db.go`: `GetAllBooks()`, `GetBookByID()`
 - `templates/catalog.html`: searchable/filterable book list
@@ -325,30 +337,38 @@ LibreShelf uses server-side sessions with secure cookies.
 
 ## Key Design Decisions
 
-### 1. Flat package structure
+### 1. Bootstrap served locally (diverges from spec)
+The project specification listed "Bootstrap 5 via CDN" but Bootstrap is served locally from
+`static/stylesheets/` and `static/javascripts/`. This is more consistent with the offline-first
+architecture and eliminates CDN supply chain risk. The spec PDF cannot be changed but this
+decision is intentional and documented here.
+
+---
+
+### 3. Flat package structure
 All `.go` files in `package main`, split by concern using filename suffix
 (`handlers_books.go`, `handlers_patrons.go`, etc.) rather than sub-packages.
 The app is medium-sized — sub-packages would add indirection without benefit.
 
-### 2. SSE for real-time availability
+### 4. SSE for real-time availability
 On kiosk check-out/in, the server pushes a Server-Sent Events message to all
 connected catalog clients. SSE is one-way (server → browser) and fits the use
 case exactly. No WebSocket needed.
 
-### 3. Open Library API (server-side proxy)
+### 5. Open Library API (server-side proxy)
 ISBN metadata is fetched server-side to avoid CORS issues and to keep the client
 JS simple. The handler proxies the request and returns clean JSON to the form.
 
-### 4. ZIP export using standard library
+### 6. ZIP export using standard library
 `archive/zip` (standard library) is sufficient. No third-party dependency needed
 for backup/restore.
 
-### 5. Template loading
+### 7. Template loading
 Same pattern as the current codebase: `map[string]*template.Template`, one entry
 per page, each paired with `layout.html`. The `renderTemplate()` helper executes
 the `"layout"` template, which pulls in the page's `"content"` block.
 
-### 6. SQLite driver
+### 8. SQLite driver
 `modernc.org/sqlite` registers as driver `"sqlite"` (not `"sqlite3"`). Pure Go —
 no CGo, no system library dependency.
 
