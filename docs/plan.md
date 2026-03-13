@@ -203,8 +203,13 @@ go-full-stack/
 | `RequireAuth` | `/`, `/catalog`, `/books/:id`, `/events` |
 | `RequireAdmin` | `/patrons`, `/admin`, all CRUD endpoints |
 | Public | `/login`, `/logout`, `GET /kiosk`, static files |
+<<<<<<< HEAD
 | `LoadUser` (optional) | `POST /kiosk/favorites` |
 | `RequireAuth` (kiosk) | `POST /kiosk/holds` |
+=======
+| Login optional (`LoadUser`) | `POST /kiosk/favorites` |
+| `RequireAuth` (kiosk action) | `POST /kiosk/holds` |
+>>>>>>> 3b00650 (Update CP2 access control table to reflect public kiosk design)
 
 **Seed accounts (created on first run):**
 - `admin` / `admin123` (role: admin) — password overridable via `ADMIN_PASSWORD` env var
@@ -212,8 +217,9 @@ go-full-stack/
 
 **Verification:**
 - `GET /` redirects to `/login` when not logged in
+- `GET /kiosk` loads without login
 - Admin can log in and access all routes
-- Patron can log in and access catalog/kiosk but gets 403 on `/patrons` and `/admin`
+- Patron gets 403 on `/patrons` and `/admin`
 - `POST /logout` clears session and redirects to `/login`
 
 ---
