@@ -13,7 +13,7 @@ LibreShelf is designed for **trusted internal networks** — a school, office, o
 - Deployed behind nginx on a private or semi-private network
 - Staff-facing routes require login — unauthenticated users are redirected to `/login`
 - Two roles: **admin** (full access) and **patron** (optional login for kiosk features)
-- The kiosk is fully public — no login required to browse; patrons may optionally log in to save searches, favorite books, and request holds
+- The kiosk is fully public — no login required to browse; patrons may optionally log in to save searches, favorite books, and request holds on checked-out titles. Checkout and return are staff-only actions.
 
 ---
 

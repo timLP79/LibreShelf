@@ -332,7 +332,7 @@ CREATE TABLE loans (
 | `book_detail.html` | Single book view with loan history |
 | `patrons.html` | Patron list and management |
 | `admin.html` | Admin panel |
-| `kiosk.html` | Self-service check-in/out |
+| `kiosk.html` | Public catalog browse (optional patron login for favorites and holds) |
 | `error.html` | 404/500 error page |
 
 ### Template Syntax

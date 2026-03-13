@@ -9,7 +9,8 @@ and deployment infrastructure.
 LibreShelf lets a small library (school, office, personal collection) manage books,
 patrons, and loans through a simple web UI. A public kiosk lets anyone browse the
 catalog without logging in; patrons may optionally log in to save searches, favorite
-books, and request holds.
+books, and request holds on checked-out titles. All checkout and return transactions
+are handled exclusively by staff on the book detail page.
 
 ---
 
@@ -140,7 +141,7 @@ go-full-stack/
 │   ├── book_detail.html       # Single book view
 │   ├── patrons.html           # Patron list
 │   ├── admin.html             # Admin panel
-│   ├── kiosk.html             # Kiosk check-in/out
+│   ├── kiosk.html             # Public catalog browse (optional patron login)
 │   └── error.html             # 404/500 error page
 ├── static/
 │   ├── stylesheets/
@@ -253,11 +254,13 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 ---
 
 ### CP6 — Loans & Kiosk + SSE
-**Goal:** Kiosk enables self-service check-in/out. SSE pushes live availability updates to the Catalog.
+**Goal:** Kiosk provides public catalog browse with optional login for patron features. SSE pushes live availability updates to all connected browsers.
 
-- `handlers_loans.go`: `HandleKiosk`, `POST /loans`, `PUT /loans/:id/return`, `GET /events`
-- `db.go`: `CreateLoan()`, `ReturnLoan()`, `GetActiveLoans()`, `GetLoanHistory()`
-- `templates/kiosk.html`: public browse page; optional login to save favorites and request holds
+- `handlers_loans.go`: `GET /events` SSE endpoint
+- `handlers_books.go`: `HandleKiosk` — public catalog browse (no auth required)
+- `db.go`: `GetActiveLoans()`, `GetLoanHistory()`
+- `templates/kiosk.html`: public browse page; optional login to save searches, favorites, and request holds on checked-out titles
+- Note: checkout and return are staff-only actions on the book detail page — not available on the kiosk
 
 **SSE protocol:**
 - Endpoint: `GET /events`
@@ -309,7 +312,7 @@ For full details see [`docs/security.md`](./security.md).
 | CP4 | File upload (cover images) | Validate MIME type, restrict extensions, limit file size, sanitize filename |
 | CP4 | Open Library proxy | Validate ISBN format server-side before making outbound request |
 | CP5 | PII exposure (patron emails) | Never log patron data; keep `email` field optional |
-| CP6 | Kiosk abuse / rate limiting | Validate book and patron IDs server-side; consider rate limiting on checkout |
+| CP6 | Hold request abuse | Validate patron login before allowing holds; rate limit hold requests |
 | CP6 | SSE data exposure | Event stream must not include patron PII — book ID and availability only |
 | CP7 | Zip Slip (path traversal) | Validate every file path in uploaded ZIP before extracting; reject `../` paths |
 | CP7 | Malicious ZIP import | Validate DB schema after import before bringing app back online |
@@ -351,9 +354,9 @@ All `.go` files in `package main`, split by concern using filename suffix
 The app is medium-sized — sub-packages would add indirection without benefit.
 
 ### 4. SSE for real-time availability
-On kiosk check-out/in, the server pushes a Server-Sent Events message to all
-connected catalog clients. SSE is one-way (server → browser) and fits the use
-case exactly. No WebSocket needed.
+On staff checkout/return (book detail page), the server pushes a Server-Sent Events
+message to all connected browsers. SSE is one-way (server → browser) and fits the
+use case exactly. No WebSocket needed.
 
 ### 5. Open Library API (server-side proxy)
 ISBN metadata is fetched server-side to avoid CORS issues and to keep the client
