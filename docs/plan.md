@@ -200,9 +200,11 @@ go-full-stack/
 **Access control applied:**
 | Middleware | Routes |
 |-----------|--------|
-| `RequireAuth` | `/`, `/catalog`, `/books/:id`, `/kiosk`, `/events` |
+| `RequireAuth` | `/`, `/catalog`, `/books/:id`, `/events` |
 | `RequireAdmin` | `/patrons`, `/admin`, all CRUD endpoints |
-| Public | `/login`, `/logout`, static files |
+| Public | `/login`, `/logout`, `GET /kiosk`, static files |
+| `LoadUser` (optional) | `POST /kiosk/favorites` |
+| `RequireAuth` (kiosk) | `POST /kiosk/holds` |
 
 **Seed accounts (created on first run):**
 - `admin` / `admin123` (role: admin) — password overridable via `ADMIN_PASSWORD` env var
