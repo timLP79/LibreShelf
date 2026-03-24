@@ -1,3 +1,6 @@
 /data
 .idea/
 go-full-stack
+
+# VS Code
+.vscode/*
