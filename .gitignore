@@ -1,6 +1,81 @@
-/data
+# ========================
+# JetBrains IDEs
+# (GoLand, PyCharm, IntelliJ, CLion)
+# ========================
 .idea/
-go-full-stack
+*.iml
+*.iws
+*.ipr
 
+# ========================
 # VS Code
-.vscode/*
+# ========================
+.vscode/
+
+# ========================
+# Go
+# ========================
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/vendor/
+/dist/
+
+# ========================
+# Java
+# ========================
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+target/
+build/
+out/
+*.log
+
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+.env
+
+# ========================
+# C
+# ========================
+*.o
+*.a
+*.out
+*.so
+*.dSYM/
+
+# ========================
+# Environment & Secrets
+# ========================
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ========================
+# OS
+# ========================
+.DS_Store
+Thumbs.db
+desktop.ini
