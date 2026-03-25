@@ -34,7 +34,7 @@ This is a solo developer project.
 
 ## Project Status
 
-**Current Sprint:** Week 7 — LibreShelf CP2
+**Current Sprint:** Week 7/8 — LibreShelf CP2 (in progress)
 
 **Project history:**
 - ✅ Milestone 1: Hello World App ([Issue #1](https://github.com/timLP79/cs408-go-stack/issues/1)) — Gin server, template layout, Bootstrap
@@ -42,6 +42,7 @@ This is a solo developer project.
 - ✅ Deployment ([Issue #16](https://github.com/timLP79/cs408-go-stack/issues/16)) — EC2, systemd, nginx reverse proxy
 - ✅ **Project pivot to LibreShelf** (Week 7) — todo-app issues closed; LibreShelf CPs created
 - ✅ **CP1 complete** ([Issue #18](https://github.com/timLP79/cs408-go-stack/issues/18)) — skeleton deployed to EC2
+- 🔄 **CP2 in progress** ([Issue #25](https://github.com/timLP79/cs408-go-stack/issues/25)) — auth layer partially built
 
 **CP1 — complete:**
 - ✅ All 6 template stubs created
@@ -54,7 +55,17 @@ This is a solo developer project.
 - ✅ `main_test.go` — 3 real tests: index, all routes 200, 404 handler
 - ✅ Deployed to EC2 (URL available on request)
 
-**Next up:** [CP2 #25](https://github.com/timLP79/cs408-go-stack/issues/25) — Authentication, sessions, and role-based access
+**CP2 — in progress:**
+- ✅ `users` and `sessions` tables added to schema in `db.go`
+- ✅ DB methods: `GetUserByUsername`, `CreateUser`, `CreateSession`, `GetSession`, `DeleteSession`
+- ✅ WAL mode enabled (`PRAGMA journal_mode=WAL`)
+- ✅ `SeedDefaultUsers()` — seeds admin and patron1 on first run
+- ✅ `handlers_auth.go` — `generateSessionToken`, `RequireAuth`, `RequireAdmin`, `LoadUser`, `HandleLogin` (GET+POST), `HandleLogout`
+- ✅ Color scheme — slate blue sidebar, soft white-gray background, accent stat cards with left border treatment
+- ❌ `templates/login.html` — not yet created
+- ❌ `main.go` — routes, middleware groups, template loading, seed call not yet wired up
+
+**Next up:** [CP2 #25](https://github.com/timLP79/cs408-go-stack/issues/25) — finish login template + wire up main.go
 
 **Open milestones:**
 - 🔄 [CP2 #25](https://github.com/timLP79/cs408-go-stack/issues/25) — Authentication: login, sessions, roles
@@ -127,10 +138,10 @@ This is a solo developer project.
 **Development Tools:**
 - `go run .` — run without building
 - `go build` — compile to executable
-- `go mod download` — install dependencies
+- `go mod tidy` — sync go.sum with actual dependencies
 - `go test -v` — run tests with verbose output
 - Git commit messages with issue references
-- JetBrains GoLand IDE
+- VS Code with Go extension (switched from GoLand — resource constraints)
 - Delve debugger for advanced debugging
 
 ---
@@ -392,7 +403,7 @@ See [TESTING_AND_DEBUGGING_GUIDE.md](./week3/TESTING_AND_DEBUGGING_GUIDE.md) for
 
 1. **Print debugging** — `fmt.Println()` in code; `t.Logf()` in tests (only shows with `-v`)
 2. **Delve** — official Go debugger: `dlv debug` or `dlv test`
-3. **GoLand** — visual breakpoints, built-in Delve integration (F7 step in, F8 step over, F9 resume)
+3. **VS Code** — Go extension with Delve integration; switched from GoLand due to resource constraints
 
 See [TESTING_AND_DEBUGGING_GUIDE.md](./week3/TESTING_AND_DEBUGGING_GUIDE.md) for examples.
 
