@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -28,6 +30,10 @@ func NewDatabaseManager(dbPath string) *DatabaseManager {
 	// Enable foreign key enforcement
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		log.Fatalf("Failed to enable foreign keys: %v", err)
+	}
+
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		log.Fatalf("Failed to enable WAL mode: %v", err)
 	}
 
 	dm := &DatabaseManager{db: db}
@@ -147,4 +153,33 @@ func (dm *DatabaseManager) GetSession(token string) (*User, error) {
 func (dm *DatabaseManager) DeleteSession(token string) error {
 	_, err := dm.db.Exec("DELETE FROM sessions WHERE token = ?", token)
 	return err
+}
+
+func (dm *DatabaseManager) SeedDefaultUsers() {
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	if adminPassword == "" {
+		adminPassword = "admin123"
+	}
+
+	var count int
+
+	dm.db.QueryRow("SELECT COUNT(*) FROM users WHERE username = 'admin'").Scan(&count)
+	if count == 0 {
+		hash, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
+		if err != nil {
+			log.Fatalf("Failed to hash admin password: %v", err)
+		}
+		dm.CreateUser("admin", string(hash), "admin", nil)
+		log.Println("Seeded admin user")
+	}
+
+	dm.db.QueryRow("SELECT COUNT(*) FROM users WHERE username = 'patron1'").Scan(&count)
+	if count == 0 {
+		hash, err := bcrypt.GenerateFromPassword([]byte("patron123"), bcrypt.DefaultCost)
+		if err != nil {
+			log.Fatalf("Failed to hash patron 1 password: %v", err)
+		}
+		dm.CreateUser("patron1", string(hash), "patron", nil)
+		log.Println("Seeded patron1 user")
+	}
 }
