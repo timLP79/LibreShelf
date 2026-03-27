@@ -74,11 +74,15 @@ This is a solo developer project.
 
 **Open milestones:**
 - 🔄 [CP3 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog: list and detail pages
+  - Bug fixes: [#28](https://github.com/timLP79/cs408-go-stack/issues/28), [#29](https://github.com/timLP79/cs408-go-stack/issues/29), [#30](https://github.com/timLP79/cs408-go-stack/issues/30)
 - [CP4 #20](https://github.com/timLP79/cs408-go-stack/issues/20) — Book CRUD and Open Library API
+  - Bug fixes: [#31](https://github.com/timLP79/cs408-go-stack/issues/31), [#32](https://github.com/timLP79/cs408-go-stack/issues/32)
 - [CP5 #21](https://github.com/timLP79/cs408-go-stack/issues/21) — Patron management
+  - Bug fixes: [#33](https://github.com/timLP79/cs408-go-stack/issues/33), [#34](https://github.com/timLP79/cs408-go-stack/issues/34)
 - [CP6 #22](https://github.com/timLP79/cs408-go-stack/issues/22) — Loan system: kiosk + SSE
 - [CP7 #23](https://github.com/timLP79/cs408-go-stack/issues/23) — Admin panel: ZIP export/import
 - [CP8 #24](https://github.com/timLP79/cs408-go-stack/issues/24) — Testing, polish, deploy
+  - Bug fixes: [#35](https://github.com/timLP79/cs408-go-stack/issues/35), [#36](https://github.com/timLP79/cs408-go-stack/issues/36)
 
 ---
 
@@ -276,7 +280,7 @@ air
 
 ## Database
 
-LibreShelf uses a 5-table SQLite schema. The database file is created automatically at startup in the `data/` directory.
+LibreShelf uses a 7-table SQLite schema. The database file is created automatically at startup in the `data/` directory.
 
 ### Schema
 
@@ -315,25 +319,42 @@ CREATE TABLE loans (
     due_date DATETIME,
     returned_at DATETIME
 );
+
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN('admin', 'patron')),
+    patron_id INTEGER REFERENCES patrons(id),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE sessions (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    expires_at DATETIME NOT NULL
+);
 ```
 
 ---
 
 ## Routes
 
-| Method | Path | Page | Description |
-|--------|------|------|-------------|
-| GET | `/` | Dashboard | Stats, recent activity |
-| GET | `/catalog` | Catalog | Searchable/filterable book list |
-| GET | `/books/:id` | Book Detail | Book info, availability, loan history |
-| GET | `/patrons` | Patrons | Patron management |
-| GET | `/admin` | Admin | ZIP export/import, settings |
-| GET | `/kiosk` | Kiosk | Public browse; optional login for favorites and holds |
-| GET | `/events` | SSE | Availability updates stream (CP5) |
-| GET | `/stylesheets/*` | — | CSS static files |
-| GET | `/javascripts/*` | — | JS static files |
-| GET | `/images/*` | — | Image static files |
-| GET | `/favicon.svg` | — | Favicon |
+| Method | Path | Page | Access | Description |
+|--------|------|------|--------|-------------|
+| GET | `/login` | Login | Public | Login page |
+| POST | `/login` | Login | Public | Login action |
+| POST | `/logout` | — | Any logged-in | Logout action |
+| GET | `/` | Dashboard | RequireAuth | Stats, recent activity |
+| GET | `/catalog` | Catalog | RequireAuth | Searchable/filterable book list |
+| GET | `/books/:id` | Book Detail | RequireAuth | Book info, availability, loan history |
+| GET | `/patrons` | Patrons | RequireAdmin | Patron management |
+| GET | `/admin` | Admin | RequireAdmin | ZIP export/import, settings |
+| GET | `/kiosk` | Kiosk | Public | Public browse; optional login for favorites and holds |
+| GET | `/events` | SSE | RequireAuth | Availability updates stream (CP6) |
+| GET | `/stylesheets/*` | — | Public | CSS static files |
+| GET | `/javascripts/*` | — | Public | JS static files |
+| GET | `/images/*` | — | Public | Image static files |
 
 ---
 

@@ -203,13 +203,8 @@ go-full-stack/
 | `RequireAuth` | `/`, `/catalog`, `/books/:id`, `/events` |
 | `RequireAdmin` | `/patrons`, `/admin`, all CRUD endpoints |
 | Public | `/login`, `/logout`, `GET /kiosk`, static files |
-<<<<<<< HEAD
 | `LoadUser` (optional) | `POST /kiosk/favorites` |
 | `RequireAuth` (kiosk) | `POST /kiosk/holds` |
-=======
-| Login optional (`LoadUser`) | `POST /kiosk/favorites` |
-| `RequireAuth` (kiosk action) | `POST /kiosk/holds` |
->>>>>>> 3b00650 (Update CP2 access control table to reflect public kiosk design)
 
 **Seed accounts (created on first run):**
 - `admin` / `admin123` (role: admin) — password overridable via `ADMIN_PASSWORD` env var
@@ -234,6 +229,11 @@ go-full-stack/
 - `templates/catalog.html`: searchable/filterable book list
 - `templates/book_detail.html`: book info, availability, loan history
 
+**Bug fixes (from code review):**
+- [#28](https://github.com/timLP79/cs408-go-stack/issues/28) — `CreateSession` error silently ignored in `HandleLoginPost`
+- [#29](https://github.com/timLP79/cs408-go-stack/issues/29) — `SeedDefaultUsers` ignores `Scan` and `CreateUser` errors
+- [#30](https://github.com/timLP79/cs408-go-stack/issues/30) — `renderPage` template name mismatch causes blank 404 page
+
 ---
 
 ### CP4 — Book CRUD + Open Library API
@@ -242,6 +242,10 @@ go-full-stack/
 - `handlers_books.go`: `POST /books`, `PUT /books/:id`, `DELETE /books/:id`
 - `handlers_admin.go`: `GET /api/openlibrary?isbn=...` (server-side proxy)
 - `db.go`: `CreateBook()`, `UpdateBook()`, `DeleteBook()`
+
+**Bug fixes (from code review):**
+- [#31](https://github.com/timLP79/cs408-go-stack/issues/31) — `ExecuteTemplate` errors never checked in render helpers
+- [#32](https://github.com/timLP79/cs408-go-stack/issues/32) — CSRF protection documented but not implemented anywhere
 
 **Open Library API:**
 ```
@@ -258,6 +262,10 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 - `db.go`: `GetAllPatrons()`, `GetPatronByID()`, `CreatePatron()`, `UpdatePatron()`, `DeletePatron()`
 - `templates/patrons.html`: patron list with inline forms
 - Creating a patron also creates a linked `users` record (patron role)
+
+**Bug fixes (from code review):**
+- [#33](https://github.com/timLP79/cs408-go-stack/issues/33) — Username enumeration via login timing side-channel
+- [#34](https://github.com/timLP79/cs408-go-stack/issues/34) — Missing `lang="en"` on HTML tags (WCAG 2.1)
 
 ---
 
@@ -295,6 +303,10 @@ ZIP contains: SQLite database file + cover images from `static/images/covers/`
 - `handlers_test.go`: integration tests for all HTTP handlers including auth flows
 - `scripts/install.sh`, `scripts/configure.sh`: EC2 automation scripts
 - Security headers middleware, trusted proxies config, HTTPS setup
+
+**Bug fixes (from code review):**
+- [#35](https://github.com/timLP79/cs408-go-stack/issues/35) — Test router does not mirror production middleware (false-positive tests)
+- [#36](https://github.com/timLP79/cs408-go-stack/issues/36) — Empty `app.js` loaded on every page
 
 ---
 

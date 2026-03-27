@@ -289,6 +289,8 @@ c.SetCookie(
 - On logout: delete the session row from the DB immediately
 
 ### CSRF Protection
+> **Status: NOT YET IMPLEMENTED** — tracked in [#32](https://github.com/timLP79/cs408-go-stack/issues/32), scheduled for CP4.
+
 Every state-changing form (`POST`, `PUT`, `DELETE`) needs a CSRF token:
 - Server generates a random token and stores it in the session
 - Token is embedded as a hidden field in each form:
