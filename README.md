@@ -27,6 +27,15 @@ go run .
 
 Visit `http://localhost:3000` in your browser.
 
+## Test Accounts
+
+These accounts are created automatically on first run:
+
+| Username | Password | Role |
+|----------|----------|------|
+| `admin` | `admin123` | Admin — full access to all pages |
+| `patron1` | `patron123` | Patron — limited access (no admin/patrons pages) |
+
 ## Pages
 
 | Route | Page |
