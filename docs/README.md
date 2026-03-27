@@ -34,7 +34,7 @@ This is a solo developer project.
 
 ## Project Status
 
-**Current Sprint:** Week 7/8 — LibreShelf CP2 (in progress)
+**Current Sprint:** Week 7/8 — LibreShelf CP3
 
 **Project history:**
 - ✅ Milestone 1: Hello World App ([Issue #1](https://github.com/timLP79/cs408-go-stack/issues/1)) — Gin server, template layout, Bootstrap
@@ -42,7 +42,7 @@ This is a solo developer project.
 - ✅ Deployment ([Issue #16](https://github.com/timLP79/cs408-go-stack/issues/16)) — EC2, systemd, nginx reverse proxy
 - ✅ **Project pivot to LibreShelf** (Week 7) — todo-app issues closed; LibreShelf CPs created
 - ✅ **CP1 complete** ([Issue #18](https://github.com/timLP79/cs408-go-stack/issues/18)) — skeleton deployed to EC2
-- 🔄 **CP2 in progress** ([Issue #25](https://github.com/timLP79/cs408-go-stack/issues/25)) — auth layer partially built
+- ✅ **CP2 complete** ([Issue #25](https://github.com/timLP79/cs408-go-stack/issues/25)) — authentication merged, tagged v2
 
 **CP1 — complete:**
 - ✅ All 6 template stubs created
@@ -55,21 +55,25 @@ This is a solo developer project.
 - ✅ `main_test.go` — 3 real tests: index, all routes 200, 404 handler
 - ✅ Deployed to EC2 (URL available on request)
 
-**CP2 — in progress:**
+**CP2 — complete:**
 - ✅ `users` and `sessions` tables added to schema in `db.go`
 - ✅ DB methods: `GetUserByUsername`, `CreateUser`, `CreateSession`, `GetSession`, `DeleteSession`
 - ✅ WAL mode enabled (`PRAGMA journal_mode=WAL`)
 - ✅ `SeedDefaultUsers()` — seeds admin and patron1 on first run
 - ✅ `handlers_auth.go` — `generateSessionToken`, `RequireAuth`, `RequireAdmin`, `LoadUser`, `HandleLogin` (GET+POST), `HandleLogout`
-- ✅ Color scheme — slate blue sidebar, soft white-gray background, accent stat cards with left border treatment
-- ❌ `templates/login.html` — not yet created
-- ❌ `main.go` — routes, middleware groups, template loading, seed call not yet wired up
+- ✅ `RequireAdmin` inlined session check (fixed premature `c.Next()` bug)
+- ✅ `templates/login.html` — standalone login page (no layout/sidebar)
+- ✅ `templates/error.html` — layout-aware error page for 403/404
+- ✅ `renderPage` helper for standalone templates (login, 404)
+- ✅ `layout.html` — shows username, Sign Out button, hides admin nav for patrons
+- ✅ `index.html` — hides Patrons stat card for patron role
+- ✅ Color scheme — slate blue sidebar, soft white-gray background, accent stat cards
+- ✅ Merged PR #27, tagged v2
 
-**Next up:** [CP2 #25](https://github.com/timLP79/cs408-go-stack/issues/25) — finish login template + wire up main.go
+**Next up:** [CP3 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — book catalog list and detail pages
 
 **Open milestones:**
-- 🔄 [CP2 #25](https://github.com/timLP79/cs408-go-stack/issues/25) — Authentication: login, sessions, roles
-- [CP3 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog: list and detail pages
+- 🔄 [CP3 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog: list and detail pages
 - [CP4 #20](https://github.com/timLP79/cs408-go-stack/issues/20) — Book CRUD and Open Library API
 - [CP5 #21](https://github.com/timLP79/cs408-go-stack/issues/21) — Patron management
 - [CP6 #22](https://github.com/timLP79/cs408-go-stack/issues/22) — Loan system: kiosk + SSE
@@ -153,8 +157,8 @@ See [`plan.md`](./plan.md) for the full LibreShelf architecture. Summary:
 | CP | Issue | Goal |
 |----|-------|------|
 | CP1 ✅ | [#18](https://github.com/timLP79/cs408-go-stack/issues/18) | Project skeleton — all 6 routes, nav, DB schema |
-| CP2 🔄 | [#25](https://github.com/timLP79/cs408-go-stack/issues/25) | Authentication — login, sessions, role-based access |
-| CP3 | [#19](https://github.com/timLP79/cs408-go-stack/issues/19) | Book catalog and detail pages |
+| CP2 ✅ | [#25](https://github.com/timLP79/cs408-go-stack/issues/25) | Authentication — login, sessions, role-based access |
+| CP3 🔄 | [#19](https://github.com/timLP79/cs408-go-stack/issues/19) | Book catalog and detail pages |
 | CP4 | [#20](https://github.com/timLP79/cs408-go-stack/issues/20) | Book CRUD + Open Library API lookup |
 | CP5 | [#21](https://github.com/timLP79/cs408-go-stack/issues/21) | Patron management |
 | CP6 | [#22](https://github.com/timLP79/cs408-go-stack/issues/22) | Loans, kiosk, and SSE availability |
