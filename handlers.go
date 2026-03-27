@@ -65,7 +65,7 @@ func HandleKiosk(c *gin.Context) {
 // HandleNotFound renders the 404 error page
 func HandleNotFound(c *gin.Context) {
 	c.Status(http.StatusNotFound)
-	renderTemplate(c, "error", gin.H{
+	renderPage(c, "error", gin.H{
 		"Title":   "Not Found",
 		"Status":  404,
 		"Message": "Page not found",
@@ -79,5 +79,17 @@ func renderTemplate(c *gin.Context, name string, data gin.H) {
 		c.Status(http.StatusInternalServerError)
 		return
 	}
+	if user, exists := c.Get("user"); exists {
+		data["User"] = user
+	}
 	tmpl.ExecuteTemplate(c.Writer, "layout", data)
+}
+
+func renderPage(c *gin.Context, name string, data gin.H) {
+	tmpl, ok := templates[name]
+	if !ok {
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	tmpl.ExecuteTemplate(c.Writer, name, data)
 }

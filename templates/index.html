@@ -2,30 +2,34 @@
 <h1 class="mb-4">Dashboard</h1>
 
 <div class="row">
-    <div class="col-md-4">
-        <div class="card text-bg-primary mb-3">
-            <div class="card-body">
-                <h5 class="card-title">Books</h5>
-                <p class="card-text display-6">—</p>
-            </div>
-        </div>
+  <div class="col-md-4">
+    <div class="card stat-card stat-card-books mb-3">
+      <div class="card-body">
+        <div class="stat-label">Books</div>
+        <div class="stat-value">—</div>
+      </div>
     </div>
-    <div class="col-md-4">
-        <div class="card text-bg-success mb-3">
-            <div class="card-body">
-                <h5 class="card-title">Patrons</h5>
-                <p class="card-text display-6">—</p>
-            </div>
-        </div>
+  </div>
+
+  {{if and .User (eq .User.Role "admin")}}
+  <div class="col-md-4">
+    <div class="card stat-card stat-card-patrons mb-3">
+      <div class="card-body">
+        <div class="stat-label">Patrons</div>
+        <div class="stat-value">—</div>
+      </div>
     </div>
-    <div class="col-md-4">
-        <div class="card text-bg-warning mb-3">
-            <div class="card-body">
-                <h5 class="card-title">Active Loans</h5>
-                <p class="card-text display-6">—</p>
-            </div>
-        </div>
+  </div>
+  {{end}}
+
+  <div class="col-md-4">
+    <div class="card stat-card stat-card-loans mb-3">
+      <div class="card-body">
+        <div class="stat-label">Active Loans</div>
+        <div class="stat-value">—</div>
+      </div>
     </div>
+  </div>
 </div>
 
 <p class="text-muted">Stats and recent activity coming soon.</p>

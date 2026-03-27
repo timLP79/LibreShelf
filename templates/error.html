@@ -1,4 +1,7 @@
 {{define "content"}}
-<h1>{{.Status}} - {{.Message}}</h1>
-<p><a href="/">Go back home</a></p>
+<div class="text-center mt-5">
+    <div class="fw-bold" style="font-size: 5rem; color: #1e3a5f;">{{.Status}}</div>
+    <div class="fs-4 mb-3 text-muted">{{.Message}}</div>
+    <a href="/" class="btn btn-sm" style="color: #1e3a5f; border-color: #1e3a5f;">Go back home</a>
+</div>
 {{end}}

@@ -26,12 +26,13 @@ func main() {
 
 	// Initialize the database
 	dm := NewDatabaseManager(dataDir + "/" + dbName)
+	dm.SeedDefaultUsers()
 
 	// Load Templates
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
 		"index", "catalog", "book_detail",
-		"patrons", "admin", "kiosk", "error",
+		"patrons", "admin", "kiosk",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.ParseFiles(
@@ -39,6 +40,15 @@ func main() {
 			"templates/"+name+".html",
 		))
 	}
+
+	templates["login"] = template.Must(template.ParseFiles(
+		"templates/login.html",
+	))
+
+	templates["error"] = template.Must(template.ParseFiles(
+		"templates/layout.html",
+		"templates/error.html",
+	))
 
 	// Setup router
 	router := gin.Default()
@@ -51,13 +61,25 @@ func main() {
 	// Database middleware - make dm available to all handlers
 	router.Use(DatabaseMiddleware(dm))
 
-	// Routes
-	router.GET("/", HandleIndex)
-	router.GET("/catalog", HandleCatalog)
-	router.GET("/books/:id", HandleBookDetail)
-	router.GET("/patrons", HandlePatrons)
-	router.GET("/admin", HandleAdmin)
+	// Public routes
+	router.GET("/login", HandleLogin)
+	router.POST("/login", HandleLoginPost)
+	router.POST("/logout", HandleLogout)
 	router.GET("/kiosk", HandleKiosk)
+
+	// Authenticated routes
+	auth := router.Group("/")
+	auth.Use(RequireAuth)
+	auth.GET("/", HandleIndex)
+	auth.GET("/catalog", HandleCatalog)
+	auth.GET("/books/:id", HandleBookDetail)
+
+	// Admin-only routes
+	admin := router.Group("/")
+	admin.Use(RequireAdmin)
+	admin.GET("/patrons", HandlePatrons)
+	admin.GET("/admin", HandleAdmin)
+
 	router.NoRoute(HandleNotFound)
 
 	// Start server
