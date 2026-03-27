@@ -1,22 +1,7 @@
-{{define "error"}}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{.Status}} - LibreShelf</title>
-    <link href="/stylesheets/bootstrap.min.css" rel="stylesheet">
-    <link href="/stylesheets/style.css" rel="stylesheet">
-</head>
-<body class="d-flex align-items-center justify-content-center min-vh-100" style="background-color: #f0f4f8;">
-
-    <div class="text-center">
-        <div class="fw-bold" style="font-size: 5rem; color: #1e3a5f;">{{.Status}}</div>
-        <div class="fs-4 mb-3 text-muted">{{.Message}}</div>
-        <a href="/" class="btn btn-sm" style="color: #1e3a5f; border-color: #1e3a5f;">Go back home</a>
-    </div>
-
-    <script src="/javascripts/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+{{define "content"}}
+<div class="text-center mt-5">
+    <div class="fw-bold" style="font-size: 5rem; color: #1e3a5f;">{{.Status}}</div>
+    <div class="fs-4 mb-3 text-muted">{{.Message}}</div>
+    <a href="/" class="btn btn-sm" style="color: #1e3a5f; border-color: #1e3a5f;">Go back home</a>
+</div>
 {{end}}

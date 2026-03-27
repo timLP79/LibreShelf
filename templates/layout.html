@@ -21,8 +21,10 @@
         <nav class="nav flex-column flex-grow-1 gap-1">
             <a class="nav-link rounded" href="/">Dashboard</a>
             <a class="nav-link rounded" href="/catalog">Catalog</a>
+            {{if and .User (eq .User.Role "admin")}}
             <a class="nav-link rounded" href="/patrons">Patrons</a>
             <a class="nav-link rounded" href="/admin">Admin</a>
+            {{end}}
             <a class="nav-link rounded" href="/kiosk">Kiosk View</a>
         </nav>
         {{if .User}}

@@ -11,6 +11,7 @@
     </div>
   </div>
 
+  {{if and .User (eq .User.Role "admin")}}
   <div class="col-md-4">
     <div class="card stat-card stat-card-patrons mb-3">
       <div class="card-body">
@@ -19,6 +20,7 @@
       </div>
     </div>
   </div>
+  {{end}}
 
   <div class="col-md-4">
     <div class="card stat-card stat-card-loans mb-3">

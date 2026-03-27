@@ -46,6 +46,7 @@ func main() {
 	))
 
 	templates["error"] = template.Must(template.ParseFiles(
+		"templates/layout.html",
 		"templates/error.html",
 	))
 
