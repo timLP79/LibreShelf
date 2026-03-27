@@ -49,7 +49,7 @@ func RequireAdmin(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 	if user.Role != "admin" {
 		c.Status(http.StatusForbidden)
-		renderTemplate(c, "error", gin.H{
+		renderPage(c, "error", gin.H{
 			"Title":   "Forbidden",
 			"Status":  403,
 			"Message": "You don't have permission to access this page.",
@@ -81,7 +81,7 @@ func LoadUser(c *gin.Context) {
 
 func HandleLogin(c *gin.Context) {
 	c.Status(http.StatusOK)
-	renderTemplate(c, "login", gin.H{
+	renderPage(c, "login", gin.H{
 		"Title": "Login",
 	})
 }
@@ -93,7 +93,7 @@ func HandleLoginPost(c *gin.Context) {
 	dm := getDB(c)
 	user, err := dm.GetUserByUsername(username)
 	if err == sql.ErrNoRows || user == nil {
-		renderTemplate(c, "login", gin.H{
+		renderPage(c, "login", gin.H{
 			"Title": "Login",
 			"Error": "Invalid username or password.",
 		})
@@ -101,7 +101,7 @@ func HandleLoginPost(c *gin.Context) {
 	}
 
 	if err != nil {
-		renderTemplate(c, "login", gin.H{
+		renderPage(c, "login", gin.H{
 			"Title": "Login",
 			"Error": "Something went wrong. Please try again.",
 		})
@@ -109,7 +109,7 @@ func HandleLoginPost(c *gin.Context) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		renderTemplate(c, "login", gin.H{
+		renderPage(c, "login", gin.H{
 			"Title": "Login",
 			"Error": "Invalid username or password.",
 		})
@@ -118,7 +118,7 @@ func HandleLoginPost(c *gin.Context) {
 
 	token, err := generateSessionToken()
 	if err != nil {
-		renderTemplate(c, "login", gin.H{
+		renderPage(c, "login", gin.H{
 			"Title": "Login",
 			"Error": "Something went wrong. Please try again.",
 		})

@@ -25,9 +25,16 @@
             <a class="nav-link rounded" href="/admin">Admin</a>
             <a class="nav-link rounded" href="/kiosk">Kiosk View</a>
         </nav>
+        {{if .User}}
         <div class="small mt-auto pt-3 border-top border-secondary" style="color: #a8c4e0; opacity: 0.7;">
-            Logged in as Staff
+            Logged in as {{.User.Username}}
         </div>
+        <form method="POST" action="/logout" class="mt-2">
+            <button type="submit" class="btn btn-sm w-100" style="color: #a8c4e0; border-color: #a8c4e0;">
+                Sign Out
+            </button>
+        </form>
+        {{end}}
     </div>
 
     <!-- Main Content -->

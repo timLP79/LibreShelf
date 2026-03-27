@@ -1,0 +1,43 @@
+{{define "login"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{.Title}} - LibreShelf</title>
+    <link href="/stylesheets/bootstrap.min.css" rel="stylesheet">
+    <link href="/stylesheets/style.css" rel="stylesheet">
+</head>
+<body class="d-flex align-items-center justify-content-center min-vh-100" style="background-color: #f0f4f8;">
+
+    <div class="card shadow-sm" style="width: 360px;">
+        <div class="card-body p-4">
+            <div class="text-center mb-4">
+                <div class="fw-bold fs-4" style="color: #1e3a5f;">&#128218; LibreShelf</div>
+                <div class="text-muted small">Staff Portal</div>
+            </div>
+
+            {{if .Error}}
+            <div class="alert alert-danger py-2 small">{{.Error}}</div>
+            {{end}}
+
+            <form method="POST" action="/login">
+                <div class="mb-3">
+                    <label for="username" class="form-label">Username</label>
+                    <input type="text" class="form-control" id="username" name="username" required autofocus>
+                </div>
+                <div class="mb-3">
+                    <label for="password" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="password" name="password" required>
+                </div>
+                <button type="submit" class="btn btn-primary w-100" style="background-color: #1e3a5f; border-color: #1e3a5f;">
+                    Sign In
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script src="/javascripts/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+{{end}}
