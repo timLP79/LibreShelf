@@ -5,8 +5,9 @@ A self-hostable library management system built with Go.
 **CS408 Spring 2026 Project** | [GitHub Issues](https://github.com/timLP79/cs408-go-stack/issues) | [Project Board](https://github.com/timLP79/cs408-go-stack/projects)
 
 LibreShelf lets a small library (school, office, personal collection) manage books,
-patrons, and loans through a simple web UI. A kiosk mode supports self-service
-check-in and check-out with real-time availability updates via Server-Sent Events.
+patrons, and loans through a simple web UI. A public kiosk supports self-service
+browsing with optional patron login for favorites and holds. All checkout and return
+transactions are staff-only. Real-time availability updates via Server-Sent Events.
 
 ## Tech Stack
 

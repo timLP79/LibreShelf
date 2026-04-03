@@ -109,7 +109,7 @@ This is a solo developer project.
 - ✅ Set up Go module with `go.mod` and dependency management
 - ✅ Configured Gin web framework for HTTP routing
 - ✅ Implemented Go template rendering with layout pattern
-- ✅ Integrated Bootstrap 5 via CDN for styling
+- ✅ Integrated Bootstrap 5 served locally (no CDN dependency)
 - ✅ Created clean project structure following Go conventions
 - ✅ Learned Git workflow with issue tracking and `Closes #N` syntax
 
@@ -179,12 +179,14 @@ go-full-stack/
 ├── main_test.go                     # HTTP handler tests (update pending)
 ├── db.go                            # DatabaseManager: schema + CRUD methods ✅
 ├── handlers.go                      # Stub handlers for all 6 pages ✅
-├── handlers_books.go                # Book handlers (CP2/CP3)
-├── handlers_patrons.go              # Patron handlers (CP4)
-├── handlers_loans.go                # Loan/kiosk handlers + SSE (CP5)
-├── handlers_admin.go                # Admin handlers: ZIP export/import (CP6)
+├── handlers_auth.go                 # Login, logout, session middleware ✅
+├── handlers_books.go                # Book handlers (CP3/CP4)
+├── handlers_patrons.go              # Patron handlers (CP5)
+├── handlers_loans.go                # Loan/kiosk handlers + SSE (CP6)
+├── handlers_admin.go                # Admin handlers: ZIP export/import, Open Library proxy (CP4/CP7)
 ├── templates/
-│   ├── layout.html                  # Base layout with nav bar ✅
+│   ├── layout.html                  # Base layout with sidebar nav ✅
+│   ├── login.html                   # Standalone login page (no layout) ✅
 │   ├── index.html                   # Dashboard page ✅
 │   ├── catalog.html                 # Book catalog placeholder ✅
 │   ├── book_detail.html             # Book detail placeholder ✅
@@ -207,9 +209,11 @@ go-full-stack/
 │   └── configure.sh                 # EC2 configure script (CP7)
 ├── deploy/
 │   └── go-full-stack.service        # systemd unit file
+├── DECISIONS.md                         # Design decisions log
 ├── docs/
 │   ├── README.md                    # This file
 │   ├── plan.md                      # LibreShelf architecture and checkpoint plan
+│   ├── security.md                  # Security model and per-CP mitigations
 │   ├── tutorials/GO_LEARNING_GUIDE.md
 │   ├── week3/
 │   │   ├── BOOTSTRAP_INTEGRATION_GUIDE.md
@@ -274,7 +278,8 @@ air
 | `PORT` | `3000` | HTTP server port |
 | `DATA_DIR` | `data` | Directory for SQLite database |
 | `DB_NAME` | `database.sqlite` | Database filename |
-| `GO_ENV` | (none) | Set to `test` to enable test utilities |
+| `ADMIN_PASSWORD` | `admin123` | Override default admin password |
+| `APP_ENV` | (none) | Set to `production` to enable Secure cookie flag |
 
 ---
 
