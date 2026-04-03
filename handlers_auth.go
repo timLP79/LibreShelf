@@ -137,7 +137,13 @@ func HandleLoginPost(c *gin.Context) {
 	}
 
 	expiresAt := time.Now().Add(8 * time.Hour)
-	dm.CreateSession(token, user.ID, expiresAt)
+	if err := dm.CreateSession(token, user.ID, expiresAt); err != nil {
+		renderPage(c, "login", gin.H{
+			"Title": "Login",
+			"Error": "Something went wrong. Please try again.",
+		})
+		return
+	}
 
 	secure := os.Getenv("APP_ENV") == "production"
 	c.SetCookie("session", token, 8*60*60, "/", "", secure, true)
