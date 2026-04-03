@@ -30,6 +30,9 @@ return transactions are staff-only.
 - No em dashes in any written output.
 - No co-author notes in commits, code, or documentation.
 - Direct and honest assessments over validation.
+- Use feature branches for substantial changes that could break functionality. Small fixes
+  (typos, one-liner bug fixes) can go straight to main. Otherwise, create a feature branch,
+  test, and merge via PR.
 
 ---
 
