@@ -125,7 +125,7 @@ Files planned for CP3:
 
 ### CP3 (current)
 - [ ] #19 -- Book catalog: list and detail pages
-- [ ] #28 -- Fix: `CreateSession` error silently ignored in login handler
+- [x] #28 -- Fix: `CreateSession` error silently ignored in login handler
 - [ ] #29 -- Fix: `SeedDefaultUsers` ignores multiple errors
 - [ ] #30 -- Fix: `renderPage` template name mismatch causes blank 404
 
