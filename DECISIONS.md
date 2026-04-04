@@ -127,16 +127,16 @@ templates clean without requiring nil checks on every optional field.
 
 ---
 
-## DEC-012: Client-side catalog filtering
+## DEC-012: Client-side catalog filtering (temporary)
 
 **Date:** 2026-04-04 (CP3)
 **Context:** The catalog needs search, genre filtering, and availability filtering. Options: server-side
 query params with page reloads, or client-side filtering over the full dataset.
 **Decision:** All books are rendered server-side into the page. JavaScript in `app.js` filters by
 toggling `display: none` on card elements using data attributes.
-**Rationale:** With a small library (dozens to low hundreds of books), sending the full dataset is
-negligible. Client-side filtering gives instant feedback with no round-trips. If the catalog grows
-large, pagination can be added later as a server-side enhancement.
+**Rationale:** Fastest path to a working catalog for CP3. This approach does not scale to larger
+collections (thousands of books would hurt page load and DOM performance). Server-side pagination
+and query-based filtering should replace this before production use.
 
 ---
 
