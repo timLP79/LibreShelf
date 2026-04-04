@@ -115,12 +115,38 @@ which matters when SSE connections are reading while staff actions are writing.
 
 ---
 
-## DEC-011: Template loading pattern
+## DEC-011: Pointer types for nullable database columns
 
-**Date:** 2026-02-01 (CP1)
+**Date:** 2026-04-04 (CP3)
+**Context:** Book fields like ISBN, publisher, description, and genre are optional (nullable in SQLite).
+Scanning NULL into a Go `string` or `int` causes a runtime error.
+**Decision:** Use pointer types (`*string`, `*int`) for nullable columns in Go structs. Register a
+`deref` template function to safely unwrap pointers in templates.
+**Rationale:** Pointer types make nullability explicit at the type level. The `deref` helper keeps
+templates clean without requiring nil checks on every optional field.
+
+---
+
+## DEC-012: Client-side catalog filtering
+
+**Date:** 2026-04-04 (CP3)
+**Context:** The catalog needs search, genre filtering, and availability filtering. Options: server-side
+query params with page reloads, or client-side filtering over the full dataset.
+**Decision:** All books are rendered server-side into the page. JavaScript in `app.js` filters by
+toggling `display: none` on card elements using data attributes.
+**Rationale:** With a small library (dozens to low hundreds of books), sending the full dataset is
+negligible. Client-side filtering gives instant feedback with no round-trips. If the catalog grows
+large, pagination can be added later as a server-side enhancement.
+
+---
+
+## DEC-013: Template loading pattern
+
+**Date:** 2026-02-01 (CP1), updated 2026-04-04 (CP3)
 **Context:** Go templates can be loaded individually, as a global set, or as page-specific pairs.
 **Decision:** `map[string]*template.Template` with one entry per page, each paired with
 `layout.html`. The `renderTemplate()` helper executes the `"layout"` template which pulls in
-the page's `"content"` block.
+the page's `"content"` block. As of CP3, templates are created with `template.New("layout").Funcs(funcMap)`
+to register custom functions before parsing.
 **Rationale:** Simple, explicit, and avoids the global template namespace collisions that come
 from `template.ParseGlob()`. Each page knows exactly which templates it includes.

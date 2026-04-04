@@ -14,7 +14,7 @@ return transactions are staff-only.
 
 **Live at:** EC2 instance (URL available on request)
 **Repo:** github.com/timLP79/cs408-go-stack
-**Status:** In development -- CP2 complete, CP3 in progress
+**Status:** In development -- CP3 complete, CP4 next
 
 ---
 
@@ -83,16 +83,14 @@ Do not use Write/Edit tools to create or modify Go files. Tim writes all Go code
 
 **CP1 -- Project Skeleton:** Complete. All routes, nav, schema, basic tests.
 **CP2 -- Authentication:** Complete. Login/logout, sessions, bcrypt, role-based access control.
-**CP3 -- Book Catalog & Detail Pages:** In progress.
+**CP3 -- Book Catalog & Detail Pages:** Complete. Catalog with search/filter, book detail with metadata and loan history, bug fixes #28/#29/#30.
+**CP4 -- Book CRUD & Open Library API:** Next.
 
 Files that exist:
-- `main.go`, `db.go`, `handlers.go`, `handlers_auth.go`, `main_test.go`
-- All 9 HTML templates, layout with sidebar nav
-
-Files planned for CP3:
-- `handlers_books.go` (new)
-- `db.go` updates (schema changes, new queries)
-- Template updates (`catalog.html`, `book_detail.html`)
+- `main.go`, `db.go`, `handlers.go`, `handlers_auth.go`, `handlers_books.go`, `main_test.go`
+- All 9 HTML templates, layout with sticky sidebar nav
+- `static/javascripts/app.js` (client-side catalog filtering)
+- `static/stylesheets/style.css` (custom styles including availability badges)
 
 ---
 
@@ -123,13 +121,13 @@ Files planned for CP3:
 
 ## Open Issues / Current Focus
 
-### CP3 (current)
-- [ ] #19 -- Book catalog: list and detail pages
+### CP3 (complete)
+- [x] #19 -- Book catalog: list and detail pages
 - [x] #28 -- Fix: `CreateSession` error silently ignored in login handler
-- [ ] #29 -- Fix: `SeedDefaultUsers` ignores multiple errors
-- [ ] #30 -- Fix: `renderPage` template name mismatch causes blank 404
+- [x] #29 -- Fix: `SeedDefaultUsers` ignores multiple errors
+- [x] #30 -- Fix: `renderPage` template name mismatch causes blank 404
 
-### Future checkpoints
+### CP4 (next)
 - [ ] #20 -- [CP4] Book CRUD and Open Library API lookup
 - [ ] #21 -- [CP5] Patron management: list, add, edit, delete
 - [ ] #22 -- [CP6] Loan system: kiosk browse, holds, and SSE availability
@@ -142,7 +140,6 @@ Files planned for CP3:
 - [ ] #33 -- [CP5] Username enumeration via login timing side-channel
 - [ ] #34 -- [CP5] Missing `lang="en"` on HTML tags (WCAG 2.1)
 - [ ] #35 -- [CP8] Test router does not mirror production middleware
-- [ ] #36 -- [CP8] Empty `app.js` loaded on every page
 
 ### Backlog
 - [ ] #17 -- Automate deployment via GitHub Actions (low priority)
