@@ -132,6 +132,7 @@ Files that exist:
 - [ ] #21 -- [CP5] Patron management: list, add, edit, delete
 - [ ] #22 -- [CP6] Loan system: kiosk browse, holds, and SSE availability
 - [ ] #23 -- [CP7] Admin panel: ZIP export and import
+- [ ] #37 -- [CP7] Server-side pagination and filtering for catalog
 - [ ] #24 -- [CP8] Testing, polish, and deploy
 
 ### Bug fixes (assigned to future CPs)
