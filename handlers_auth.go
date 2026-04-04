@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -138,6 +139,7 @@ func HandleLoginPost(c *gin.Context) {
 
 	expiresAt := time.Now().Add(8 * time.Hour)
 	if err := dm.CreateSession(token, user.ID, expiresAt); err != nil {
+		log.Printf("Failed to create session: %v", err)
 		renderPage(c, "login", gin.H{
 			"Title": "Login",
 			"Error": "Something went wrong. Please try again.",

@@ -27,15 +27,32 @@ func main() {
 	// Initialize the database
 	dm := NewDatabaseManager(dataDir + "/" + dbName)
 	dm.SeedDefaultUsers()
+	dm.SeedBooks()
 
-	// Load Templates
+	// Template helpers
+	funcMap := template.FuncMap{
+		"deref": func(v interface{}) interface{} {
+			switch p := v.(type) {
+			case *string:
+				if p != nil {
+					return *p
+				}
+			case *int:
+				if p != nil {
+					return *p
+				}
+			}
+			return ""
+		},
+	}
+
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
 		"index", "catalog", "book_detail",
 		"patrons", "admin", "kiosk",
 	}
 	for _, name := range templateNames {
-		templates[name] = template.Must(template.ParseFiles(
+		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
 			"templates/layout.html",
 			"templates/"+name+".html",
 		))
@@ -45,7 +62,7 @@ func main() {
 		"templates/login.html",
 	))
 
-	templates["error"] = template.Must(template.ParseFiles(
+	templates["error"] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
 		"templates/layout.html",
 		"templates/error.html",
 	))

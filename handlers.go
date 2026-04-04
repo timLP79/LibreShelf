@@ -26,21 +26,6 @@ func HandleIndex(c *gin.Context) {
 	})
 }
 
-// HandleCatalog renders the Catalog page
-func HandleCatalog(c *gin.Context) {
-	renderTemplate(c, "catalog", gin.H{
-		"Title": "Catalog",
-	})
-}
-
-// HandleBookDetail renders the book detail page
-func HandleBookDetail(c *gin.Context) {
-	id := c.Param("id")
-	renderTemplate(c, "book_detail", gin.H{
-		"Title": "Book #" + id,
-	})
-}
-
 // HandlePatrons renders the Patrons page
 func HandlePatrons(c *gin.Context) {
 	renderTemplate(c, "patrons", gin.H{
@@ -65,7 +50,7 @@ func HandleKiosk(c *gin.Context) {
 // HandleNotFound renders the 404 error page
 func HandleNotFound(c *gin.Context) {
 	c.Status(http.StatusNotFound)
-	renderPage(c, "error", gin.H{
+	renderTemplate(c, "error", gin.H{
 		"Title":   "Not Found",
 		"Status":  404,
 		"Message": "Page not found",

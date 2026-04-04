@@ -22,6 +22,23 @@ func setupTestRouter(t *testing.T) *gin.Engine {
 	t.Cleanup(func() { os.RemoveAll(tmpDir) })
 
 	dm := NewDatabaseManager(tmpDir + "/test.sqlite")
+	dm.SeedBooks()
+
+	funcMap := template.FuncMap{
+		"deref": func(v interface{}) interface{} {
+			switch p := v.(type) {
+			case *string:
+				if p != nil {
+					return *p
+				}
+			case *int:
+				if p != nil {
+					return *p
+				}
+			}
+			return ""
+		},
+	}
 
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
@@ -30,7 +47,7 @@ func setupTestRouter(t *testing.T) *gin.Engine {
 	}
 
 	for _, name := range templateNames {
-		templates[name] = template.Must(template.ParseFiles(
+		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
 			"templates/layout.html",
 			"templates/"+name+".html",
 		))
@@ -85,6 +102,30 @@ func TestNotFoundReturns404(t *testing.T) {
 	router := setupTestRouter(t)
 
 	req, _ := http.NewRequest("GET", "/doesnotexist", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", rr.Code)
+	}
+}
+
+func TestBookDetailNotFoundReturns404(t *testing.T) {
+	router := setupTestRouter(t)
+
+	req, _ := http.NewRequest("GET", "/books/9999", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("Expected status 404, got %d", rr.Code)
+	}
+}
+
+func TestBookDetailNonNumericReturns404(t *testing.T) {
+	router := setupTestRouter(t)
+
+	req, _ := http.NewRequest("GET", "/books/abc", nil)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
