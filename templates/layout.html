@@ -16,7 +16,7 @@
     <div class="d-flex flex-column p-3 sidebar">
         <div class="mb-4">
             <div class="fw-bold fs-5" style="color: #ffffff;">&#128218; LibreShelf</div>
-            <div class="small" style="color: #a8c4e0; opacity: 0.7;">Staff Portal</div>
+            <div class="small" style="color: #a8c4e0; opacity: 0.7;">{{if and .User (eq .User.Role "admin")}}Staff Portal{{else}}Library Portal{{end}}</div>
         </div>
         <nav class="nav flex-column flex-grow-1 gap-1">
             <a class="nav-link rounded" href="/">Dashboard</a>
