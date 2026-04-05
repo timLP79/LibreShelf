@@ -14,7 +14,7 @@ transactions are staff-only. Real-time availability updates via Server-Sent Even
 - **Go 1.24+** with [Gin](https://github.com/gin-gonic/gin) web framework
 - **SQLite** via [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) (pure Go, no CGo)
 - **Go `html/template`** with layout pattern
-- **Bootstrap 5.3** (served locally — no CDN dependency)
+- **Bootstrap 5.3** (served locally -- no CDN dependency)
 - **EC2 + systemd + nginx** (deployment)
 
 ## Quick Start
@@ -34,19 +34,19 @@ These accounts are created automatically on first run:
 
 | Username | Password | Role |
 |----------|----------|------|
-| `admin` | `admin123` | Admin — full access to all pages |
-| `patron1` | `patron123` | Patron — limited access (no admin/patrons pages) |
+| `admin` | `admin123` | Admin -- full access to all pages |
+| `patron1` | `patron123` | Patron -- catalog and book detail only |
 
 ## Pages
 
 | Route | Page |
 |-------|------|
-| `/` | Dashboard — stats and recent activity |
-| `/catalog` | Book catalog — searchable and filterable |
-| `/books/:id` | Book detail — info, availability, loan history |
+| `/` | Dashboard -- stats and recent activity |
+| `/catalog` | Book catalog -- searchable and filterable |
+| `/books/:id` | Book detail -- info, availability, loan history |
 | `/patrons` | Patron management |
-| `/admin` | Admin panel — ZIP export/import |
-| `/kiosk` | Public browse — optional login for favorites and holds |
+| `/admin` | Admin panel -- ZIP export/import |
+| `/kiosk` | Public browse -- optional login for favorites and holds |
 
 ## Documentation
 
