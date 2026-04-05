@@ -1,4 +1,4 @@
-# Plan: LibreShelf — Library Management System
+# Plan: LibreShelf -- Library Management System
 
 ## Overview
 
@@ -22,7 +22,7 @@ are handled exclusively by staff on the book detail page.
 | Web framework | **Gin** (`github.com/gin-gonic/gin`) |
 | Templating | **Go `html/template`** with layout pattern |
 | Database | **SQLite** via `modernc.org/sqlite` (pure Go, no CGo) |
-| CSS | **Bootstrap 5.3** (served locally — no CDN dependency) |
+| CSS | **Bootstrap 5.3** (served locally -- no CDN dependency) |
 | Deployment | **EC2 + systemd + nginx** |
 | CI | **GitHub Actions** |
 
@@ -91,7 +91,7 @@ CREATE TABLE loans (
     returned_at    TEXT    -- NULL if still checked out
 );
 
--- Overdue status is never stored — always computed at query time:
+-- Overdue status is never stored -- always computed at query time:
 -- returned_at IS NULL AND due_date < CURRENT_TIMESTAMP
 
 CREATE TABLE users (
@@ -117,7 +117,7 @@ Created automatically on first startup if they don't exist:
 | Username | Password | Role | Notes |
 |----------|----------|------|-------|
 | `admin` | `admin123` | admin | Overridable via `ADMIN_PASSWORD` env var |
-| `patron1` | `patron123` | patron | Linked to a seed patron record |
+| `patron1` | `patron123` | patron | Not linked to a patron record yet (CP5) |
 
 ---
 
@@ -147,7 +147,7 @@ go-full-stack/
 │   ├── stylesheets/
 │   │   └── style.css          # Custom styles (minimal, Bootstrap handles most)
 │   ├── javascripts/
-│   │   └── app.js             # Client JS (SSE listener for availability updates)
+│   │   └── app.js             # Client JS (catalog filtering; SSE listener added in CP6)
 │   ├── images/
 │   └── favicon.svg
 ├── scripts/
@@ -167,32 +167,32 @@ go-full-stack/
 
 ## Checkpoint Plan
 
-### CP1 — Project Skeleton: Routes, Nav, Schema ✅
+### CP1 -- Project Skeleton: Routes, Nav, Schema ✅
 **Goal:** Working skeleton with all 6 routes returning placeholder pages; DB schema created on startup.
 
 - ✅ All 6 routes added to `main.go`
-- ✅ `templates/layout.html` — nav bar with links to all 6 pages; Bootstrap served locally
+- ✅ `templates/layout.html` -- nav bar with links to all 6 pages; Bootstrap served locally
 - ✅ Placeholder templates created for all pages including `error.html`
 - ✅ LibreShelf 5-table schema implemented in `db.go`
 - ✅ Stub handlers in `handlers.go` with `DatabaseMiddleware` and `renderTemplate`
-- ✅ `main_test.go` — 3 real tests using `setupTestRouter` helper and temp database
+- ✅ `main_test.go` -- 3 real tests using `setupTestRouter` helper and temp database
 
 **Verification:**
 - ✅ `go build -o go-full-stack .` compiles cleanly
 - ✅ All 6 routes return 200 with the nav bar visible
 - ✅ `data/database.sqlite` created with correct 5-table schema
-- ✅ `go test ./...` passes — 3 tests: `TestIndexRoute`, `TestAllRoutesReturn200`, `TestNotFoundReturns404`
+- ✅ `go test ./...` passes -- 3 tests: `TestIndexRoute`, `TestAllRoutesReturn200`, `TestNotFoundReturns404`
 - ✅ Deployed to EC2 (URL available on request)
 
 ---
 
-### CP2 — Authentication & Session Management
+### CP2 -- Authentication & Session Management
 **Goal:** All routes protected by login. Admin and patron roles enforced. Seed accounts created on first run.
 
 - `layout.html`: Updated to sidebar navigation based on wireframes (replaces top navbar)
 - `handlers_auth.go`: `HandleLogin` (GET/POST), `HandleLogout`
 - `db.go`: `users` and `sessions` tables, `CreateUser()`, `GetUserByUsername()`, `CreateSession()`, `GetSession()`, `DeleteSession()`, `SeedDefaultUsers()`
-- `db.go`: Enable WAL mode (`PRAGMA journal_mode=WAL`) — required by spec
+- `db.go`: Enable WAL mode (`PRAGMA journal_mode=WAL`) -- required by spec
 - `templates/login.html`: login form
 - `main.go`: `RequireAuth()` and `RequireAdmin()` middleware applied to all routes
 - Dependency: `golang.org/x/crypto/bcrypt` for password hashing
@@ -207,8 +207,8 @@ go-full-stack/
 | `RequireAuth` (kiosk) | `POST /kiosk/holds` |
 
 **Seed accounts (created on first run):**
-- `admin` / `admin123` (role: admin) — password overridable via `ADMIN_PASSWORD` env var
-- `patron1` / `patron123` (role: patron) — linked to a seed patron record
+- `admin` / `admin123` (role: admin) -- password overridable via `ADMIN_PASSWORD` env var
+- `patron1` / `patron123` (role: patron) -- linked to a seed patron record
 
 **Verification:**
 - `GET /` redirects to `/login` when not logged in
@@ -219,24 +219,31 @@ go-full-stack/
 
 ---
 
-### CP3 — Book Catalog & Detail Pages
+### CP3 -- Book Catalog & Detail Pages ✅
 **Goal:** `/catalog` shows real books from DB; `/books/:id` shows full book detail.
 
-- `db.go`: Update `books` schema to match spec — `quantity_total`, `quantity_available`, `cover_filename`, `publisher`, `description`, `genre` (replaces CP1 stub columns). Delete existing `data/database.sqlite` before first run to apply changes.
-- `db.go`: Update `patrons` schema — add `phone` and `joined_date` columns
-- `handlers_books.go`: `HandleCatalog`, `HandleBookDetail`
-- `db.go`: `GetAllBooks()`, `GetBookByID()`
-- `templates/catalog.html`: searchable/filterable book list
-- `templates/book_detail.html`: book info, availability, loan history
+- ✅ `db.go`: Updated `books` schema -- `quantity_total`, `quantity_available`, `cover_filename`, `publisher`, `description`, `genre`
+- ✅ `db.go`: Updated `patrons` schema -- added `phone` and `joined_date` columns
+- ✅ `db.go`: Added `UNIQUE` constraint on `authors.name` and `books.isbn`
+- ✅ `db.go`: `Book`, `Author`, `LoanRecord` structs; `GetAllBooks()`, `GetBookByID()`, `GetLoanHistory()`
+- ✅ `db.go`: `SeedBooks()` -- 6 books including multi-author (Good Omens)
+- ✅ `handlers_books.go`: `HandleCatalog`, `HandleBookDetail` with three-way error handling
+- ✅ `templates/catalog.html`: 2-column card grid with search bar, genre dropdown, availability filter
+- ✅ `templates/book_detail.html`: metadata grid, availability, loan history table, admin-only checkout scaffold
+- ✅ `static/javascripts/app.js`: client-side catalog filtering (temporary, replaced by server-side in CP7)
+- ✅ `static/stylesheets/style.css`: availability badges, sticky sidebar
+- ✅ `templates/layout.html`: role-aware sidebar labels, removed kiosk nav link
+- ✅ `main.go`: template FuncMap with `deref` for nullable pointer fields
+- ✅ `main_test.go`: updated template loading, added `TestBookDetailNotFoundReturns404`, `TestBookDetailNonNumericReturns404`
 
 **Bug fixes (from code review):**
-- [#28](https://github.com/timLP79/cs408-go-stack/issues/28) — `CreateSession` error silently ignored in `HandleLoginPost`
-- [#29](https://github.com/timLP79/cs408-go-stack/issues/29) — `SeedDefaultUsers` ignores `Scan` and `CreateUser` errors
-- [#30](https://github.com/timLP79/cs408-go-stack/issues/30) — `renderPage` template name mismatch causes blank 404 page
+- ✅ [#28](https://github.com/timLP79/cs408-go-stack/issues/28) -- `CreateSession` error now checked, logged, and returns generic error
+- ✅ [#29](https://github.com/timLP79/cs408-go-stack/issues/29) -- `SeedDefaultUsers` checks all `Scan` and `CreateUser` errors
+- ✅ [#30](https://github.com/timLP79/cs408-go-stack/issues/30) -- `HandleNotFound` uses `renderTemplate` for proper layout rendering
 
 ---
 
-### CP4 — Book CRUD + Open Library API
+### CP4 -- Book CRUD + Open Library API
 **Goal:** Admin can add, edit, and delete books. ISBN lookup auto-fills metadata.
 
 - `handlers_books.go`: `POST /books`, `PUT /books/:id`, `DELETE /books/:id`
@@ -244,8 +251,8 @@ go-full-stack/
 - `db.go`: `CreateBook()`, `UpdateBook()`, `DeleteBook()`
 
 **Bug fixes (from code review):**
-- [#31](https://github.com/timLP79/cs408-go-stack/issues/31) — `ExecuteTemplate` errors never checked in render helpers
-- [#32](https://github.com/timLP79/cs408-go-stack/issues/32) — CSRF protection documented but not implemented anywhere
+- [#31](https://github.com/timLP79/cs408-go-stack/issues/31) -- `ExecuteTemplate` errors never checked in render helpers
+- [#32](https://github.com/timLP79/cs408-go-stack/issues/32) -- CSRF protection documented but not implemented anywhere
 
 **Open Library API:**
 ```
@@ -255,7 +262,7 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 
 ---
 
-### CP5 — Patron Management
+### CP5 -- Patron Management
 **Goal:** `/patrons` shows patron list with full CRUD. Admin only.
 
 - `handlers_patrons.go`: list, add, edit, delete
@@ -264,19 +271,19 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 - Creating a patron also creates a linked `users` record (patron role)
 
 **Bug fixes (from code review):**
-- [#33](https://github.com/timLP79/cs408-go-stack/issues/33) — Username enumeration via login timing side-channel
-- [#34](https://github.com/timLP79/cs408-go-stack/issues/34) — Missing `lang="en"` on HTML tags (WCAG 2.1)
+- [#33](https://github.com/timLP79/cs408-go-stack/issues/33) -- Username enumeration via login timing side-channel
+- [#34](https://github.com/timLP79/cs408-go-stack/issues/34) -- Missing `lang="en"` on HTML tags (WCAG 2.1)
 
 ---
 
-### CP6 — Loans & Kiosk + SSE
+### CP6 -- Loans & Kiosk + SSE
 **Goal:** Kiosk provides public catalog browse with optional login for patron features. SSE pushes live availability updates to all connected browsers.
 
 - `handlers_loans.go`: `GET /events` SSE endpoint
-- `handlers_books.go`: `HandleKiosk` — public catalog browse (no auth required)
+- `handlers_books.go`: `HandleKiosk` -- public catalog browse (no auth required)
 - `db.go`: `GetActiveLoans()`, `GetLoanHistory()`
 - `templates/kiosk.html`: public browse page; optional login to save searches, favorites, and request holds on checked-out titles
-- Note: checkout and return are staff-only actions on the book detail page — not available on the kiosk
+- Note: checkout and return are staff-only actions on the book detail page -- not available on the kiosk
 
 **SSE protocol:**
 - Endpoint: `GET /events`
@@ -285,18 +292,19 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 
 ---
 
-### CP7 — Admin Panel (ZIP Export/Import)
-**Goal:** Admin can export the entire DB as a ZIP and import it back.
+### CP7 -- Admin Panel (ZIP Export/Import) + Pagination
+**Goal:** Admin can export the entire DB as a ZIP and import it back. Catalog gets server-side pagination.
 
 - `handlers_admin.go`: `GET /admin/export`, `POST /admin/import`
 - `templates/admin.html`: export button, import file picker, system stats
-- Uses Go standard library `archive/zip` — no extra dependencies
+- Uses Go standard library `archive/zip` -- no extra dependencies
+- [#37](https://github.com/timLP79/cs408-go-stack/issues/37) -- Server-side pagination and filtering for catalog (replaces CP3 client-side filtering)
 
 ZIP contains: SQLite database file + cover images from `static/images/covers/`
 
 ---
 
-### CP8 — Testing, Polish & Deploy
+### CP8 -- Testing, Polish & Deploy
 **Goal:** Test coverage, UI cleanup, security hardening, final EC2 redeploy.
 
 - `db_test.go`: unit tests for all DB methods including auth
@@ -305,54 +313,54 @@ ZIP contains: SQLite database file + cover images from `static/images/covers/`
 - Security headers middleware, trusted proxies config, HTTPS setup
 
 **Bug fixes (from code review):**
-- [#35](https://github.com/timLP79/cs408-go-stack/issues/35) — Test router does not mirror production middleware (false-positive tests)
-- [#36](https://github.com/timLP79/cs408-go-stack/issues/36) — Empty `app.js` loaded on every page
+- [#35](https://github.com/timLP79/cs408-go-stack/issues/35) -- Test router does not mirror production middleware (false-positive tests)
+- ~~[#36](https://github.com/timLP79/cs408-go-stack/issues/36) -- Empty `app.js` loaded on every page~~ (resolved in CP3: app.js now has catalog filtering)
 
 ---
 
 ## Security Plan
 
-Security is addressed incrementally as each feature is built — not as an afterthought in CP7.
+Security is addressed incrementally as each feature is built -- not as an afterthought in CP7.
 For full details see [`docs/security.md`](./security.md).
 
 ### Already protected by design
-- **XSS** — Go's `html/template` auto-escapes all output by default. Unlike string concatenation, templates cannot inject raw HTML unless you explicitly use `template.HTML`. No extra work needed.
-- **CDN supply chain** — Bootstrap is served locally, not from a CDN. No third-party script can be injected by compromising an external server.
-- **Foreign keys** — SQLite foreign key enforcement is enabled on startup, preventing orphaned records.
+- **XSS** -- Go's `html/template` auto-escapes all output by default. Unlike string concatenation, templates cannot inject raw HTML unless you explicitly use `template.HTML`. No extra work needed.
+- **CDN supply chain** -- Bootstrap is served locally, not from a CDN. No third-party script can be injected by compromising an external server.
+- **Foreign keys** -- SQLite foreign key enforcement is enabled on startup, preventing orphaned records.
 
 ### Per-checkpoint security work
 
 | CP | Risk | Mitigation |
 |----|------|-----------|
-| CP2 | Weak password storage | Use `bcrypt` — never store plain text or MD5/SHA passwords |
+| CP2 | Weak password storage | Use `bcrypt` -- never store plain text or MD5/SHA passwords |
 | CP2 | Session hijacking | `HttpOnly`, `Secure`, `SameSite=Strict` cookie; server-side session store |
 | CP2 | Session fixation | Regenerate session token after successful login |
 | CP2 | Brute force login | Bcrypt's cost factor adds natural delay; rate limit `/login` POST in CP8 |
-| CP3 | SQL injection via book/patron IDs | Always use parameterized queries (`?` placeholders) — never string concatenation |
+| CP3 | SQL injection via book/patron IDs | Always use parameterized queries (`?` placeholders) -- never string concatenation |
 | CP4 | File upload (cover images) | Validate MIME type, restrict extensions, limit file size, sanitize filename |
 | CP4 | Open Library proxy | Validate ISBN format server-side before making outbound request |
 | CP5 | PII exposure (patron emails) | Never log patron data; keep `email` field optional |
 | CP6 | Hold request abuse | Validate patron login before allowing holds; rate limit hold requests |
-| CP6 | SSE data exposure | Event stream must not include patron PII — book ID and availability only |
+| CP6 | SSE data exposure | Event stream must not include patron PII -- book ID and availability only |
 | CP7 | Zip Slip (path traversal) | Validate every file path in uploaded ZIP before extracting; reject `../` paths |
 | CP7 | Malicious ZIP import | Validate DB schema after import before bringing app back online |
 | CP8 | HTTP security headers | Add middleware for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` |
 | CP8 | Gin proxy warning | Configure `router.SetTrustedProxies([]string{"127.0.0.1"})` for EC2/nginx setup |
-| CP8 | HTTPS | Optional — requires a domain name; Let's Encrypt does not issue certs for bare IP addresses. HTTP-only is acceptable for this class deployment. |
+| CP8 | HTTPS | Optional -- requires a domain name; Let's Encrypt does not issue certs for bare IP addresses. HTTP-only is acceptable for this class deployment. |
 | CP8 | Dependency audit | Run `go mod verify` and check for known CVEs before final deploy |
 
-### Session hijacking — design (implemented in CP2)
+### Session hijacking -- design (implemented in CP2)
 LibreShelf uses server-side sessions with secure cookies.
 
 - Session tokens generated with `crypto/rand` (cryptographically secure)
 - Cookie attributes: `HttpOnly`, `SameSite=Strict`; `Secure` flag is environment-aware (disabled for HTTP-only deployments)
 - Session token regenerated after login (prevents session fixation)
-- Sessions stored in the `sessions` DB table — can be invalidated server-side
-- Short expiry (8 hours) with no sliding renewal — re-login required
+- Sessions stored in the `sessions` DB table -- can be invalidated server-side
+- Short expiry (8 hours) with no sliding renewal -- re-login required
 - CSRF tokens on all state-changing forms (`POST`, `PUT`, `DELETE`)
 
 ### Sensitive data at rest
-- `data/database.sqlite` is gitignored — never committed to the repo
+- `data/database.sqlite` is gitignored -- never committed to the repo
 - Patron emails are optional and never logged
 - The `data/` directory should have restricted permissions on the server (`chmod 700 data/`)
 
@@ -371,7 +379,7 @@ decision is intentional and documented here.
 ### 3. Flat package structure
 All `.go` files in `package main`, split by concern using filename suffix
 (`handlers_books.go`, `handlers_patrons.go`, etc.) rather than sub-packages.
-The app is medium-sized — sub-packages would add indirection without benefit.
+The app is medium-sized -- sub-packages would add indirection without benefit.
 
 ### 4. SSE for real-time availability
 On staff checkout/return (book detail page), the server pushes a Server-Sent Events
@@ -392,7 +400,7 @@ per page, each paired with `layout.html`. The `renderTemplate()` helper executes
 the `"layout"` template, which pulls in the page's `"content"` block.
 
 ### 8. SQLite driver
-`modernc.org/sqlite` registers as driver `"sqlite"` (not `"sqlite3"`). Pure Go —
+`modernc.org/sqlite` registers as driver `"sqlite"` (not `"sqlite3"`). Pure Go --
 no CGo, no system library dependency.
 
 ---

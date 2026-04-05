@@ -40,6 +40,8 @@ return transactions are staff-only.
 
 **Go (this project):** Tutor mode. Show what needs to be written and explain it thoroughly.
 Do not use Write/Edit tools to create or modify Go files. Tim writes all Go code.
+**Exceptions:** Claude can directly edit SQL schema in `createSchema()`, repetitive data entry
+(seed data, struct literals), and test files.
 
 **HTML templates, CSS, JS:** Claude can write and edit these files directly.
 
