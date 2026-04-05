@@ -10,12 +10,25 @@
 </head>
 <body>
 
+<!-- Mobile top bar (visible below lg breakpoint) -->
+<nav class="navbar d-lg-none sidebar-topbar">
+    <div class="container-fluid">
+        <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-controls="sidebar" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <span class="navbar-brand mb-0 fw-bold" style="color: #ffffff;">&#128218; LibreShelf</span>
+    </div>
+</nav>
+
 <div class="d-flex min-vh-100">
 
-    <!-- Sidebar -->
-    <div class="d-flex flex-column p-3 sidebar">
+    <!-- Sidebar: offcanvas on mobile, pinned on desktop -->
+    <div class="offcanvas-lg offcanvas-start d-flex flex-column p-3 sidebar" tabindex="-1" id="sidebar">
         <div class="mb-4">
-            <div class="fw-bold fs-5" style="color: #ffffff;">&#128218; LibreShelf</div>
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="fw-bold fs-5" style="color: #ffffff;">&#128218; LibreShelf</div>
+                <button type="button" class="btn-close btn-close-white d-lg-none" data-bs-dismiss="offcanvas" data-bs-target="#sidebar" aria-label="Close"></button>
+            </div>
             <div class="small" style="color: #a8c4e0; opacity: 0.7;">{{if and .User (eq .User.Role "admin")}}Staff Portal{{else}}Library Portal{{end}}</div>
         </div>
         <nav class="nav flex-column flex-grow-1 gap-1">
