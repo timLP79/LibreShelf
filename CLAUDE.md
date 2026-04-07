@@ -85,14 +85,14 @@ Do not use Write/Edit tools to create or modify Go files. Tim writes all Go code
 
 **CP1 -- Project Skeleton:** Complete. All routes, nav, schema, basic tests.
 **CP2 -- Authentication:** Complete. Login/logout, sessions, bcrypt, role-based access control.
-**CP3 -- Book Catalog & Detail Pages:** Complete. Catalog with search/filter, book detail with metadata and loan history, bug fixes #28/#29/#30.
-**CP4 -- Book CRUD & Open Library API:** Next.
+**CP3 -- Book Catalog & Detail Pages:** Complete. Catalog with search/filter, book detail with metadata and loan history, bug fixes #28/#29/#30, responsive sidebar.
+**CP4 -- Security Hardening + Three-Role Model:** In progress. Schema, seed, middleware, routes, and sidebar done. CSRF, ExecuteTemplate fix, and timing fix remaining.
 
 Files that exist:
 - `main.go`, `db.go`, `handlers.go`, `handlers_auth.go`, `handlers_books.go`, `main_test.go`
-- All 9 HTML templates, layout with sticky sidebar nav
+- All 9 HTML templates, layout with responsive offcanvas sidebar
 - `static/javascripts/app.js` (client-side catalog filtering)
-- `static/stylesheets/style.css` (custom styles including availability badges)
+- `static/stylesheets/style.css` (custom styles including availability badges, responsive sidebar)
 
 ---
 
@@ -128,21 +128,28 @@ Files that exist:
 - [x] #28 -- Fix: `CreateSession` error silently ignored in login handler
 - [x] #29 -- Fix: `SeedDefaultUsers` ignores multiple errors
 - [x] #30 -- Fix: `renderPage` template name mismatch causes blank 404
+- [x] #40 -- Responsive sidebar with offcanvas mobile menu
 
-### CP4 (next)
-- [ ] #20 -- [CP4] Book CRUD and Open Library API lookup
-- [ ] #21 -- [CP5] Patron management: list, add, edit, delete
-- [ ] #22 -- [CP6] Loan system: kiosk browse, holds, and SSE availability
-- [ ] #23 -- [CP7] Admin panel: ZIP export and import
-- [ ] #37 -- [CP7] Server-side pagination and filtering for catalog
-- [ ] #24 -- [CP8] Testing, polish, and deploy
+### CP4 -- Security Hardening + Bug Fixes (in progress)
+- [x] #34 -- Add `lang="en"` to HTML tags (WCAG 2.1)
+- [ ] #38 -- Three-role model: admin, staff, patron (partially done)
+- [ ] #31 -- `ExecuteTemplate` errors never checked in render helpers
+- [ ] #32 -- CSRF protection not implemented
+- [ ] #33 -- Username enumeration via login timing side-channel
 
-### Bug fixes (assigned to future CPs)
-- [ ] #31 -- [CP4] `ExecuteTemplate` errors never checked in render helpers
-- [ ] #32 -- [CP4] CSRF protection not implemented
-- [ ] #33 -- [CP5] Username enumeration via login timing side-channel
-- [ ] #34 -- [CP5] Missing `lang="en"` on HTML tags (WCAG 2.1)
-- [ ] #35 -- [CP8] Test router does not mirror production middleware
+### CP5 -- CRUD Features (Books, Patrons, Staff)
+- [ ] #20 -- Book CRUD and Open Library API lookup
+- [ ] #21 -- Patron management: CRUD, metadata, and CSV import
+- [ ] #39 -- Staff management: list, add, edit, delete
+
+### CP6 -- Loans + Kiosk + SSE
+- [ ] #22 -- Loan system: kiosk browse, holds, and SSE availability
+- [ ] #37 -- Server-side pagination and filtering for catalog
+
+### CP7 -- Admin Panel + Testing + Deploy
+- [ ] #23 -- Admin panel: ZIP export and import
+- [ ] #35 -- Fix: Test router does not mirror production middleware
+- [ ] #24 -- Testing, polish, and deploy
 
 ### Backlog
 - [ ] #17 -- Automate deployment via GitHub Actions (low priority)

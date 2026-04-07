@@ -243,16 +243,54 @@ go-full-stack/
 
 ---
 
-### CP4 -- Book CRUD + Open Library API
-**Goal:** Admin can add, edit, and delete books. ISBN lookup auto-fills metadata.
+### CP4 -- Security Hardening + Three-Role Model
+**Goal:** Lock down the foundation with CSRF, error handling, and the three-role access model before adding CRUD features.
 
-- `handlers_books.go`: `POST /books`, `PUT /books/:id`, `DELETE /books/:id`
-- `handlers_admin.go`: `GET /api/openlibrary?isbn=...` (server-side proxy)
-- `db.go`: `CreateBook()`, `UpdateBook()`, `DeleteBook()`
-
-**Bug fixes (from code review):**
+- [#38](https://github.com/timLP79/cs408-go-stack/issues/38) -- Three-role model: admin, staff, patron
+  - `users.role` CHECK constraint updated to include `'staff'`
+  - `RequireStaff` middleware (allows admin + staff)
+  - `RequireAdmin` refactored to chain after `RequireAuth`
+  - Route groups restructured: public, auth, staff, admin
+  - Sidebar nav adapts for three roles
+  - Seed staff account: `staff1` / `staff123`
 - [#31](https://github.com/timLP79/cs408-go-stack/issues/31) -- `ExecuteTemplate` errors never checked in render helpers
-- [#32](https://github.com/timLP79/cs408-go-stack/issues/32) -- CSRF protection documented but not implemented anywhere
+- [#32](https://github.com/timLP79/cs408-go-stack/issues/32) -- CSRF protection on all state-changing forms
+- [#33](https://github.com/timLP79/cs408-go-stack/issues/33) -- Username enumeration via login timing side-channel
+- [#34](https://github.com/timLP79/cs408-go-stack/issues/34) -- Missing `lang="en"` on HTML tags (WCAG 2.1)
+
+**Permission matrix:**
+
+| Capability | Admin | Staff | Patron |
+|---|---|---|---|
+| Dashboard, catalog, book detail | Yes | Yes | Yes |
+| Checkout/return books | Yes | Yes | Yes (self) |
+| Book CRUD | Yes | Yes | No |
+| View patron list | Yes | Yes | No |
+| Patron CRUD | Yes | No | No |
+| CSV patron import | Yes | Yes | No |
+| Admin panel (export/import) | Yes | Yes | No |
+| Staff management | Yes | No | No |
+
+---
+
+### CP5 -- CRUD Features (Books, Patrons, Staff)
+**Goal:** Full CRUD for books (with Open Library API), patrons (with metadata and CSV import), and staff accounts.
+
+- [#20](https://github.com/timLP79/cs408-go-stack/issues/20) -- Book CRUD and Open Library API lookup
+  - `handlers_books.go`: `POST /books`, `PUT /books/:id`, `DELETE /books/:id`
+  - `handlers_admin.go`: `GET /api/openlibrary?isbn=...` (server-side proxy)
+  - `db.go`: `CreateBook()`, `UpdateBook()`, `DeleteBook()`
+- [#21](https://github.com/timLP79/cs408-go-stack/issues/21) -- Patron management: CRUD, metadata, and CSV import
+  - `handlers_patrons.go`: list, add, edit, delete, CSV import
+  - `db.go`: `Patron` struct with `metadata TEXT` (JSON, nullable), all patron CRUD methods
+  - `templates/patrons.html`: patron list with modals, CSV upload
+  - Creating a patron also creates a linked `users` record (patron role)
+  - Auto-generated username: first-initial + last-name with collision handling
+  - Default password: `changeme` (bcrypt-hashed)
+- [#39](https://github.com/timLP79/cs408-go-stack/issues/39) -- Staff management: list, add, edit, delete
+  - `handlers_staff.go`: list, add, edit, delete staff accounts
+  - `templates/staff.html`: staff list with modals
+  - Safety guards: cannot delete self, cannot delete last admin
 
 **Open Library API:**
 ```
@@ -262,28 +300,16 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 
 ---
 
-### CP5 -- Patron Management
-**Goal:** `/patrons` shows patron list with full CRUD. Admin only.
+### CP6 -- Loans + Kiosk + SSE
+**Goal:** Kiosk provides public catalog browse with optional patron login. Checkout/return available to all roles. SSE pushes live availability updates. Catalog gets server-side pagination.
 
-- `handlers_patrons.go`: list, add, edit, delete
-- `db.go`: `GetAllPatrons()`, `GetPatronByID()`, `CreatePatron()`, `UpdatePatron()`, `DeletePatron()`
-- `templates/patrons.html`: patron list with inline forms
-- Creating a patron also creates a linked `users` record (patron role)
-
-**Bug fixes (from code review):**
-- [#33](https://github.com/timLP79/cs408-go-stack/issues/33) -- Username enumeration via login timing side-channel
-- [#34](https://github.com/timLP79/cs408-go-stack/issues/34) -- Missing `lang="en"` on HTML tags (WCAG 2.1)
-
----
-
-### CP6 -- Loans & Kiosk + SSE
-**Goal:** Kiosk provides public catalog browse with optional login for patron features. SSE pushes live availability updates to all connected browsers.
-
-- `handlers_loans.go`: `GET /events` SSE endpoint
-- `handlers_books.go`: `HandleKiosk` -- public catalog browse (no auth required)
-- `db.go`: `GetActiveLoans()`, `GetLoanHistory()`
-- `templates/kiosk.html`: public browse page; optional login to save searches, favorites, and request holds on checked-out titles
-- Note: checkout and return are staff-only actions on the book detail page -- not available on the kiosk
+- [#22](https://github.com/timLP79/cs408-go-stack/issues/22) -- Loan system: kiosk browse, holds, and SSE availability
+  - `handlers_loans.go`: `GET /events` SSE endpoint
+  - `handlers_books.go`: `HandleKiosk` -- public catalog browse (no auth required)
+  - `db.go`: `GetActiveLoans()`, `GetLoanHistory()`
+  - `templates/kiosk.html`: public browse page; optional login for favorites and holds
+  - Checkout/return on book detail page: admin and staff pick a patron, patron self-checkouts
+- [#37](https://github.com/timLP79/cs408-go-stack/issues/37) -- Server-side pagination and filtering for catalog (replaces CP3 client-side filtering)
 
 **SSE protocol:**
 - Endpoint: `GET /events`
@@ -292,29 +318,22 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 
 ---
 
-### CP7 -- Admin Panel (ZIP Export/Import) + Pagination
-**Goal:** Admin can export the entire DB as a ZIP and import it back. Catalog gets server-side pagination.
+### CP7 -- Admin Panel + Testing + Deploy
+**Goal:** ZIP export/import, test coverage, security hardening, final EC2 redeploy.
 
-- `handlers_admin.go`: `GET /admin/export`, `POST /admin/import`
-- `templates/admin.html`: export button, import file picker, system stats
-- Uses Go standard library `archive/zip` -- no extra dependencies
-- [#37](https://github.com/timLP79/cs408-go-stack/issues/37) -- Server-side pagination and filtering for catalog (replaces CP3 client-side filtering)
-
-ZIP contains: SQLite database file + cover images from `static/images/covers/`
-
----
-
-### CP8 -- Testing, Polish & Deploy
-**Goal:** Test coverage, UI cleanup, security hardening, final EC2 redeploy.
-
-- `db_test.go`: unit tests for all DB methods including auth
-- `handlers_test.go`: integration tests for all HTTP handlers including auth flows
-- `scripts/install.sh`, `scripts/configure.sh`: EC2 automation scripts
-- Security headers middleware, trusted proxies config, HTTPS setup
-
-**Bug fixes (from code review):**
+- [#23](https://github.com/timLP79/cs408-go-stack/issues/23) -- Admin panel: ZIP export and import
+  - `handlers_admin.go`: `GET /admin/export`, `POST /admin/import`
+  - `templates/admin.html`: export button, import file picker, system stats
+  - Uses Go standard library `archive/zip` -- no extra dependencies
+  - ZIP contains: SQLite database file + cover images from `static/images/covers/`
 - [#35](https://github.com/timLP79/cs408-go-stack/issues/35) -- Test router does not mirror production middleware (false-positive tests)
-- ~~[#36](https://github.com/timLP79/cs408-go-stack/issues/36) -- Empty `app.js` loaded on every page~~ (resolved in CP3: app.js now has catalog filtering)
+- [#24](https://github.com/timLP79/cs408-go-stack/issues/24) -- Testing, polish, and deploy
+  - `db_test.go`: unit tests for all DB methods including auth
+  - `handlers_test.go`: integration tests for all HTTP handlers including auth flows
+  - `scripts/install.sh`, `scripts/configure.sh`: EC2 automation scripts
+  - Security headers middleware, trusted proxies config
+  - Run `go mod verify` and dependency audit
+  - ~~[#36](https://github.com/timLP79/cs408-go-stack/issues/36) -- Empty `app.js` loaded on every page~~ (resolved in CP3)
 
 ---
 
@@ -335,19 +354,21 @@ For full details see [`docs/security.md`](./security.md).
 | CP2 | Weak password storage | Use `bcrypt` -- never store plain text or MD5/SHA passwords |
 | CP2 | Session hijacking | `HttpOnly`, `Secure`, `SameSite=Strict` cookie; server-side session store |
 | CP2 | Session fixation | Regenerate session token after successful login |
-| CP2 | Brute force login | Bcrypt's cost factor adds natural delay; rate limit `/login` POST in CP8 |
+| CP2 | Brute force login | Bcrypt's cost factor adds natural delay; rate limit `/login` POST in CP7 |
 | CP3 | SQL injection via book/patron IDs | Always use parameterized queries (`?` placeholders) -- never string concatenation |
-| CP4 | File upload (cover images) | Validate MIME type, restrict extensions, limit file size, sanitize filename |
-| CP4 | Open Library proxy | Validate ISBN format server-side before making outbound request |
+| CP4 | CSRF on state-changing forms | Token-based CSRF protection on all POST/PUT/DELETE endpoints |
+| CP4 | Username enumeration | Constant-time login path prevents timing side-channel |
+| CP5 | File upload (cover images) | Validate MIME type, restrict extensions, limit file size, sanitize filename |
+| CP5 | Open Library proxy | Validate ISBN format server-side before making outbound request |
 | CP5 | PII exposure (patron emails) | Never log patron data; keep `email` field optional |
 | CP6 | Hold request abuse | Validate patron login before allowing holds; rate limit hold requests |
 | CP6 | SSE data exposure | Event stream must not include patron PII -- book ID and availability only |
 | CP7 | Zip Slip (path traversal) | Validate every file path in uploaded ZIP before extracting; reject `../` paths |
 | CP7 | Malicious ZIP import | Validate DB schema after import before bringing app back online |
-| CP8 | HTTP security headers | Add middleware for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` |
-| CP8 | Gin proxy warning | Configure `router.SetTrustedProxies([]string{"127.0.0.1"})` for EC2/nginx setup |
-| CP8 | HTTPS | Optional -- requires a domain name; Let's Encrypt does not issue certs for bare IP addresses. HTTP-only is acceptable for this class deployment. |
-| CP8 | Dependency audit | Run `go mod verify` and check for known CVEs before final deploy |
+| CP7 | HTTP security headers | Add middleware for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` |
+| CP7 | Gin proxy warning | Configure `router.SetTrustedProxies([]string{"127.0.0.1"})` for EC2/nginx setup |
+| CP7 | HTTPS | Optional -- requires a domain name; Let's Encrypt does not issue certs for bare IP addresses. HTTP-only is acceptable for this class deployment. |
+| CP7 | Dependency audit | Run `go mod verify` and check for known CVEs before final deploy |
 
 ### Session hijacking -- design (implemented in CP2)
 LibreShelf uses server-side sessions with secure cookies.
