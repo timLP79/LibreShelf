@@ -42,24 +42,36 @@ func RequireAuth(c *gin.Context) {
 }
 
 func RequireAdmin(c *gin.Context) {
-	token, err := c.Cookie("session")
-	if err != nil {
+	user, exists := c.Get("user")
+	if !exists {
 		c.Redirect(http.StatusFound, "/login")
 		c.Abort()
 		return
 	}
 
-	dm := getDB(c)
-	user, err := dm.GetSession(token)
-	if err != nil {
+	if user.(*User).Role != "admin" {
+		c.Status(http.StatusForbidden)
+		renderTemplate(c, "error", gin.H{
+			"Title":   "Forbidden",
+			"Status":  403,
+			"Message": "You don't have permission to access this page.",
+		})
+		c.Abort()
+		return
+	}
+
+	c.Next()
+}
+
+func RequireStaff(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
 		c.Redirect(http.StatusFound, "/login")
 		c.Abort()
 		return
 	}
 
-	c.Set("user", user)
-
-	if user.Role != "admin" {
+	if user.(*User).Role == "patron" {
 		c.Status(http.StatusForbidden)
 		renderTemplate(c, "error", gin.H{
 			"Title":   "Forbidden",

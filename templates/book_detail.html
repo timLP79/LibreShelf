@@ -70,7 +70,7 @@
         <p>{{deref .Book.Description}}</p>
         {{end}}
 
-        {{if and .User (eq .User.Role "admin")}}
+        {{if .User}}
         <!-- Checkout Form (scaffolded, disabled until CP6) -->
         <div class="card mt-4 mb-4">
             <div class="card-body">

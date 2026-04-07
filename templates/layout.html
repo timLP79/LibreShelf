@@ -1,6 +1,6 @@
 {{define "layout"}}
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -29,14 +29,17 @@
                 <div class="fw-bold fs-5" style="color: #ffffff;">&#128218; LibreShelf</div>
                 <button type="button" class="btn-close btn-close-white d-lg-none" data-bs-dismiss="offcanvas" data-bs-target="#sidebar" aria-label="Close"></button>
             </div>
-            <div class="small" style="color: #a8c4e0; opacity: 0.7;">{{if and .User (eq .User.Role "admin")}}Staff Portal{{else}}Library Portal{{end}}</div>
+            <div class="small" style="color: #a8c4e0; opacity: 0.7;">{{if and .User (or (eq .User.Role "admin") (eq .User.Role "staff"))}}Staff Portal{{else}}Library Portal{{end}}</div>
         </div>
         <nav class="nav flex-column flex-grow-1 gap-1">
             <a class="nav-link rounded" href="/">Dashboard</a>
             <a class="nav-link rounded" href="/catalog">Catalog</a>
-            {{if and .User (eq .User.Role "admin")}}
+            {{if and .User (or (eq .User.Role "admin") (eq .User.Role "staff"))}}
             <a class="nav-link rounded" href="/patrons">Patrons</a>
             <a class="nav-link rounded" href="/admin">Admin</a>
+            {{end}}
+            {{if and .User (eq .User.Role "admin")}}
+            <a class="nav-link rounded" href="/staff">Staff</a>
             {{end}}
         </nav>
         {{if .User}}

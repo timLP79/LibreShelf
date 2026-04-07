@@ -11,7 +11,7 @@
     </div>
   </div>
 
-  {{if and .User (eq .User.Role "admin")}}
+  {{if and .User (or (eq .User.Role "admin") (eq .User.Role "staff"))}}
   <div class="col-md-4">
     <div class="card stat-card stat-card-patrons mb-3">
       <div class="card-body">

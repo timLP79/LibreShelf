@@ -201,7 +201,8 @@ func (dm *DatabaseManager) createSchema() {
 		name        TEXT NOT NULL,
 		email       TEXT,
 		phone       TEXT,
-		joined_date DATETIME DEFAULT CURRENT_TIMESTAMP
+		joined_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+		metadata    TEXT
 	);
 
 	CREATE TABLE IF NOT EXISTS loans (
@@ -217,7 +218,7 @@ func (dm *DatabaseManager) createSchema() {
 		id            INTEGER PRIMARY KEY AUTOINCREMENT,
 		username      TEXT NOT NULL UNIQUE,
 		password_hash TEXT NOT NULL,
-		role          TEXT NOT NULL CHECK(role IN('admin', 'patron')),
+		role          TEXT NOT NULL CHECK(role IN('admin', 'staff', 'patron')),
 		patron_id     INTEGER REFERENCES patrons(id),
 		created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
@@ -325,6 +326,20 @@ func (dm *DatabaseManager) SeedDefaultUsers() {
 			log.Fatalf("Failed to seed patron1 user: %v", err)
 		}
 		log.Println("Seeded patron1 user")
+	}
+
+	if err := dm.db.QueryRow("SELECT COUNT(*) FROM users WHERE username = 'staff1'").Scan(&count); err != nil {
+		log.Fatalf("Failed to check for staff1 user: %v", err)
+	}
+	if count == 0 {
+		hash, err := bcrypt.GenerateFromPassword([]byte("staff123"), bcrypt.DefaultCost)
+		if err != nil {
+			log.Fatalf("Failed to hash staff1 password: %v", err)
+		}
+		if err := dm.CreateUser("staff1", string(hash), "staff", nil); err != nil {
+			log.Fatalf("Failed to seed staff1 user: %v", err)
+		}
+		log.Println("Seeded staff1 user")
 	}
 }
 
