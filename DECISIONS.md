@@ -150,3 +150,50 @@ the page's `"content"` block. As of CP3, templates are created with `template.Ne
 to register custom functions before parsing.
 **Rationale:** Simple, explicit, and avoids the global template namespace collisions that come
 from `template.ParseGlob()`. Each page knows exactly which templates it includes.
+
+---
+
+## DEC-014: Three-role access model (admin, staff, patron)
+
+**Date:** 2026-04-06 (CP4)
+**Context:** The original two-role model (admin/patron) had no way to give operational access
+without full admin privileges. Different deployment environments need a middle tier for
+day-to-day workers who can handle books, view patrons, and run exports, but should not
+manage user accounts or system settings.
+**Decision:** Three roles with chained middleware. `RequireAuth` validates the session and sets
+the user in context. `RequireStaff` checks that the role is not patron (allows admin + staff).
+`RequireAdmin` checks that the role is admin. Route groups chain these:
+`RequireAuth, RequireStaff` for operational routes, `RequireAuth, RequireAdmin` for admin-only routes.
+**Rationale:** Chaining keeps each middleware single-purpose and avoids duplicating session lookup
+logic. The staff role fills the gap between full admin and patron without overcomplicating the
+permission model.
+
+---
+
+## DEC-015: Admin page shared with role-based template conditionals
+
+**Date:** 2026-04-06 (CP4)
+**Context:** Both admin and staff need access to the admin tools page (export/import, system stats),
+but admin has additional privileges (staff management, system settings).
+**Decision:** Single `/admin` route in the staff group (accessible to admin + staff). The template
+uses `{{if and .User (eq .User.Role "admin")}}` to conditionally show admin-only sections.
+Admin-only POST endpoints are registered in the admin route group, not the staff group.
+**Rationale:** Template conditionals control what the user sees; route group middleware enforces
+what the user can do. This avoids duplicate pages and is consistent with the pattern used in the
+sidebar, dashboard, and book detail templates. Security does not depend on the template -- even
+if a staff user crafted a direct request to an admin-only endpoint, the middleware would return 403.
+
+---
+
+## DEC-016: Patron metadata as JSON TEXT column
+
+**Date:** 2026-04-06 (CP5 design)
+**Context:** Different deployment environments need different extra fields on patron records
+(external IDs, housing units, departments, etc.). Options: EAV table (patron_custom_fields),
+JSON column, or hardcoded extra columns.
+**Decision:** Add a nullable `metadata TEXT` column to the patrons table. Stores JSON for
+environment-specific fields. NULL for manually-added patrons. CSV imports store extra columns
+as JSON in this field.
+**Rationale:** JSON columns are the modern standard for flexible metadata. SQLite has built-in
+JSON functions (`json_extract`) for querying. Avoids the EAV anti-pattern and keeps the schema
+clean. If the project ever migrates to PostgreSQL, JSONB provides even richer support.
