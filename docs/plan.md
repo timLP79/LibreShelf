@@ -277,13 +277,15 @@ go-full-stack/
 | Capability | Admin | Staff | Patron |
 |---|---|---|---|
 | Dashboard, catalog, book detail | Yes | Yes | Yes |
-| Checkout/return books | Yes | Yes | Yes (self) |
+| Checkout/return books | Yes | Yes | No |
 | Book CRUD | Yes | Yes | No |
 | View patron list | Yes | Yes | No |
 | Patron CRUD | Yes | No | No |
 | CSV patron import | Yes | Yes | No |
 | Admin panel (export/import) | Yes | Yes | No |
 | Staff management | Yes | No | No |
+
+All checkout and return transactions are staff-only. Patrons cannot self-checkout; their login exists for browsing, favorites, and requesting holds on the kiosk.
 
 ---
 
@@ -315,14 +317,14 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 ---
 
 ### CP6 -- Loans + Kiosk + SSE
-**Goal:** Kiosk provides public catalog browse with optional patron login. Checkout/return available to all roles. SSE pushes live availability updates. Catalog gets server-side pagination.
+**Goal:** Kiosk provides public catalog browse with optional patron login. Admin and staff handle all checkout and return transactions on the book detail page. SSE pushes live availability updates. Catalog gets server-side pagination.
 
 - [#22](https://github.com/timLP79/cs408-go-stack/issues/22) -- Loan system: kiosk browse, holds, and SSE availability
   - `handlers_loans.go`: `GET /events` SSE endpoint
   - `handlers_books.go`: `HandleKiosk` -- public catalog browse (no auth required)
   - `db.go`: `GetActiveLoans()`, `GetLoanHistory()`
   - `templates/kiosk.html`: public browse page; optional login for favorites and holds
-  - Checkout/return on book detail page: admin and staff pick a patron, patron self-checkouts
+  - Checkout/return on book detail page: admin and staff select a patron and perform the transaction. Patrons cannot self-checkout.
 - [#37](https://github.com/timLP79/cs408-go-stack/issues/37) -- Server-side pagination and filtering for catalog (replaces CP3 client-side filtering)
 
 **SSE protocol:**

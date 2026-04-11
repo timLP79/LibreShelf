@@ -70,8 +70,8 @@
         <p>{{deref .Book.Description}}</p>
         {{end}}
 
-        {{if .User}}
-        <!-- Checkout Form (scaffolded, disabled until CP6) -->
+        {{if and .User (or (eq .User.Role "admin") (eq .User.Role "staff"))}}
+        <!-- Checkout Form (scaffolded, disabled until CP6). Staff-only: patrons cannot self-checkout. -->
         <div class="card mt-4 mb-4">
             <div class="card-body">
                 <h5 class="card-title">Check Out Book</h5>
@@ -92,8 +92,8 @@
         </div>
         {{end}}
 
-        <!-- Loan History -->
-        {{if .Loans}}
+        <!-- Loan History: staff-only, contains other patrons' names (privacy) -->
+        {{if and .Loans .User (or (eq .User.Role "admin") (eq .User.Role "staff"))}}
         <div class="card mt-4">
             <div class="card-body">
                 <h5 class="card-title">Loan History</h5>

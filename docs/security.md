@@ -425,6 +425,7 @@ admin.Use(RequireAuth, RequireAdmin, CSRFProtect)
   chmod 700 data/
   ```
 - Do not include patron data in error messages or log output
+- **Role-gated views.** Loan history (which includes other patrons' names and checkout dates) and the checkout form on the book detail page are visible only to admin and staff. Patrons see the book info and availability but never see who else has borrowed a book. Template conditionals must match the role model even for disabled or scaffolded controls, because visibility itself leaks information.
 
 ---
 
