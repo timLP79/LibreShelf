@@ -13,6 +13,16 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+var dummyPasswordHash []byte
+
+func init() {
+	hash, err := bcrypt.GenerateFromPassword([]byte("dummy-password-for-timing"), bcrypt.DefaultCost)
+	if err != nil {
+		log.Fatalf("failed to generate dummy bcrypt hash: %v", err)
+	}
+	dummyPasswordHash = hash
+}
+
 func generateSessionToken() (string, error) {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
@@ -116,23 +126,22 @@ func HandleLoginPost(c *gin.Context) {
 
 	dm := getDB(c)
 	user, err := dm.GetUserByUsername(username)
-	if err == sql.ErrNoRows || user == nil {
+	if err != nil && err != sql.ErrNoRows {
+		log.Printf("login lookup failed for %q: %v", username, err)
 		renderPage(c, "login", gin.H{
 			"Title": "Login",
-			"Error": "Invalid username or password.",
+			"Error": "Something went wrong.",
 		})
 		return
 	}
 
-	if err != nil {
-		renderPage(c, "login", gin.H{
-			"Title": "Login",
-			"Error": "Something went wrong. Please try again.",
-		})
-		return
+	hashToCompare := dummyPasswordHash
+	if user != nil {
+		hashToCompare = []byte(user.PasswordHash)
 	}
+	bcryptErr := bcrypt.CompareHashAndPassword(hashToCompare, []byte(password))
 
-	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+	if user == nil || bcryptErr != nil {
 		renderPage(c, "login", gin.H{
 			"Title": "Login",
 			"Error": "Invalid username or password.",
@@ -142,9 +151,10 @@ func HandleLoginPost(c *gin.Context) {
 
 	token, err := generateSessionToken()
 	if err != nil {
+		log.Printf("failed to generate session token: %v", err)
 		renderPage(c, "login", gin.H{
 			"Title": "Login",
-			"Error": "Something went wrong. Please try again.",
+			"Error": "Something went wrong.",
 		})
 		return
 	}
@@ -154,7 +164,7 @@ func HandleLoginPost(c *gin.Context) {
 		log.Printf("Failed to create session: %v", err)
 		renderPage(c, "login", gin.H{
 			"Title": "Login",
-			"Error": "Something went wrong. Please try again.",
+			"Error": "Something went wrong.",
 		})
 		return
 	}
@@ -162,6 +172,7 @@ func HandleLoginPost(c *gin.Context) {
 	secure := os.Getenv("APP_ENV") == "production"
 	c.SetCookie("session", token, 8*60*60, "/", "", secure, true)
 	c.Redirect(http.StatusFound, "/")
+
 }
 
 func HandleLogout(c *gin.Context) {

@@ -38,9 +38,6 @@
             <a class="nav-link rounded" href="/patrons">Patrons</a>
             <a class="nav-link rounded" href="/admin">Admin</a>
             {{end}}
-            {{if and .User (eq .User.Role "admin")}}
-            <a class="nav-link rounded" href="/staff">Staff</a>
-            {{end}}
         </nav>
         {{if .User}}
         <div class="small mt-auto pt-3 border-top border-secondary" style="color: #a8c4e0; opacity: 0.7;">
