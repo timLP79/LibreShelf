@@ -49,6 +49,12 @@ stateless JWT tokens.
 cannot be revoked without maintaining a blocklist, which negates the stateless benefit. For a
 server-rendered app with no separate API clients, sessions are simpler and more secure.
 
+**Addendum (2026-04-10, CP4):** `SameSite=Strict` was documented as a decision here but the
+original CP2 code never actually called `c.SetSameSite(http.SameSiteStrictMode)` before
+`c.SetCookie`, so the browser used its default (Lax). Fixed while working on CSRF (#32) in CP4.
+`HandleLoginPost` now explicitly sets Strict mode on both the session cookie and the
+`csrf_login` pre-session cookie.
+
 ---
 
 ## DEC-005: bcrypt for password hashing
@@ -197,3 +203,59 @@ as JSON in this field.
 **Rationale:** JSON columns are the modern standard for flexible metadata. SQLite has built-in
 JSON functions (`json_extract`) for querying. Avoids the EAV anti-pattern and keeps the schema
 clean. If the project ever migrates to PostgreSQL, JSONB provides even richer support.
+
+---
+
+## DEC-017: Session-bound CSRF tokens with double-submit cookie for login
+
+**Date:** 2026-04-10 (CP4)
+**Context:** Every state-changing form needs CSRF protection. Several patterns exist:
+double-submit cookie (non-HttpOnly cookie with a token, form embeds the same token, middleware
+compares); synchronizer token bound to the server-side session (token stored on the session
+row, template reads it, middleware validates); per-form tokens (new token on each render,
+tracked in a pool).
+**Decision:** **Session-bound synchronizer tokens** for authenticated routes, generated at
+login and stored on the `sessions` row in a new `csrf_token NOT NULL` column. The token is
+injected into the request context by `RequireAuth`/`LoadUser` alongside the user, then
+auto-injected into template data by `renderTemplate` (same pattern as `User`), so forms
+only need `<input type="hidden" name="csrf_token" value="{{.CSRFToken}}">`. A new
+`CSRFProtect` middleware validates unsafe-method requests against the context token using
+`subtle.ConstantTimeCompare`. For `POST /login` where no session exists yet, a separate
+**pre-session double-submit cookie** named `csrf_login` is set on `GET /login` (HttpOnly,
+SameSite=Strict, 10-minute lifetime) and compared against the form field by a dedicated
+`LoginCSRFProtect` middleware. The pre-session cookie is cleared once a real session exists.
+**Rationale:** Session-bound tokens are the textbook-correct pattern for server-rendered apps
+with sessions and bind CSRF state to authentication state for free (logout deletes both).
+Adding a column to `sessions` was a 1:1 extension with no extra joins. Per-form tokens would
+add complexity (token pool, tracking, expiry) without meaningful security gain for LibreShelf's
+threat model. The double-submit cookie for login is scoped narrowly to the authentication
+chicken-and-egg and does not bleed into the normal request path. Defense in depth: the
+SameSite=Strict cookie attribute (also implemented in CP4, see DEC-004 addendum) provides a
+first line of defense before middleware ever runs.
+
+---
+
+## DEC-018: Canonical UTC datetime format for session expiry
+
+**Date:** 2026-04-10 (CP4, discovered during CSRF integration testing)
+**Context:** `CreateSession` originally passed `time.Time` directly to `dm.db.Exec`. The
+modernc.org/sqlite driver serialized this as ISO 8601 with the local timezone offset and
+nanosecond precision (e.g. `2026-04-10T22:22:05.168055574-06:00`). SQLite's `CURRENT_TIMESTAMP`
+returns canonical UTC in `YYYY-MM-DD HH:MM:SS` format. The `GetSession` WHERE clause used
+`expires_at > CURRENT_TIMESTAMP`, which is a **lexicographic string comparison** of two
+differently-formatted strings. On non-UTC systems (e.g. local dev in MDT) the string comparison
+failed even when the absolute times were correct, so freshly-created sessions were reported as
+expired. The UTC EC2 deployment was accidentally masking this because the date portions matched.
+Additionally, SQLite's `datetime()` normalization function could not parse the driver's
+9-digit fractional seconds, so wrapping the comparison in `datetime()` returned NULL.
+**Decision:** `CreateSession` formats `expires_at` explicitly as
+`expiresAt.UTC().Format("2006-01-02 15:04:05")` before insert, producing a canonical UTC
+string that is byte-identical in format to `CURRENT_TIMESTAMP`. String comparison then works
+correctly as chronological comparison. `GetSession` keeps `datetime()` wrappers on both sides
+of the comparison as defense in depth against future callers that might bypass `CreateSession`.
+**Rationale:** Storing datetimes in a canonical format at write time is more robust than
+normalizing at every read. Formatting in UTC removes the timezone-comparison trap entirely.
+The `"2006-01-02 15:04:05"` layout is Go's reference time; it produces exactly the format
+SQLite's `CURRENT_TIMESTAMP` returns. Discovered via `TestAuthenticatedPOSTWithCSRF`, which
+was the first test to exercise the full `CreateSession` to `GetSession` round trip and caught
+the latent bug immediately.

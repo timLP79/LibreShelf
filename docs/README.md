@@ -34,7 +34,7 @@ This is a solo developer project.
 
 ## Project Status
 
-**Current Sprint:** Week 7/8 — LibreShelf CP3
+**Current Sprint:** LibreShelf CP4 complete; CP5 next.
 
 **Project history:**
 - ✅ Milestone 1: Hello World App ([Issue #1](https://github.com/timLP79/cs408-go-stack/issues/1)) — Gin server, template layout, Bootstrap
@@ -43,6 +43,8 @@ This is a solo developer project.
 - ✅ **Project pivot to LibreShelf** (Week 7) — todo-app issues closed; LibreShelf CPs created
 - ✅ **CP1 complete** ([Issue #18](https://github.com/timLP79/cs408-go-stack/issues/18)) — skeleton deployed to EC2
 - ✅ **CP2 complete** ([Issue #25](https://github.com/timLP79/cs408-go-stack/issues/25)) — authentication merged, tagged v2
+- ✅ **CP3 complete** ([Issue #19](https://github.com/timLP79/cs408-go-stack/issues/19)): book catalog with search/filter, book detail with loan history, responsive sidebar, bug fixes #28/#29/#30
+- ✅ **CP4 complete**: security hardening, three-role model (#38), template error handling (#31), constant-time login (#33), session-bound CSRF protection (#32), `lang="en"` accessibility (#34)
 
 **CP1 — complete:**
 - ✅ All 6 template stubs created
@@ -70,19 +72,18 @@ This is a solo developer project.
 - ✅ Color scheme — slate blue sidebar, soft white-gray background, accent stat cards
 - ✅ Merged PR #27, tagged v2
 
-**Next up:** [CP3 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — book catalog list and detail pages
+**Next up:** CP5 for CRUD features (books, patrons, staff management).
 
 **Open milestones:**
-- 🔄 [CP3 #19](https://github.com/timLP79/cs408-go-stack/issues/19) — Book catalog: list and detail pages
-  - Bug fixes: [#28](https://github.com/timLP79/cs408-go-stack/issues/28), [#29](https://github.com/timLP79/cs408-go-stack/issues/29), [#30](https://github.com/timLP79/cs408-go-stack/issues/30)
-- [CP4 #20](https://github.com/timLP79/cs408-go-stack/issues/20) — Book CRUD and Open Library API
-  - Bug fixes: [#31](https://github.com/timLP79/cs408-go-stack/issues/31), [#32](https://github.com/timLP79/cs408-go-stack/issues/32)
-- [CP5 #21](https://github.com/timLP79/cs408-go-stack/issues/21) — Patron management
-  - Bug fixes: [#33](https://github.com/timLP79/cs408-go-stack/issues/33), [#34](https://github.com/timLP79/cs408-go-stack/issues/34)
-- [CP6 #22](https://github.com/timLP79/cs408-go-stack/issues/22) — Loan system: kiosk + SSE
-- [CP7 #23](https://github.com/timLP79/cs408-go-stack/issues/23) — Admin panel: ZIP export/import
-- [CP8 #24](https://github.com/timLP79/cs408-go-stack/issues/24) — Testing, polish, deploy
-  - Bug fixes: [#35](https://github.com/timLP79/cs408-go-stack/issues/35), [#36](https://github.com/timLP79/cs408-go-stack/issues/36)
+- [CP5 #20](https://github.com/timLP79/cs408-go-stack/issues/20) Book CRUD and Open Library API lookup
+- [CP5 #21](https://github.com/timLP79/cs408-go-stack/issues/21) Patron management: CRUD, metadata, CSV import
+- [CP5 #39](https://github.com/timLP79/cs408-go-stack/issues/39) Staff management: list, add, edit, delete
+- [CP6 #22](https://github.com/timLP79/cs408-go-stack/issues/22) Loan system: kiosk browse, holds, SSE availability
+- [CP6 #37](https://github.com/timLP79/cs408-go-stack/issues/37) Server-side pagination and filtering for catalog
+- [CP7 #23](https://github.com/timLP79/cs408-go-stack/issues/23) Admin panel: ZIP export and import
+- [CP7 #35](https://github.com/timLP79/cs408-go-stack/issues/35) Fix: test router does not mirror production middleware
+- [CP7 #24](https://github.com/timLP79/cs408-go-stack/issues/24) Testing, polish, deploy
+- Backlog: [#17](https://github.com/timLP79/cs408-go-stack/issues/17) Automate deployment via GitHub Actions (low priority)
 
 ---
 
@@ -158,16 +159,15 @@ This is a solo developer project.
 
 See [`plan.md`](./plan.md) for the full LibreShelf architecture. Summary:
 
-| CP | Issue | Goal |
-|----|-------|------|
-| CP1 ✅ | [#18](https://github.com/timLP79/cs408-go-stack/issues/18) | Project skeleton — all 6 routes, nav, DB schema |
-| CP2 ✅ | [#25](https://github.com/timLP79/cs408-go-stack/issues/25) | Authentication — login, sessions, role-based access |
-| CP3 🔄 | [#19](https://github.com/timLP79/cs408-go-stack/issues/19) | Book catalog and detail pages |
-| CP4 | [#20](https://github.com/timLP79/cs408-go-stack/issues/20) | Book CRUD + Open Library API lookup |
-| CP5 | [#21](https://github.com/timLP79/cs408-go-stack/issues/21) | Patron management |
-| CP6 | [#22](https://github.com/timLP79/cs408-go-stack/issues/22) | Loans, kiosk, and SSE availability |
-| CP7 | [#23](https://github.com/timLP79/cs408-go-stack/issues/23) | Admin panel: ZIP export/import |
-| CP8 | [#24](https://github.com/timLP79/cs408-go-stack/issues/24) | Testing, polish, final deploy |
+| CP | Status | Goal |
+|----|--------|------|
+| CP1 | ✅ | Project skeleton: all routes, nav, DB schema ([#18](https://github.com/timLP79/cs408-go-stack/issues/18)) |
+| CP2 | ✅ | Authentication: login, sessions, role-based access ([#25](https://github.com/timLP79/cs408-go-stack/issues/25)) |
+| CP3 | ✅ | Book catalog and detail pages ([#19](https://github.com/timLP79/cs408-go-stack/issues/19)) |
+| CP4 | ✅ | Security hardening: three-role model, CSRF, constant-time login, ExecuteTemplate fix |
+| CP5 | 🔄 | CRUD: book CRUD + Open Library, patron management, staff management ([#20](https://github.com/timLP79/cs408-go-stack/issues/20), [#21](https://github.com/timLP79/cs408-go-stack/issues/21), [#39](https://github.com/timLP79/cs408-go-stack/issues/39)) |
+| CP6 | | Loans, kiosk, SSE availability, server-side pagination ([#22](https://github.com/timLP79/cs408-go-stack/issues/22), [#37](https://github.com/timLP79/cs408-go-stack/issues/37)) |
+| CP7 | | Admin panel (ZIP export/import), test router fixes, final polish and deploy ([#23](https://github.com/timLP79/cs408-go-stack/issues/23), [#35](https://github.com/timLP79/cs408-go-stack/issues/35), [#24](https://github.com/timLP79/cs408-go-stack/issues/24)) |
 
 ---
 
@@ -285,59 +285,67 @@ air
 
 ## Database
 
-LibreShelf uses a 7-table SQLite schema. The database file is created automatically at startup in the `data/` directory.
+LibreShelf uses a 7-table SQLite schema. The database file is created automatically at startup in the `data/` directory. See [`plan.md`](./plan.md) for the authoritative schema; the snippet below is a convenience copy.
 
 ### Schema
 
 ```sql
 CREATE TABLE books (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    isbn TEXT,
-    cover_url TEXT,
-    published_year INTEGER,
-    available INTEGER DEFAULT 1
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    title              TEXT NOT NULL,
+    isbn               TEXT UNIQUE,
+    cover_filename     TEXT,
+    year               INTEGER,
+    publisher          TEXT,
+    description        TEXT,
+    genre              TEXT,
+    quantity_total     INTEGER DEFAULT 1,
+    quantity_available INTEGER DEFAULT 1
 );
 
 CREATE TABLE authors (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
 );
 
 CREATE TABLE book_authors (
-    book_id INTEGER REFERENCES books(id),
+    book_id   INTEGER REFERENCES books(id),
     author_id INTEGER REFERENCES authors(id),
     PRIMARY KEY (book_id, author_id)
 );
 
 CREATE TABLE patrons (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    email TEXT
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    email       TEXT,
+    phone       TEXT,
+    joined_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    metadata    TEXT  -- JSON, nullable, added in CP5 (DEC-016)
 );
 
 CREATE TABLE loans (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    book_id INTEGER REFERENCES books(id),
-    patron_id INTEGER REFERENCES patrons(id),
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_id        INTEGER REFERENCES books(id),
+    patron_id      INTEGER REFERENCES patrons(id),
     checked_out_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    due_date DATETIME,
-    returned_at DATETIME
+    due_date       DATETIME,
+    returned_at    DATETIME
 );
 
 CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL CHECK(role IN('admin', 'patron')),
-    patron_id INTEGER REFERENCES patrons(id),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    role          TEXT NOT NULL CHECK(role IN('admin', 'staff', 'patron')),
+    patron_id     INTEGER REFERENCES patrons(id),  -- NULL for admin and staff
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE sessions (
-    token TEXT PRIMARY KEY,
-    user_id INTEGER NOT NULL REFERENCES users(id),
-    expires_at DATETIME NOT NULL
+    token      TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id),
+    csrf_token TEXT NOT NULL,  -- bound to session (CP4, DEC-017)
+    expires_at DATETIME NOT NULL  -- canonical UTC "YYYY-MM-DD HH:MM:SS" (DEC-018)
 );
 ```
 

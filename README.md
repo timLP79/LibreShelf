@@ -35,6 +35,7 @@ These accounts are created automatically on first run:
 | Username | Password | Role |
 |----------|----------|------|
 | `admin` | `admin123` | Admin -- full access to all pages |
+| `staff1` | `staff123` | Staff -- day-to-day operations, no staff/system management |
 | `patron1` | `patron123` | Patron -- catalog and book detail only |
 
 ## Pages

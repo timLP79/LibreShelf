@@ -14,7 +14,7 @@ return transactions are staff-only.
 
 **Live at:** EC2 instance (URL available on request)
 **Repo:** github.com/timLP79/cs408-go-stack
-**Status:** In development -- CP3 complete, CP4 next
+**Status:** In development -- CP4 complete, CP5 next
 
 ---
 
@@ -86,7 +86,7 @@ Do not use Write/Edit tools to create or modify Go files. Tim writes all Go code
 **CP1 -- Project Skeleton:** Complete. All routes, nav, schema, basic tests.
 **CP2 -- Authentication:** Complete. Login/logout, sessions, bcrypt, role-based access control.
 **CP3 -- Book Catalog & Detail Pages:** Complete. Catalog with search/filter, book detail with metadata and loan history, bug fixes #28/#29/#30, responsive sidebar.
-**CP4 -- Security Hardening + Three-Role Model:** In progress. Schema, seed, middleware, routes, and sidebar done. CSRF, ExecuteTemplate fix, and timing fix remaining.
+**CP4 -- Security Hardening + Three-Role Model:** Complete. Three-role model, ExecuteTemplate buffer-based rendering, constant-time login, session-bound CSRF protection with pre-session double-submit cookie for login, SameSite=Strict on session cookie, canonical UTC datetime format for session expiry. 15 tests passing.
 
 Files that exist:
 - `main.go`, `db.go`, `handlers.go`, `handlers_auth.go`, `handlers_books.go`, `main_test.go`
@@ -130,12 +130,12 @@ Files that exist:
 - [x] #30 -- Fix: `renderPage` template name mismatch causes blank 404
 - [x] #40 -- Responsive sidebar with offcanvas mobile menu
 
-### CP4 -- Security Hardening + Bug Fixes (in progress)
+### CP4 (complete)
 - [x] #34 -- Add `lang="en"` to HTML tags (WCAG 2.1)
-- [ ] #38 -- Three-role model: admin, staff, patron (partially done)
-- [ ] #31 -- `ExecuteTemplate` errors never checked in render helpers
-- [ ] #32 -- CSRF protection not implemented
-- [ ] #33 -- Username enumeration via login timing side-channel
+- [x] #38 -- Three-role model: admin, staff, patron
+- [x] #31 -- `ExecuteTemplate` errors never checked in render helpers
+- [x] #33 -- Username enumeration via login timing side-channel
+- [x] #32 -- CSRF protection via session-bound synchronizer token
 
 ### CP5 -- CRUD Features (Books, Patrons, Staff)
 - [ ] #20 -- Book CRUD and Open Library API lookup

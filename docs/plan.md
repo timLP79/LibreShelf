@@ -98,15 +98,16 @@ CREATE TABLE users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,         -- bcrypt hash
-    role TEXT NOT NULL CHECK(role IN ('admin', 'patron')),
-    patron_id INTEGER REFERENCES patrons(id),  -- NULL for admin users
+    role TEXT NOT NULL CHECK(role IN ('admin', 'staff', 'patron')),
+    patron_id INTEGER REFERENCES patrons(id),  -- NULL for admin and staff
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE sessions (
     token TEXT PRIMARY KEY,              -- crypto/rand generated
-    user_id INTEGER REFERENCES users(id),
-    expires_at DATETIME NOT NULL
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    csrf_token TEXT NOT NULL,            -- crypto/rand generated, bound to session (CP4, DEC-017)
+    expires_at DATETIME NOT NULL         -- canonical UTC "YYYY-MM-DD HH:MM:SS" (DEC-018)
 );
 ```
 
@@ -117,6 +118,7 @@ Created automatically on first startup if they don't exist:
 | Username | Password | Role | Notes |
 |----------|----------|------|-------|
 | `admin` | `admin123` | admin | Overridable via `ADMIN_PASSWORD` env var |
+| `staff1` | `staff123` | staff | Added in CP4 with the three-role model |
 | `patron1` | `patron123` | patron | Not linked to a patron record yet (CP5) |
 
 ---
@@ -243,20 +245,32 @@ go-full-stack/
 
 ---
 
-### CP4 -- Security Hardening + Three-Role Model
+### CP4 -- Security Hardening + Three-Role Model ✅
 **Goal:** Lock down the foundation with CSRF, error handling, and the three-role access model before adding CRUD features.
 
-- [#38](https://github.com/timLP79/cs408-go-stack/issues/38) -- Three-role model: admin, staff, patron
+- ✅ [#38](https://github.com/timLP79/cs408-go-stack/issues/38) -- Three-role model: admin, staff, patron
   - `users.role` CHECK constraint updated to include `'staff'`
   - `RequireStaff` middleware (allows admin + staff)
   - `RequireAdmin` refactored to chain after `RequireAuth`
   - Route groups restructured: public, auth, staff, admin
   - Sidebar nav adapts for three roles
   - Seed staff account: `staff1` / `staff123`
-- [#31](https://github.com/timLP79/cs408-go-stack/issues/31) -- `ExecuteTemplate` errors never checked in render helpers
-- [#32](https://github.com/timLP79/cs408-go-stack/issues/32) -- CSRF protection on all state-changing forms
-- [#33](https://github.com/timLP79/cs408-go-stack/issues/33) -- Username enumeration via login timing side-channel
-- [#34](https://github.com/timLP79/cs408-go-stack/issues/34) -- Missing `lang="en"` on HTML tags (WCAG 2.1)
+- ✅ [#31](https://github.com/timLP79/cs408-go-stack/issues/31) -- `ExecuteTemplate` errors never checked in render helpers
+  - `renderTemplate` and `renderPage` now buffer template output before writing to the response
+  - Failed template execution returns a clean 500 instead of a half-written page
+  - Content-Type set explicitly (`text/html; charset=utf-8`) rather than relying on body sniffing
+- ✅ [#32](https://github.com/timLP79/cs408-go-stack/issues/32) -- CSRF protection on all state-changing forms
+  - Session-bound synchronizer token stored on the `sessions` row (see DEC-017)
+  - Pre-session double-submit cookie for `POST /login` (chicken-and-egg case)
+  - `CSRFProtect` middleware attached to auth/staff/admin route groups
+  - `LoginCSRFProtect` middleware on `POST /login`
+  - `POST /logout` moved into the auth group so it is CSRF-protected
+  - `SameSite=Strict` now actually wired on the session cookie (previously documented but missing; see DEC-004 addendum)
+  - Latent datetime bug in `CreateSession` fixed during integration testing (see DEC-018)
+- ✅ [#33](https://github.com/timLP79/cs408-go-stack/issues/33) -- Username enumeration via login timing side-channel
+  - `HandleLoginPost` always runs `bcrypt.CompareHashAndPassword` against a precomputed dummy hash when the user does not exist
+  - Both branches take the same wall-clock time (verified by `TestLoginTimingIsConstant`)
+- ✅ [#34](https://github.com/timLP79/cs408-go-stack/issues/34) -- Missing `lang="en"` on HTML tags (WCAG 2.1)
 
 **Permission matrix:**
 
@@ -352,12 +366,12 @@ For full details see [`docs/security.md`](./security.md).
 | CP | Risk | Mitigation |
 |----|------|-----------|
 | CP2 | Weak password storage | Use `bcrypt` -- never store plain text or MD5/SHA passwords |
-| CP2 | Session hijacking | `HttpOnly`, `Secure`, `SameSite=Strict` cookie; server-side session store |
+| CP2 | Session hijacking | `HttpOnly`, `Secure`, `SameSite=Strict` cookie; server-side session store (SameSite=Strict actually wired in CP4, see DEC-004 addendum) |
 | CP2 | Session fixation | Regenerate session token after successful login |
 | CP2 | Brute force login | Bcrypt's cost factor adds natural delay; rate limit `/login` POST in CP7 |
 | CP3 | SQL injection via book/patron IDs | Always use parameterized queries (`?` placeholders) -- never string concatenation |
-| CP4 | CSRF on state-changing forms | Token-based CSRF protection on all POST/PUT/DELETE endpoints |
-| CP4 | Username enumeration | Constant-time login path prevents timing side-channel |
+| CP4 ✅ | CSRF on state-changing forms | Session-bound synchronizer token for authenticated routes, pre-session double-submit cookie for login (#32, DEC-017) |
+| CP4 ✅ | Username enumeration via login timing | `HandleLoginPost` always runs bcrypt against a dummy hash when the user does not exist (#33) |
 | CP5 | File upload (cover images) | Validate MIME type, restrict extensions, limit file size, sanitize filename |
 | CP5 | Open Library proxy | Validate ISBN format server-side before making outbound request |
 | CP5 | PII exposure (patron emails) | Never log patron data; keep `email` field optional |

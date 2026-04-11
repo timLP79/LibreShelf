@@ -11,9 +11,9 @@ LibreShelf is designed for **trusted internal networks** — a school, office, o
 
 **Assumed environment:**
 - Deployed behind nginx on a private or semi-private network
-- Staff-facing routes require login — unauthenticated users are redirected to `/login`
-- Two roles: **admin** (full access) and **patron** (optional login for kiosk features)
-- The kiosk is fully public — no login required to browse; patrons may optionally log in to save searches, favorite books, and request holds on checked-out titles. Checkout and return are staff-only actions.
+- Staff-facing routes require login; unauthenticated users are redirected to `/login`
+- Three roles: **admin** (full access including staff management and system settings), **staff** (day-to-day operations: book/patron CRUD, checkouts, exports), and **patron** (optional login for kiosk features)
+- The kiosk is fully public; no login required to browse. Patrons may optionally log in to save searches, favorite books, and request holds on checked-out titles. Checkout and return are handled by admin and staff.
 
 ---
 
@@ -214,9 +214,10 @@ by external clients.
 
 ---
 
-## Authentication (CP2)
+## Authentication (CP2, expanded in CP4)
 
-LibreShelf uses server-side sessions with two roles: `admin` and `patron`.
+LibreShelf uses server-side sessions with three roles: `admin`, `staff`, and `patron`
+(see DEC-014 for the role model).
 
 ### Password Hashing — bcrypt
 
@@ -255,31 +256,37 @@ This is a feature: it makes brute-force attacks expensive.
 
 ### Cookie Security
 ```go
-// Secure flag requires HTTPS — must be false for HTTP-only deployments.
+// Secure flag requires HTTPS; must be false for HTTP-only deployments.
 // If set to true on an HTTP server, the browser will never send the cookie
 // back and login will silently break.
 secure := os.Getenv("APP_ENV") == "production"
 
+c.SetSameSite(http.SameSiteStrictMode)  // must be called before SetCookie
 c.SetCookie(
     "session",     // name
     sessionToken,  // value
     28800,         // max age (8 hours)
     "/",           // path
     "",            // domain
-    secure,        // Secure — true only when HTTPS is available
-    true,          // HttpOnly — always true, blocks JS access
+    secure,        // Secure; true only when HTTPS is available
+    true,          // HttpOnly; always true, blocks JS access
 )
 ```
 
 | Attribute | Purpose |
 |-----------|---------|
-| `HttpOnly` | Prevents JavaScript from reading the cookie — blocks XSS-based session theft |
-| `Secure` | Cookie only sent over HTTPS — disabled here since we are HTTP-only |
-| `SameSite=Strict` | Cookie not sent on cross-site requests — prevents CSRF |
+| `HttpOnly` | Prevents JavaScript from reading the cookie; blocks XSS-based session theft |
+| `Secure` | Cookie only sent over HTTPS; disabled here since we are HTTP-only |
+| `SameSite=Strict` | Cookie not sent on cross-site requests; first line of defense against CSRF |
 
 > **Note:** `Secure: false` is a known limitation of this deployment. The `HttpOnly`
 > and `SameSite=Strict` attributes still protect against XSS-based theft and CSRF.
 > If HTTPS becomes available, set `APP_ENV=production` and the flag enables automatically.
+
+> **History note:** CP2 documented `SameSite=Strict` as part of the session design but the
+> original code never called `c.SetSameSite(http.SameSiteStrictMode)` before `c.SetCookie`,
+> so browsers used their default (Lax). The missing call was added in CP4 during the CSRF
+> work (#32). See DEC-004 addendum.
 
 ### Session Hijacking Prevention
 - Tokens generated with `crypto/rand` (cryptographically secure) — never `math/rand`
@@ -288,74 +295,123 @@ c.SetCookie(
 - 8-hour expiry — user must re-login after expiry
 - On logout: delete the session row from the DB immediately
 
-### CSRF Protection
-> **Status: NOT YET IMPLEMENTED** — tracked in [#32](https://github.com/timLP79/cs408-go-stack/issues/32), scheduled for CP4.
+### CSRF Protection (CP4, implemented)
 
-Every state-changing form (`POST`, `PUT`, `DELETE`) needs a CSRF token:
-- Server generates a random token and stores it in the session
-- Token is embedded as a hidden field in each form:
+Every state-changing request is protected by a CSRF token. Two separate mechanisms handle
+the two cases: authenticated requests use a session-bound synchronizer token; unauthenticated
+login requests use a pre-session double-submit cookie. See DEC-017 for the full design
+rationale.
+
+**Session-bound token (authenticated routes):**
+- On successful login, a cryptographically random token is generated alongside the session
+  token and stored on the `sessions` row in the `csrf_token` column.
+- `RequireAuth` and `LoadUser` middleware read the session from the DB and set both the
+  user and the CSRF token into the gin request context (`c.Set("csrfToken", ...)`).
+- `renderTemplate` auto-injects `CSRFToken` into template data (same pattern as `User`).
+- Forms embed the token as a hidden field:
   ```html
   <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
   ```
-- Server validates the token before processing the form
-- Requests without a valid token are rejected with `403 Forbidden`
+- `CSRFProtect` middleware attached to the auth/staff/admin route groups validates the form
+  field against the context token using `subtle.ConstantTimeCompare` on any unsafe-method
+  request (POST/PUT/PATCH/DELETE). Safe methods (GET/HEAD/OPTIONS) bypass the check.
+- Requests without a valid token are rejected with `403 Forbidden`.
 
-### Auth Middleware
+**Pre-session double-submit cookie (`POST /login`):**
+- `GET /login` generates a random token, sets it as a `csrf_login` cookie (HttpOnly,
+  SameSite=Strict, 10-minute lifetime), and embeds the same token in the login form.
+- `LoginCSRFProtect` middleware on `POST /login` reads the cookie and the form field and
+  rejects with 403 if either is missing or they do not match.
+- On successful login, the `csrf_login` cookie is cleared; the session-bound token takes
+  over for all subsequent requests.
 
-Two middleware functions protect routes in `main.go`:
+**Route wiring:**
+```go
+router.POST("/login", LoginCSRFProtect, HandleLoginPost)
+
+auth := router.Group("/")
+auth.Use(RequireAuth, CSRFProtect)
+auth.POST("/logout", HandleLogout)
+// ... other auth routes
+
+staff := router.Group("/")
+staff.Use(RequireAuth, RequireStaff, CSRFProtect)
+// ... staff routes
+
+admin := router.Group("/")
+admin.Use(RequireAuth, RequireAdmin, CSRFProtect)
+// ... admin routes
+```
+
+**Test coverage:** `TestLoginCSRFRejectsMissingCookie`, `TestLoginCSRFRejectsMismatchedToken`,
+`TestCSRFProtectAllowsGet`, `TestCSRFProtectRejectsMissingToken`,
+`TestCSRFProtectRejectsMismatchedToken`, `TestCSRFProtectAcceptsMatchingToken`, and
+`TestAuthenticatedPOSTWithCSRF` (end-to-end `RequireAuth` + `CSRFProtect` + `HandleLogout`).
+
+### Auth Middleware (three roles, chained)
+
+Four middleware functions protect routes in `main.go`. They are chained so each is
+single-purpose and stateless (see DEC-014):
+
+- `RequireAuth` validates the session cookie, loads the session, and sets both the user
+  and the CSRF token into the request context. Redirects to `/login` on failure.
+- `RequireStaff` checks that the role is admin or staff (rejects patron). Must run after
+  `RequireAuth`.
+- `RequireAdmin` checks that the role is admin. Must run after `RequireAuth`.
+- `LoadUser` is the optional-auth variant used on the public kiosk: it attaches the user
+  and CSRF token if a session is present but does not redirect otherwise.
 
 ```go
-// RequireAuth — any logged-in user
+// RequireAuth: any logged-in user
 func RequireAuth(c *gin.Context) {
-    session := getSession(c)
-    if session == nil {
+    token, err := c.Cookie("session")
+    if err != nil {
+        c.Redirect(http.StatusFound, "/login")
+        c.Abort()
+        return
+    }
+    dm := getDB(c)
+    session, err := dm.GetSession(token)
+    if err != nil {
         c.Redirect(http.StatusFound, "/login")
         c.Abort()
         return
     }
     c.Set("user", session.User)
+    c.Set("csrfToken", session.CSRFToken)
     c.Next()
 }
 
-// RequireAdmin — admin role only
-func RequireAdmin(c *gin.Context) {
-    user := c.MustGet("user").(*User)
-    if user.Role != "admin" {
-        c.Status(http.StatusForbidden)
-        renderTemplate(c, "error", gin.H{
-            "Status":  403,
-            "Message": "Admin access required",
-        })
-        c.Abort()
-        return
-    }
-    c.Next()
-}
+// RequireStaff: admin or staff (rejects patron)
+// RequireAdmin: admin only
+// Both must run after RequireAuth in the middleware chain.
 ```
 
-Applied in `main.go`:
+Applied in `main.go` (see also DEC-017 for the CSRF middleware on each group):
 ```go
-// Public routes — no login required
+// Public routes
+router.GET("/login", HandleLogin)
+router.POST("/login", LoginCSRFProtect, HandleLoginPost)
 router.GET("/kiosk", HandleKiosk)
 
+// Authenticated (any logged-in user)
 auth := router.Group("/")
-auth.Use(RequireAuth)
-{
-    auth.GET("/", HandleIndex)
-    auth.GET("/catalog", HandleCatalog)
+auth.Use(RequireAuth, CSRFProtect)
+auth.GET("/", HandleIndex)
+auth.GET("/catalog", HandleCatalog)
+auth.GET("/books/:id", HandleBookDetail)
+auth.POST("/logout", HandleLogout)
 
-    admin := auth.Group("/")
-    admin.Use(RequireAdmin)
-    {
-        admin.GET("/patrons", HandlePatrons)
-        admin.GET("/admin", HandleAdmin)
-    }
-}
+// Staff (admin + staff)
+staff := router.Group("/")
+staff.Use(RequireAuth, RequireStaff, CSRFProtect)
+staff.GET("/patrons", HandlePatrons)
+staff.GET("/admin", HandleAdmin)
 
-// Kiosk optional-auth actions — LoadUser attaches session if present, but does not redirect
-router.GET("/kiosk/favorites", LoadUser, HandleKioskFavorites)
-router.POST("/kiosk/favorites", LoadUser, HandleKioskAddFavorite)
-router.POST("/kiosk/holds", LoadUser, RequireAuth, HandleKioskRequestHold)
+// Admin-only
+admin := router.Group("/")
+admin.Use(RequireAuth, RequireAdmin, CSRFProtect)
+// (admin-only routes added in later checkpoints)
 ```
 
 ---
