@@ -226,6 +226,7 @@ func (dm *DatabaseManager) createSchema() {
 	CREATE TABLE IF NOT EXISTS sessions (
 		token      TEXT PRIMARY KEY,
 		user_id    INTEGER NOT NULL REFERENCES users(id),
+		csrf_token TEXT NOT NULL,
 		expires_at DATETIME NOT NULL
 	);`
 
@@ -234,6 +235,11 @@ func (dm *DatabaseManager) createSchema() {
 	}
 
 	log.Println("Database schema ready")
+}
+
+type Session struct {
+	User      *User
+	CSRFToken string
 }
 
 type User struct {
@@ -264,27 +270,27 @@ func (dm *DatabaseManager) CreateUser(username, passwordHash, role string, patro
 	return err
 }
 
-func (dm *DatabaseManager) CreateSession(token string, userID int, expiresAt time.Time) error {
+func (dm *DatabaseManager) CreateSession(token string, userID int, csrfToken string, expiresAt time.Time) error {
 	_, err := dm.db.Exec(
-		"INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)",
-		token, userID, expiresAt,
+		"INSERT INTO sessions (token, user_id, csrf_token, expires_at) VALUES (?, ?, ?, ?)",
+		token, userID, csrfToken, expiresAt.UTC().Format("2006-01-02 15:04:05"),
 	)
 	return err
 }
 
-func (dm *DatabaseManager) GetSession(token string) (*User, error) {
-	user := &User{}
+func (dm *DatabaseManager) GetSession(token string) (*Session, error) {
+	session := &Session{User: &User{}}
 	err := dm.db.QueryRow(`
-		SELECT u.id, u.username, u.password_hash, u.role, u.patron_id
+		SELECT u.id, u.username, u.password_hash, u.role, u.patron_id, s.csrf_token
 		FROM sessions s
 		JOIN users u on s.user_id = u.id
-		WHERE s.token = ? AND s.expires_at > CURRENT_TIMESTAMP`,
+		WHERE s.token = ? AND datetime(s.expires_at) > datetime('now')`,
 		token,
-	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.PatronID)
+	).Scan(&session.User.ID, &session.User.Username, &session.User.PasswordHash, &session.User.Role, &session.User.PatronID, &session.CSRFToken)
 	if err != nil {
 		return nil, err
 	}
-	return user, nil
+	return session, nil
 }
 
 func (dm *DatabaseManager) DeleteSession(token string) error {

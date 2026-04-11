@@ -80,26 +80,26 @@ func main() {
 
 	// Public routes
 	router.GET("/login", HandleLogin)
-	router.POST("/login", HandleLoginPost)
-	router.POST("/logout", HandleLogout)
+	router.POST("/login", LoginCSRFProtect, HandleLoginPost)
 	router.GET("/kiosk", HandleKiosk)
 
 	// Authenticated routes -- any logged in user
 	auth := router.Group("/")
-	auth.Use(RequireAuth)
+	auth.Use(RequireAuth, CSRFProtect)
 	auth.GET("/", HandleIndex)
 	auth.GET("/catalog", HandleCatalog)
 	auth.GET("/books/:id", HandleBookDetail)
+	auth.POST("/logout", HandleLogout)
 
 	// Staff routes -- admin + staff
 	staff := router.Group("/")
-	staff.Use(RequireAuth, RequireStaff)
+	staff.Use(RequireAuth, RequireStaff, CSRFProtect)
 	staff.GET("/patrons", HandlePatrons)
 	staff.GET("/admin", HandleAdmin)
 
 	// Admin-only routes
 	admin := router.Group("/")
-	admin.Use(RequireAuth, RequireAdmin)
+	admin.Use(RequireAuth, RequireAdmin, CSRFProtect)
 
 	router.NoRoute(HandleNotFound)
 

@@ -69,6 +69,9 @@ func renderTemplate(c *gin.Context, name string, data gin.H) {
 	if user, exists := c.Get("user"); exists {
 		data["User"] = user
 	}
+	if token, exists := c.Get("csrfToken"); exists {
+		data["CSRFToken"] = token
+	}
 
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "layout", data); err != nil {

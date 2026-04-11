@@ -195,17 +195,38 @@ func setupAuthTestRouter(t *testing.T) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.Use(DatabaseMiddleware(dm))
-	router.POST("/login", HandleLoginPost)
+	router.GET("/login", HandleLogin)
+	router.POST("/login", LoginCSRFProtect, HandleLoginPost)
 	return router
 }
 
 func postLogin(t *testing.T, router *gin.Engine, username, password string) *httptest.ResponseRecorder {
 	t.Helper()
+
+	// Preflight GET /login to obtain the csrf_login cookie and its token value.
+	getReq := httptest.NewRequest("GET", "/login", nil)
+	getRR := httptest.NewRecorder()
+	router.ServeHTTP(getRR, getReq)
+
+	var csrfCookie *http.Cookie
+	for _, cookie := range getRR.Result().Cookies() {
+		if cookie.Name == "csrf_login" {
+			csrfCookie = cookie
+			break
+		}
+	}
+	if csrfCookie == nil {
+		t.Fatalf("GET /login did not set csrf_login cookie")
+	}
+
 	form := url.Values{}
 	form.Set("username", username)
 	form.Set("password", password)
+	form.Set("csrf_token", csrfCookie.Value)
 	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(csrfCookie)
+
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 	return rr
@@ -282,4 +303,199 @@ func medianDuration(ds []time.Duration) time.Duration {
 	copy(sorted, ds)
 	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
 	return sorted[len(sorted)/2]
+}
+
+// TestLoginCSRFRejectsMissingCookie asserts that POST /login without a
+// csrf_login cookie is rejected by LoginCSRFProtect with 403, even if a
+// csrf_token form field is present.
+func TestLoginCSRFRejectsMissingCookie(t *testing.T) {
+	router := setupAuthTestRouter(t)
+
+	form := url.Values{}
+	form.Set("username", "staff1")
+	form.Set("password", "irrelevant")
+	form.Set("csrf_token", "any-value")
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for missing csrf_login cookie, got %d", rr.Code)
+	}
+}
+
+// TestLoginCSRFRejectsMismatchedToken asserts that POST /login with a
+// csrf_login cookie and a csrf_token form field that don't match is
+// rejected with 403.
+func TestLoginCSRFRejectsMismatchedToken(t *testing.T) {
+	router := setupAuthTestRouter(t)
+
+	form := url.Values{}
+	form.Set("username", "staff1")
+	form.Set("password", "irrelevant")
+	form.Set("csrf_token", "wrong-value")
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "csrf_login", Value: "correct-value"})
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for mismatched CSRF tokens, got %d", rr.Code)
+	}
+}
+
+// setupCSRFTestRouter builds a minimal router with CSRFProtect in front
+// of GET and POST routes, with a stub middleware that injects a known
+// CSRF token into the context. Used to unit-test CSRFProtect behavior
+// in isolation from the full auth flow.
+func setupCSRFTestRouter(t *testing.T, knownToken string) *gin.Engine {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(func(c *gin.Context) {
+		c.Set("csrfToken", knownToken)
+		c.Next()
+	})
+	router.Use(CSRFProtect)
+	router.GET("/protected", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+	router.POST("/protected", func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
+	})
+	return router
+}
+
+// TestCSRFProtectAllowsGet asserts that CSRFProtect bypasses validation
+// for GET/HEAD/OPTIONS requests, since those methods don't change state.
+func TestCSRFProtectAllowsGet(t *testing.T) {
+	router := setupCSRFTestRouter(t, "any-token")
+
+	req := httptest.NewRequest("GET", "/protected", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200 for GET, got %d", rr.Code)
+	}
+}
+
+// TestCSRFProtectRejectsMissingToken asserts that CSRFProtect returns 403
+// when an unsafe-method request omits the csrf_token form field.
+func TestCSRFProtectRejectsMissingToken(t *testing.T) {
+	router := setupCSRFTestRouter(t, "known-token")
+
+	req := httptest.NewRequest("POST", "/protected", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for missing csrf_token, got %d", rr.Code)
+	}
+}
+
+// TestCSRFProtectRejectsMismatchedToken asserts that CSRFProtect returns
+// 403 when the form csrf_token differs from the session's token in context.
+func TestCSRFProtectRejectsMismatchedToken(t *testing.T) {
+	router := setupCSRFTestRouter(t, "known-token")
+
+	form := url.Values{}
+	form.Set("csrf_token", "wrong-token")
+	req := httptest.NewRequest("POST", "/protected", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for mismatched csrf_token, got %d", rr.Code)
+	}
+}
+
+// TestCSRFProtectAcceptsMatchingToken asserts that CSRFProtect lets
+// through a POST with a csrf_token field that matches the session's token
+// in context.
+func TestCSRFProtectAcceptsMatchingToken(t *testing.T) {
+	router := setupCSRFTestRouter(t, "known-token")
+
+	form := url.Values{}
+	form.Set("csrf_token", "known-token")
+	req := httptest.NewRequest("POST", "/protected", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200 for matching csrf_token, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestAuthenticatedPOSTWithCSRF is an end-to-end check that the full
+// RequireAuth -> CSRFProtect -> handler chain works for an authenticated
+// POST. Creates a session row with a known CSRF token, then verifies
+// that POST /logout without the token returns 403 and with the correct
+// token performs the logout (redirect + session cookie cleared).
+// Protects against regressions where RequireAuth forgets to populate
+// csrfToken in context.
+func TestAuthenticatedPOSTWithCSRF(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "libreshelf-integration-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	dm := NewDatabaseManager(tmpDir + "/test.sqlite")
+	dm.SeedDefaultUsers()
+
+	user, err := dm.GetUserByUsername("staff1")
+	if err != nil {
+		t.Fatalf("GetUserByUsername: %v", err)
+	}
+
+	const knownSession = "test-session-token"
+	const knownCSRF = "test-csrf-token"
+	if err := dm.CreateSession(knownSession, user.ID, knownCSRF, time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.Use(DatabaseMiddleware(dm))
+	authGroup := router.Group("/")
+	authGroup.Use(RequireAuth, CSRFProtect)
+	authGroup.POST("/logout", HandleLogout)
+
+	// Case 1: POST /logout without csrf_token -> 403
+	req1 := httptest.NewRequest("POST", "/logout", nil)
+	req1.AddCookie(&http.Cookie{Name: "session", Value: knownSession})
+	rr1 := httptest.NewRecorder()
+	router.ServeHTTP(rr1, req1)
+	if rr1.Code != http.StatusForbidden {
+		t.Errorf("expected 403 for /logout without csrf_token, got %d", rr1.Code)
+	}
+
+	// Case 2: POST /logout with correct csrf_token -> 302 redirect
+	form := url.Values{}
+	form.Set("csrf_token", knownCSRF)
+	req2 := httptest.NewRequest("POST", "/logout", strings.NewReader(form.Encode()))
+	req2.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req2.AddCookie(&http.Cookie{Name: "session", Value: knownSession})
+	rr2 := httptest.NewRecorder()
+	router.ServeHTTP(rr2, req2)
+	if rr2.Code != http.StatusFound {
+		t.Errorf("expected 302 for /logout with correct csrf_token, got %d. body: %s", rr2.Code, rr2.Body.String())
+	}
+
+	// Verify logout cleared the session cookie in the response.
+	var sessionCookieCleared bool
+	for _, c := range rr2.Result().Cookies() {
+		if c.Name == "session" && c.MaxAge < 0 {
+			sessionCookieCleared = true
+			break
+		}
+	}
+	if !sessionCookieCleared {
+		t.Errorf("expected logout to clear session cookie (MaxAge<0), but no cleared cookie found in response")
+	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"database/sql"
 	"encoding/hex"
 	"log"
@@ -40,14 +41,15 @@ func RequireAuth(c *gin.Context) {
 	}
 
 	dm := getDB(c)
-	user, err := dm.GetSession(token)
+	session, err := dm.GetSession(token)
 	if err != nil {
 		c.Redirect(http.StatusFound, "/login")
 		c.Abort()
 		return
 	}
 
-	c.Set("user", user)
+	c.Set("user", session.User)
+	c.Set("csrfToken", session.CSRFToken)
 	c.Next()
 }
 
@@ -103,21 +105,41 @@ func LoadUser(c *gin.Context) {
 	}
 
 	dm := getDB(c)
-	user, err := dm.GetSession(token)
+	session, err := dm.GetSession(token)
 	if err != nil {
 		c.Next()
 		return
 	}
 
-	c.Set("user", user)
+	c.Set("user", session.User)
+	c.Set("csrfToken", session.CSRFToken)
 	c.Next()
 }
 
+func renderLoginForm(c *gin.Context, errorMsg string) {
+	csrfToken, err := generateSessionToken()
+	if err != nil {
+		log.Printf("failed to generate per-session CSRF token: %v", err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	secure := os.Getenv("APP_ENV") == "production"
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie("csrf_login", csrfToken, 600, "/", "", secure, true)
+
+	data := gin.H{
+		"Title":     "Login",
+		"CSRFToken": csrfToken,
+	}
+	if errorMsg != "" {
+		data["Error"] = errorMsg
+	}
+	renderPage(c, "login", data)
+}
+
 func HandleLogin(c *gin.Context) {
-	c.Status(http.StatusOK)
-	renderPage(c, "login", gin.H{
-		"Title": "Login",
-	})
+	renderLoginForm(c, "")
 }
 
 func HandleLoginPost(c *gin.Context) {
@@ -128,10 +150,7 @@ func HandleLoginPost(c *gin.Context) {
 	user, err := dm.GetUserByUsername(username)
 	if err != nil && err != sql.ErrNoRows {
 		log.Printf("login lookup failed for %q: %v", username, err)
-		renderPage(c, "login", gin.H{
-			"Title": "Login",
-			"Error": "Something went wrong.",
-		})
+		renderLoginForm(c, "Something went wrong.")
 		return
 	}
 
@@ -142,37 +161,37 @@ func HandleLoginPost(c *gin.Context) {
 	bcryptErr := bcrypt.CompareHashAndPassword(hashToCompare, []byte(password))
 
 	if user == nil || bcryptErr != nil {
-		renderPage(c, "login", gin.H{
-			"Title": "Login",
-			"Error": "Invalid username or password.",
-		})
+		renderLoginForm(c, "Invalid username or password.")
 		return
 	}
 
 	token, err := generateSessionToken()
 	if err != nil {
 		log.Printf("failed to generate session token: %v", err)
-		renderPage(c, "login", gin.H{
-			"Title": "Login",
-			"Error": "Something went wrong.",
-		})
+		renderLoginForm(c, "Something went wrong.")
+		return
+	}
+
+	csrfToken, err := generateSessionToken()
+	if err != nil {
+		log.Printf("failed to generate session CSRF token: %v", err)
+		renderLoginForm(c, "Something went wrong.")
 		return
 	}
 
 	expiresAt := time.Now().Add(8 * time.Hour)
-	if err := dm.CreateSession(token, user.ID, expiresAt); err != nil {
+	if err := dm.CreateSession(token, user.ID, csrfToken, expiresAt); err != nil {
 		log.Printf("Failed to create session: %v", err)
-		renderPage(c, "login", gin.H{
-			"Title": "Login",
-			"Error": "Something went wrong.",
-		})
+		renderLoginForm(c, "Something went wrong.")
 		return
 	}
 
+	c.SetCookie("csrf_login", "", -1, "/", "", false, true)
+
 	secure := os.Getenv("APP_ENV") == "production"
+	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie("session", token, 8*60*60, "/", "", secure, true)
 	c.Redirect(http.StatusFound, "/")
-
 }
 
 func HandleLogout(c *gin.Context) {
@@ -184,4 +203,50 @@ func HandleLogout(c *gin.Context) {
 
 	c.SetCookie("session", "", -1, "/", "", false, true)
 	c.Redirect(http.StatusFound, "/login")
+}
+
+func CSRFProtect(c *gin.Context) {
+	method := c.Request.Method
+	if method == "GET" || method == "HEAD" || method == "OPTIONS" {
+		c.Next()
+		return
+	}
+
+	sessionToken, exists := c.Get("csrfToken")
+	if !exists {
+		log.Printf("CSRFProtect: no csrfToken in context for %s %s", method, c.Request.URL.Path)
+		c.String(http.StatusForbidden, "CSRF validation failed")
+		c.Abort()
+		return
+	}
+
+	formToken := c.PostForm("csrf_token")
+	if subtle.ConstantTimeCompare([]byte(formToken), []byte(sessionToken.(string))) != 1 {
+		log.Printf("CSRFProtect: token mismatch for %s %s", method, c.Request.URL.Path)
+		c.String(http.StatusForbidden, "CSRF validation failed")
+		c.Abort()
+		return
+	}
+
+	c.Next()
+}
+
+func LoginCSRFProtect(c *gin.Context) {
+	cookieToken, err := c.Cookie("csrf_login")
+	if err != nil || cookieToken == "" {
+		log.Printf("LoginCSRFProtect: missing csrf_login cookie")
+		c.String(http.StatusForbidden, "CSRF validation failed")
+		c.Abort()
+		return
+	}
+
+	formToken := c.PostForm("csrf_token")
+	if subtle.ConstantTimeCompare([]byte(formToken), []byte(cookieToken)) != 1 {
+		log.Printf("LoginCSRFProtect: token mismatch")
+		c.String(http.StatusForbidden, "CSRF validation failed")
+		c.Abort()
+		return
+	}
+
+	c.Next()
 }
