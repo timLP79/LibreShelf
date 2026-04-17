@@ -259,3 +259,46 @@ The `"2006-01-02 15:04:05"` layout is Go's reference time; it produces exactly t
 SQLite's `CURRENT_TIMESTAMP` returns. Discovered via `TestAuthenticatedPOSTWithCSRF`, which
 was the first test to exercise the full `CreateSession` to `GetSession` round trip and caught
 the latent bug immediately.
+
+---
+
+## DEC-019: Type-to-confirm over delayed deletion queue for staff accounts
+
+**Date:** 2026-04-16 (CP5 design)
+**Context:** Admin staff deletion needs a safety net against accidental or mistaken deletion.
+Proposed design was a 48-hour delayed-deletion queue with cancellation. Evaluated against
+LibreShelf's actual threat model (single-admin class deployment) and the engineering cost.
+**Decision:** Use a type-to-confirm modal instead of a delayed queue. The delete button opens
+a Bootstrap modal containing the target username. The confirm button stays disabled until
+the admin types the username exactly. Deletion is immediate on confirm. No background job,
+no pending state, no cancellation flow. Last-admin and self-deletion checks run server-side
+and also gate the UI (delete button is disabled on rows that violate either rule).
+**Rationale:** A 48-hour queue would require a new pending-deletions table, a startup
+catch-up pass, a periodic scheduler goroutine, a cancellation UI, and a dual last-admin
+check (at schedule time and execution time, because two admins could schedule each other
+and leave zero admins). Each of those is a non-trivial lift and would need its own tests.
+Type-to-confirm captures most of the "oops" protection value in one modal with roughly
+fifty lines of client JS. Consistent with the Absolute Code philosophy: build the simpler
+thing first; revisit if the threat model changes.
+
+---
+
+## DEC-020: Combined username + role edit, restricted role transitions
+
+**Date:** 2026-04-16 (CP5 design)
+**Context:** Staff management needs to support renames and role changes. Options: separate
+endpoints per field (cleaner REST but more handlers), one combined edit endpoint, or
+promote/demote as explicit actions.
+**Decision:** One `POST /staff/:id/edit` endpoint updates both username and role in a
+single call. Allowed role transitions are `staff <-> admin` only. Patron role changes are
+out of scope and will be handled in `/patrons` (#21). Self role changes are forbidden
+(cannot demote yourself, prevents accidental admin lockout). The last admin cannot be
+demoted (same `CountAdmins() > 1` check used for deletion). The UI disables the `staff`
+option in the role dropdown when the target is the last admin, and disables the role
+field entirely when the target is the current user.
+**Rationale:** Combining username and role into one form matches the UX of a standard
+edit dialog and keeps the handler count low. Restricting role transitions to `staff <->
+admin` is a consequence of the CP4 three-role model: the patron role has a `patron_id`
+foreign key relationship and a different lifecycle, so co-mingling it with staff edits
+would invite bugs. Server-side checks are authoritative; the UI restrictions are UX
+polish only.

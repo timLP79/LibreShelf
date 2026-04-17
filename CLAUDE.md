@@ -14,7 +14,7 @@ return transactions are staff-only.
 
 **Live at:** EC2 instance (URL available on request)
 **Repo:** github.com/timLP79/cs408-go-stack
-**Status:** In development -- CP4 complete, CP5 next
+**Status:** In development -- CP4 complete, CP5 in progress on branch `cp5-crud`
 
 ---
 
@@ -138,9 +138,14 @@ Files that exist:
 - [x] #32 -- CSRF protection via session-bound synchronizer token
 
 ### CP5 -- CRUD Features (Books, Patrons, Staff)
+
+Order: Staff (#39) first, then Books (#20), then Patrons (#21). All on branch `cp5-crud`.
+
+- [ ] #39 -- Staff management: list, add, edit, delete
+    - Design locked (see DEC-019, DEC-020). Template + JS + DECISIONS.md done.
+    - Remaining (tutor mode): `db.go` methods (`GetAllStaff`, `GetUserByID`, `CreateStaffUser`, `UpdateStaffUser`, `DeleteUser`, `CountAdmins`), `handlers_staff.go` (new file), route registration in `main.go`, and tests.
 - [ ] #20 -- Book CRUD and Open Library API lookup
 - [ ] #21 -- Patron management: CRUD, metadata, and CSV import
-- [ ] #39 -- Staff management: list, add, edit, delete
 
 ### CP6 -- Loans + Kiosk + SSE
 - [ ] #22 -- Loan system: kiosk browse, holds, and SSE availability
