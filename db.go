@@ -41,6 +41,36 @@ type LoanRecord struct {
 	Status       string
 }
 
+type StaffMember struct {
+	ID        int
+	Username  string
+	Role      string
+	CreatedAt string
+}
+
+func (dm *DatabaseManager) GetAllStaff() ([]StaffMember, error) {
+	rows, err := dm.db.Query(`
+	SELECT id, username, role, created_at
+	FROM users
+	WHERE role != 'patron'
+	ORDER BY CASE role WHEN 'admin' THEN 0 ELSE 1 END, username`)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var staff []StaffMember
+	for rows.Next() {
+		var s StaffMember
+		if err := rows.Scan(&s.ID, &s.Username, &s.Role, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		staff = append(staff, s)
+	}
+	return staff, rows.Err()
+}
+
 func (dm *DatabaseManager) GetAllBooks() ([]Book, error) {
 	rows, err := dm.db.Query(`
 			SELECT b.id, b.title, b.isbn, b.cover_filename, b.year, b.publisher,
@@ -262,12 +292,53 @@ func (dm *DatabaseManager) GetUserByUsername(username string) (*User, error) {
 	return user, nil
 }
 
+func (dm *DatabaseManager) GetUserByID(id int) (*User, error) {
+	user := &User{}
+	err := dm.db.QueryRow(
+		"SELECT id, username, password_hash, role, patron_id FROM users where id = ?", id,
+	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.PatronID)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
 func (dm *DatabaseManager) CreateUser(username, passwordHash, role string, patronID *int) error {
 	_, err := dm.db.Exec(
 		"INSERT INTO users (username, password_hash, role, patron_id) VALUES (?, ?, ?, ?)",
 		username, passwordHash, role, patronID,
 	)
 	return err
+}
+
+func (dm *DatabaseManager) UpdateStaffUser(id int, username, role string) error {
+	_, err := dm.db.Exec(
+		"UPDATE users SET username = ?, role = ? WHERE id = ?",
+		username, role, id,
+	)
+	return err
+}
+
+func (dm *DatabaseManager) DeleteUser(id int) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM sessions WHERE user_id = ?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM users WHERE id = ?", id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (dm *DatabaseManager) CountAdmins() (int, error) {
+	var count int
+	err := dm.db.QueryRow("SELECT COUNT(*) FROM users WHERE role = 'admin'").Scan(&count)
+	return count, err
 }
 
 func (dm *DatabaseManager) CreateSession(token string, userID int, csrfToken string, expiresAt time.Time) error {
