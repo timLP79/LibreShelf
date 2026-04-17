@@ -5,6 +5,7 @@
     <meta charset="utf-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{.Title}} - LibreShelf</title>
+    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
     <link href="/stylesheets/bootstrap.min.css" rel="stylesheet">
     <link href="/stylesheets/style.css" rel="stylesheet">
 </head>
@@ -16,7 +17,10 @@
         <button class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar" aria-controls="sidebar" aria-label="Toggle navigation">
             <span class="navbar-toggler-icon"></span>
         </button>
-        <span class="navbar-brand mb-0 fw-bold" style="color: #ffffff;">&#128218; LibreShelf</span>
+        <span class="navbar-brand mb-0 fw-bold d-flex align-items-center gap-2" style="color: #ffffff;">
+            <img src="/images/favicon.svg" alt="" width="24" height="24">
+            LibreShelf
+        </span>
     </div>
 </nav>
 
@@ -26,7 +30,10 @@
     <div class="offcanvas-lg offcanvas-start d-flex flex-column p-3 sidebar" tabindex="-1" id="sidebar">
         <div class="mb-4">
             <div class="d-flex justify-content-between align-items-center">
-                <div class="fw-bold fs-5" style="color: #ffffff;">&#128218; LibreShelf</div>
+                <div class="fw-bold fs-5 d-flex align-items-center gap-2" style="color: #ffffff;">
+                    <img src="/images/favicon.svg" alt="" width="26" height="26">
+                    LibreShelf
+                </div>
                 <button type="button" class="btn-close btn-close-white d-lg-none" data-bs-dismiss="offcanvas" data-bs-target="#sidebar" aria-label="Close"></button>
             </div>
             <div class="small" style="color: #a8c4e0; opacity: 0.7;">{{if and .User (or (eq .User.Role "admin") (eq .User.Role "staff"))}}Staff Portal{{else}}Library Portal{{end}}</div>
