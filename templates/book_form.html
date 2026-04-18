@@ -1,0 +1,143 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="mb-1">{{.FormTitle}}</h1>
+        <p class="text-muted mb-0">{{.FormSubtitle}}</p>
+    </div>
+    <a href="/catalog" class="btn btn-outline-secondary">Cancel</a>
+</div>
+
+{{if .Error}}<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    {{.Error}}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>{{end}}
+
+{{if .Success}}<div class="alert alert-success alert-dismissible fade show" role="alert">
+    {{.Success}}{{with .SuccessDetail}} <strong>{{.}}</strong>{{end}}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>{{end}}
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" action="{{.FormAction}}" enctype="multipart/form-data" id="bookForm" novalidate>
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <input type="hidden" name="cover_url" id="cover-url" value="">
+
+            <div class="row mb-3">
+                <label for="book-isbn" class="col-sm-2 col-form-label">ISBN</label>
+                <div class="col-sm-7">
+                    <input type="text" class="form-control" id="book-isbn" name="isbn"
+                           value="{{if .Book}}{{deref .Book.ISBN}}{{end}}"
+                           maxlength="20" pattern="[0-9Xx\- ]*"
+                           title="ISBN-10 or ISBN-13; digits with optional hyphens or spaces">
+                    <div class="invalid-feedback">ISBN must be 10 or 13 characters, digits with optional hyphens or spaces.</div>
+                </div>
+                <div class="col-sm-3">
+                    <button type="button" class="btn btn-outline-primary w-100" id="ol-lookup-btn">Lookup on Open Library</button>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <label for="book-title" class="col-sm-2 col-form-label">Title</label>
+                <div class="col-sm-10">
+                    <input type="text" class="form-control" id="book-title" name="title"
+                           value="{{if .Book}}{{.Book.Title}}{{end}}"
+                           required maxlength="255">
+                    <div class="invalid-feedback">Title is required.</div>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <label for="book-authors" class="col-sm-2 col-form-label">Authors</label>
+                <div class="col-sm-10">
+                    <input type="text" class="form-control" id="book-authors" name="authors"
+                           value="{{.AuthorsText}}" required
+                           placeholder="Comma-separated, in order (e.g. Frank Herbert, Kevin J. Anderson)">
+                    <div class="form-text">Listed in the order shown on the book jacket. Separate with commas.</div>
+                    <div class="invalid-feedback">At least one author is required.</div>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <label for="book-year" class="col-sm-2 col-form-label">Year</label>
+                <div class="col-sm-3">
+                    <input type="number" class="form-control" id="book-year" name="year"
+                           value="{{if .Book}}{{deref .Book.Year}}{{end}}"
+                           min="1500" max="2100">
+                </div>
+                <label for="book-quantity" class="col-sm-2 col-form-label">Quantity</label>
+                <div class="col-sm-3">
+                    <input type="number" class="form-control" id="book-quantity" name="quantity"
+                           value="{{if .Book}}{{.Book.QuantityTotal}}{{else}}1{{end}}"
+                           min="1" required>
+                    <div class="invalid-feedback">Quantity must be at least 1.</div>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <label for="book-publisher" class="col-sm-2 col-form-label">Publisher</label>
+                <div class="col-sm-10">
+                    <input type="text" class="form-control" id="book-publisher" name="publisher"
+                           value="{{if .Book}}{{deref .Book.Publisher}}{{end}}"
+                           maxlength="255">
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <label for="book-genre" class="col-sm-2 col-form-label">Genre</label>
+                <div class="col-sm-10">
+                    <input type="text" class="form-control" id="book-genre" name="genre"
+                           value="{{if .Book}}{{deref .Book.Genre}}{{end}}"
+                           maxlength="100">
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <label for="book-description" class="col-sm-2 col-form-label">Description</label>
+                <div class="col-sm-10">
+                    <textarea class="form-control" id="book-description" name="description"
+                              rows="4" maxlength="5000">{{if .Book}}{{deref .Book.Description}}{{end}}</textarea>
+                </div>
+            </div>
+
+            <div class="row mb-3">
+                <label class="col-sm-2 col-form-label">Cover</label>
+                <div class="col-sm-10">
+                    <div class="d-flex align-items-start gap-3">
+                        <div>
+                            {{if and .Book .Book.CoverFilename}}
+                                <img src="/covers/{{deref .Book.CoverFilename}}" alt="Cover preview" id="cover-preview"
+                                     style="width: 150px; height: 220px; object-fit: cover;">
+                            {{else}}
+                                <img src="" alt="Cover preview" id="cover-preview"
+                                     style="width: 150px; height: 220px; object-fit: cover; display: none;">
+                                <div id="cover-placeholder" class="text-muted border rounded d-flex align-items-center justify-content-center"
+                                     style="width: 150px; height: 220px;">No cover</div>
+                            {{end}}
+                        </div>
+                        <div class="flex-grow-1">
+                            <input type="file" class="form-control" id="cover-file" name="cover"
+                                   accept="image/jpeg,image/png,image/webp">
+                            <div class="form-text">Max 2 MB. JPG, PNG, or WebP only. Leave blank to keep the current cover (edit mode).</div>
+                            <div id="cover-url-note" class="form-text text-muted mt-2" style="display: none;">
+                                A cover from Open Library will be fetched and stored with this book.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-sm-10 offset-sm-2 d-flex gap-2">
+                    <button type="submit" name="submit_action" value="save" class="btn" style="background-color: #1e3a5f; color: #ffffff;">{{.SubmitLabel}}</button>
+                    {{if .ShowAddAnother}}
+                    <button type="submit" name="submit_action" value="add_another" class="btn btn-outline-primary">Save and Add Another</button>
+                    {{end}}
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="/javascripts/app.js"></script>
+{{end}}
