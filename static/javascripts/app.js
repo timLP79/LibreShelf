@@ -1,6 +1,8 @@
 document.addEventListener("DOMContentLoaded", function () {
     initCatalogFilter();
     initStaffManagement();
+    initBookDetail();
+    initBookForm();
 });
 
 function initCatalogFilter() {
@@ -181,6 +183,143 @@ function initStaffManagement() {
         confirm: "#reset-password-confirm",
         modal: resetModal,
     });
+}
+
+function initBookDetail() {
+    var deleteModal = document.getElementById("deleteBookModal");
+    if (!deleteModal) return;
+
+    var deleteForm = document.getElementById("deleteBookForm");
+    var titleTarget = document.getElementById("delete-book-title");
+    var confirmInput = document.getElementById("delete-book-confirm-input");
+    var confirmBtn = document.getElementById("delete-book-confirm-btn");
+    var expectedTitle = "";
+
+    document.querySelectorAll('[data-bs-target="#deleteBookModal"]').forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            var id = btn.getAttribute("data-book-id");
+            expectedTitle = btn.getAttribute("data-book-title");
+            deleteForm.action = "/books/" + id + "/delete";
+            titleTarget.textContent = expectedTitle;
+            confirmInput.value = "";
+            confirmBtn.disabled = true;
+        });
+    });
+
+    confirmInput.addEventListener("input", function () {
+        confirmBtn.disabled = confirmInput.value !== expectedTitle;
+    });
+
+    deleteModal.addEventListener("hidden.bs.modal", function () {
+        confirmInput.value = "";
+        confirmBtn.disabled = true;
+    });
+}
+
+function initBookForm() {
+    var form = document.getElementById("bookForm");
+    if (!form) return;
+
+    // Open Library lookup: fetch metadata for the ISBN in the form,
+    // prefill title/authors/year/publisher, and stage a cover URL in the
+    // hidden cover_url field so the server can download it on submit.
+    // The admin can still override any field before saving.
+    var lookupBtn = document.getElementById("ol-lookup-btn");
+    var isbnField = document.getElementById("book-isbn");
+    var titleField = document.getElementById("book-title");
+    var authorsField = document.getElementById("book-authors");
+    var yearField = document.getElementById("book-year");
+    var publisherField = document.getElementById("book-publisher");
+    var coverUrlField = document.getElementById("cover-url");
+    var coverPreview = document.getElementById("cover-preview");
+    var coverPlaceholder = document.getElementById("cover-placeholder");
+    var coverUrlNote = document.getElementById("cover-url-note");
+
+    function setStatus(msg, kind) {
+        var existing = document.getElementById("ol-lookup-status");
+        if (existing) existing.remove();
+        if (!msg) return;
+        var div = document.createElement("div");
+        div.id = "ol-lookup-status";
+        div.className = "form-text mt-2 " + (kind === "error" ? "text-danger" : "text-success");
+        div.textContent = msg;
+        lookupBtn.parentElement.appendChild(div);
+    }
+
+    if (lookupBtn && isbnField) {
+        lookupBtn.addEventListener("click", function () {
+            var isbn = isbnField.value.replace(/[\s-]/g, "");
+            if (!isbn) {
+                setStatus("Enter an ISBN first.", "error");
+                return;
+            }
+            setStatus("Looking up...", "info");
+            lookupBtn.disabled = true;
+
+            fetch("/api/openlibrary/isbn/" + encodeURIComponent(isbn), {
+                headers: { "Accept": "application/json" }
+            }).then(function (resp) {
+                lookupBtn.disabled = false;
+                if (resp.status === 404) {
+                    setStatus("No match in Open Library. Fill in manually.", "error");
+                    return null;
+                }
+                if (resp.status === 400) {
+                    setStatus("ISBN must be 10 or 13 characters.", "error");
+                    return null;
+                }
+                if (!resp.ok) {
+                    setStatus("Couldn't reach Open Library. Try again or fill in manually.", "error");
+                    return null;
+                }
+                return resp.json();
+            }).then(function (data) {
+                if (!data) return;
+                if (data.title) titleField.value = data.title;
+                if (Array.isArray(data.authors) && data.authors.length) {
+                    authorsField.value = data.authors.join(", ");
+                }
+                if (data.publish_year) yearField.value = data.publish_year;
+                if (data.publisher) publisherField.value = data.publisher;
+                if (data.cover_url) {
+                    coverUrlField.value = data.cover_url;
+                    if (coverPreview) {
+                        coverPreview.src = data.cover_url;
+                        coverPreview.style.display = "";
+                    }
+                    if (coverPlaceholder) coverPlaceholder.style.display = "none";
+                    if (coverUrlNote) coverUrlNote.style.display = "";
+                }
+                setStatus("Prefilled from Open Library. Review before saving.", "success");
+            }).catch(function () {
+                lookupBtn.disabled = false;
+                setStatus("Couldn't reach Open Library. Try again or fill in manually.", "error");
+            });
+        });
+    }
+
+    // Local cover-file preview so admins see what they selected without
+    // submitting. Uploading a file also clears any staged OL cover_url so
+    // the server routing (upload > URL > preserve existing) matches.
+    var coverInput = document.getElementById("cover-file");
+    if (coverInput) {
+        coverInput.addEventListener("change", function () {
+            var file = coverInput.files && coverInput.files[0];
+            if (!file) return;
+            if (coverUrlField) coverUrlField.value = "";
+            if (coverUrlNote) coverUrlNote.style.display = "none";
+            if (!coverPreview) return;
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                coverPreview.src = e.target.result;
+                coverPreview.style.display = "";
+                if (coverPlaceholder) coverPlaceholder.style.display = "none";
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    attachFormValidation(form, {});
 }
 
 // attachFormValidation wires Bootstrap 5 per-field live validation onto

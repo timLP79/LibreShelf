@@ -1,6 +1,23 @@
 {{define "content"}}
-<h1 class="mb-1">Catalog</h1>
-<p class="text-muted mb-4">Browse and search the library collection</p>
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="mb-1">Catalog</h1>
+        <p class="text-muted mb-0">Browse and search the library collection</p>
+    </div>
+    {{if and .User (or (eq .User.Role "admin") (eq .User.Role "staff"))}}
+    <a href="/books/new" class="btn" style="background-color: #1e3a5f; color: #ffffff;">+ Add Book</a>
+    {{end}}
+</div>
+
+{{if .Error}}<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    {{.Error}}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>{{end}}
+
+{{if .Success}}<div class="alert alert-success alert-dismissible fade show" role="alert">
+    {{.Success}}{{with .SuccessDetail}} <strong>{{.}}</strong>{{end}}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>{{end}}
 
 <!-- Search and Filter Bar -->
 <div class="card mb-4">
@@ -42,7 +59,7 @@
             <div class="position-relative">
                 <div class="book-cover-placeholder">
                     {{if .CoverFilename}}
-                    <img src="/images/covers/{{deref .CoverFilename}}" class="card-img-top" alt="{{.Title}} cover">
+                    <img src="/covers/{{deref .CoverFilename}}" class="card-img-top" alt="{{.Title}} cover">
                     {{else}}
                     <div class="d-flex align-items-center justify-content-center text-muted" style="height: 280px; background: #f0f4f8;">
                         [Book Cover]

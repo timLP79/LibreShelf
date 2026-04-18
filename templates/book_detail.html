@@ -1,5 +1,27 @@
 {{define "content"}}
-<a href="/catalog" class="text-decoration-none mb-3 d-inline-block" style="color: #1e3a5f;">&larr; Back to Catalog</a>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <a href="/catalog" class="text-decoration-none" style="color: #1e3a5f;">&larr; Back to Catalog</a>
+    {{if and .User (or (eq .User.Role "admin") (eq .User.Role "staff"))}}
+    <div class="d-flex gap-2">
+        <a href="/books/{{.Book.ID}}/edit" class="btn btn-outline-primary btn-sm">Edit</a>
+        {{if eq .User.Role "admin"}}
+        <button type="button" class="btn btn-outline-danger btn-sm"
+                data-bs-toggle="modal" data-bs-target="#deleteBookModal"
+                data-book-id="{{.Book.ID}}" data-book-title="{{.Book.Title}}">Delete</button>
+        {{end}}
+    </div>
+    {{end}}
+</div>
+
+{{if .Error}}<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    {{.Error}}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>{{end}}
+
+{{if .Success}}<div class="alert alert-success alert-dismissible fade show" role="alert">
+    {{.Success}}{{with .SuccessDetail}} <strong>{{.}}</strong>{{end}}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>{{end}}
 
 <div class="row">
     <!-- Left Column: Cover Image -->
@@ -7,7 +29,7 @@
         <div class="card">
             <div class="card-body text-center">
                 {{if .Book.CoverFilename}}
-                <img src="/images/covers/{{deref .Book.CoverFilename}}" class="img-fluid mb-3" alt="{{.Book.Title}} cover">
+                <img src="/covers/{{deref .Book.CoverFilename}}" class="img-fluid mb-3" alt="{{.Book.Title}} cover">
                 {{else}}
                 <div class="d-flex align-items-center justify-content-center text-muted" style="height: 280px; background: #f0f4f8;">
                     [Book Cover]
@@ -131,4 +153,33 @@
         {{end}}
     </div>
 </div>
+
+{{if and .User (eq .User.Role "admin")}}
+<!-- Delete Book Modal (type-to-confirm) -->
+<div class="modal fade" id="deleteBookModal" tabindex="-1" aria-labelledby="deleteBookModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" id="deleteBookForm" class="modal-content" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deleteBookModalLabel">Delete Book</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>You are about to permanently remove <strong id="delete-book-title"></strong> from the catalog.</p>
+                <p class="text-muted">This cannot be undone. Books with loan history cannot be deleted; return all copies first.</p>
+                <div class="mb-3">
+                    <label for="delete-book-confirm-input" class="form-label">Type the title to confirm:</label>
+                    <input type="text" id="delete-book-confirm-input" class="form-control" autocomplete="off">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" id="delete-book-confirm-btn" class="btn btn-danger" disabled>Delete Book</button>
+            </div>
+        </form>
+    </div>
+</div>
+{{end}}
+
+<script src="/javascripts/app.js"></script>
 {{end}}
