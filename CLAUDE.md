@@ -128,7 +128,7 @@ Files that exist:
 
 - **SQLite driver name.** `modernc.org/sqlite` registers as `"sqlite"`, not `"sqlite3"`. Don't copy-paste snippets from `mattn/go-sqlite3` docs (DEC-002).
 - **Seed passwords are fresh-install-only.** `SeedDefaultUsers` skips users that already exist. Bumping a seed value does NOT update existing rows; `rm data/database.sqlite*` to re-seed locally.
-- **Test router does not mirror production middleware** (#35). `main_test.go`'s `setupTestRouter` registers handlers directly, so auth and CSRF middleware are not exercised. Close #35 before writing new handler tests or they'll encode the workaround.
+- **Test router uses the production middleware chain** (fixed in #35). `setupTestRouter` returns `(router, dm)` and mirrors `main.go` route groups exactly. Use `loginAs(t, dm, username, role)` to get a session cookie + CSRF token, then `req.AddCookie(sess)` and set `csrf_token` on POSTs. `logoutHelper` exists for the logout path.
 - **Schema changes don't migrate.** `createSchema` uses `CREATE TABLE IF NOT EXISTS`. Altering a column requires either `ALTER TABLE` or nuking `data/database.sqlite` locally.
 
 ---
@@ -156,9 +156,9 @@ See `Current State` above for the per-CP summary. Closed issues and scope live i
 
 ### CP5 -- CRUD Features (Staff, Books, Patrons) -- in progress on `cp5-crud`
 
-Order: close #39, then #35, then #20, then #21.
+Order: close #39, then #20, then #21.
 
-- [ ] #35 -- Fix: Test router does not mirror production middleware (**moved from CP7**; unblocks handler tests for the rest of CP5)
+- [x] #35 -- Fix: Test router does not mirror production middleware (closed in b9ce9ed). `setupTestRouter` mirrors main.go route groups. Added `loginAs` and `logoutHelper` test helpers. Three new regression-pin tests cover the middleware chain.
 - [ ] #39 -- Staff management: close out
     - Design locked (see DEC-019, DEC-020). Template, JS, sidebar link, favicon done.
     - `db.go` methods done: `GetAllStaff`, `GetUserByID`, `UpdateStaffUser`, `DeleteUser` (transactional), `CountAdmins`. `CreateUser` is reusable as-is.
