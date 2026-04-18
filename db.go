@@ -319,6 +319,27 @@ func (dm *DatabaseManager) UpdateStaffUser(id int, username, role string) error 
 	return err
 }
 
+func (dm *DatabaseManager) UpdateUserPassword(id int, passwordHash string) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(
+		"UPDATE users SET password_hash = ? WHERE id = ?",
+		passwordHash, id,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(
+		"DELETE FROM sessions WHERE user_id = ?", id,
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (dm *DatabaseManager) DeleteUser(id int) error {
 	tx, err := dm.db.Begin()
 	if err != nil {
