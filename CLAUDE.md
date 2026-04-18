@@ -148,7 +148,8 @@ Order: Staff (#39) first, then Books (#20), then Patrons (#21). All on branch `c
     - `validators.go` done: `ValidateUsername`, `ValidatePassword` (see DEC-021).
     - `SeedBooks` retrofitted into `seedOneBook` per-book transaction (see DEC-022).
     - `SeedDefaultUsers` bumped to `Admin123!` / `Staff123!` / `Patron123!` and validates `ADMIN_PASSWORD` at startup.
-    - Remaining (tutor mode): `handlers_staff.go` (new file), route registration in `main.go`, and tests.
+    - Tests done: `validators_test.go` (username + password rules, table-driven), `db_test.go` (staff list, ordering, lookup, update, delete transaction, admin count). Full suite 35 passing on `cp5-crud`.
+    - Remaining (tutor mode): `handlers_staff.go` (new file), route registration in `main.go`, and `handlers_staff_test.go` for the guard rules. Worth resolving #35 before writing handler tests so the test router actually exercises the auth + CSRF middleware chain.
 - [ ] #20 -- Book CRUD and Open Library API lookup
 - [ ] #21 -- Patron management: CRUD, metadata, and CSV import
 

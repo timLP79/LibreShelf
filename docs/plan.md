@@ -344,8 +344,8 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
   - ZIP contains: SQLite database file + cover images from `static/images/covers/`
 - [#35](https://github.com/timLP79/cs408-go-stack/issues/35) -- Test router does not mirror production middleware (false-positive tests)
 - [#24](https://github.com/timLP79/cs408-go-stack/issues/24) -- Testing, polish, and deploy
-  - `db_test.go`: unit tests for all DB methods including auth
-  - `handlers_test.go`: integration tests for all HTTP handlers including auth flows
+  - Expand `db_test.go` to cover remaining DB methods (book catalog, loan history, session lifecycle). Staff + validator tests were added in CP5 (#39).
+  - `handlers_test.go`: integration tests for all HTTP handlers including auth flows (handler-level tests for #39 land alongside the staff handlers in CP5)
   - `scripts/install.sh`, `scripts/configure.sh`: EC2 automation scripts
   - Security headers middleware, trusted proxies config
   - Run `go mod verify` and dependency audit

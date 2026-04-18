@@ -743,8 +743,8 @@ The original `TestIndexRoute` checked for `"Hello World"` in the response. After
 3. ✅ Practice debugging with `t.Logf()`
 4. ✅ Refactor tests to use real handlers and `setupTestRouter` helper
 5. ✅ Add `TestAllRoutesReturn200` and `TestNotFoundReturns404`
-6. ⏭️ Add database layer tests in `db_test.go` (CP7)
-7. ⏭️ Add handler tests in `handlers_test.go` (CP7)
+6. ✅ Add database layer tests in `db_test.go` (initial set in CP5 #39; broader coverage in CP7)
+7. ⏭️ Add handler tests in `handlers_test.go` (CP5 for staff handlers, expanded in CP7)
 8. ⏭️ Integrate tests into CI/CD pipeline (Issue #17)
 
 ---
