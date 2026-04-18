@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"regexp"
+	"strings"
 	"unicode"
 )
 
@@ -46,4 +47,24 @@ func ValidatePassword(s string) error {
 		return fmt.Errorf("password must contain at least one special character")
 	}
 	return nil
+}
+
+func IsValidISBN(cleaned string) bool {
+	if len(cleaned) != 10 && len(cleaned) != 13 {
+		return false
+	}
+	for i, r := range cleaned {
+		if r >= '0' && r <= '9' {
+			continue
+		}
+		if i == 9 && len(cleaned) == 10 && (r == 'X' || r == 'x') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func normalizeFreeText(s string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(s)), " ")
 }
