@@ -2,6 +2,7 @@ package main
 
 import (
 	"html/template"
+	"log"
 	"os"
 
 	"github.com/gin-gonic/gin"
@@ -48,7 +49,7 @@ func main() {
 
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
-		"index", "catalog", "book_detail",
+		"index", "catalog", "book_detail", "book_form",
 		"patrons", "admin", "kiosk", "staff",
 	}
 	for _, name := range templateNames {
@@ -74,6 +75,10 @@ func main() {
 	router.Static("/stylesheets", "static/stylesheets")
 	router.Static("/javascripts", "static/javascripts")
 	router.Static("/images", "static/images")
+	if err := os.MkdirAll(coversDir(), 0o755); err != nil {
+		log.Fatalf("failed to create covers dir: %v", err)
+	}
+	router.Static("/covers", coversDir())
 
 	// Database middleware - make dm available to all handlers
 	router.Use(DatabaseMiddleware(dm))
@@ -96,6 +101,11 @@ func main() {
 	staff.Use(RequireAuth, RequireStaff, CSRFProtect)
 	staff.GET("/patrons", HandlePatrons)
 	staff.GET("/admin", HandleAdmin)
+	staff.GET("/api/openlibrary/isbn/:isbn", HandleOpenLibraryLookup)
+	staff.GET("/books/new", HandleBookNew)
+	staff.POST("/books", HandleBookCreate)
+	staff.GET("/books/:id/edit", HandleBookEdit)
+	staff.POST("/books/:id/edit", HandleBookUpdate)
 
 	// Admin-only routes
 	admin := router.Group("/")
@@ -105,6 +115,7 @@ func main() {
 	admin.POST("/staff/:id/edit", HandleStaffEdit)
 	admin.POST("/staff/:id/delete", HandleStaffDelete)
 	admin.POST("/staff/:id/password", HandleStaffResetPassword)
+	admin.POST("/books/:id/delete", HandleBookDelete)
 
 	router.NoRoute(HandleNotFound)
 

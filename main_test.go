@@ -30,6 +30,11 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	}
 	t.Cleanup(func() { os.RemoveAll(tmpDir) })
 
+	// Route DATA_DIR into the per-test tmp dir so SaveUploadedCover and
+	// coversDir() write under tmpDir/covers/ rather than polluting ./data/
+	// in the repo. t.Setenv auto-restores on test end.
+	t.Setenv("DATA_DIR", tmpDir)
+
 	dm := NewDatabaseManager(tmpDir + "/test.sqlite")
 	dm.SeedBooks()
 
@@ -51,7 +56,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
-		"index", "catalog", "book_detail",
+		"index", "catalog", "book_detail", "book_form",
 		"patrons", "admin", "kiosk", "staff", "error",
 	}
 	for _, name := range templateNames {
@@ -84,6 +89,11 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	staff.Use(RequireAuth, RequireStaff, CSRFProtect)
 	staff.GET("/patrons", HandlePatrons)
 	staff.GET("/admin", HandleAdmin)
+	staff.GET("/api/openlibrary/isbn/:isbn", HandleOpenLibraryLookup)
+	staff.GET("/books/new", HandleBookNew)
+	staff.POST("/books", HandleBookCreate)
+	staff.GET("/books/:id/edit", HandleBookEdit)
+	staff.POST("/books/:id/edit", HandleBookUpdate)
 
 	// Admin-only routes
 	admin := router.Group("/")
@@ -93,6 +103,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	admin.POST("/staff/:id/edit", HandleStaffEdit)
 	admin.POST("/staff/:id/delete", HandleStaffDelete)
 	admin.POST("/staff/:id/password", HandleStaffResetPassword)
+	admin.POST("/books/:id/delete", HandleBookDelete)
 
 	router.NoRoute(HandleNotFound)
 
@@ -219,7 +230,7 @@ func TestStaffRoutesReturn200AsStaff(t *testing.T) {
 func TestProtectedRoutesRedirectWithoutAuth(t *testing.T) {
 	router, _ := setupTestRouter(t)
 
-	for _, route := range []string{"/", "/catalog", "/books/1", "/patrons", "/admin", "/staff"} {
+	for _, route := range []string{"/", "/catalog", "/books/1", "/books/new", "/books/1/edit", "/patrons", "/admin", "/staff", "/api/openlibrary/isbn/9780553213119"} {
 		req, _ := http.NewRequest("GET", route, nil)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
@@ -243,7 +254,7 @@ func TestPatronCannotAccessStaffRoutes(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, _ := loginAs(t, dm, "patron1", "patron")
 
-	for _, route := range []string{"/patrons", "/admin", "/staff"} {
+	for _, route := range []string{"/patrons", "/admin", "/staff", "/books/new", "/books/1/edit", "/api/openlibrary/isbn/9780553213119"} {
 		req, _ := http.NewRequest("GET", route, nil)
 		req.AddCookie(sess)
 		rr := httptest.NewRecorder()
