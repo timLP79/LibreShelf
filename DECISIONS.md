@@ -107,7 +107,7 @@ server-side ISBN format validation before making the outbound request.
 **Context:** Admin needs to export and import the full database and cover images.
 **Decision:** Use Go's `archive/zip` standard library package.
 **Rationale:** No third-party dependency needed. ZIP contains the SQLite file and cover images
-from `static/images/covers/`.
+from `data/covers/` (the DATA_DIR-relative path since cover storage moved in #20).
 
 ---
 
@@ -361,3 +361,32 @@ writes are the most common source of latent data-integrity bugs, and the cost of
 wrapping in a transaction is a single extra function call per write. Adopting this
 as a project standard now means every new handler in CP5-CP7 inherits the guarantee
 by default.
+
+---
+
+## DEC-023: Variant B two-button submit for bulk-entry forms
+
+**Date:** 2026-04-18 (CP5)
+**Context:** After shipping book Create with a PRG redirect to `/books/:id`, it became
+clear the single-destination flow hurt bulk-entry use cases (processing a donation
+stack, manually importing a shelf of titles). Three options on the table: always
+redirect back to `/books/new` after save, keep the single `/books/:id` redirect but
+add a "View book" link in the success banner, or give the admin an explicit choice
+at the moment of save with two submit buttons.
+**Decision:** Two submit buttons on the create form. "Save" posts with
+`submit_action=save` and redirects to `/books/:id` (detail page). "Save and Add
+Another" posts with `submit_action=add_another` and redirects back to `/books/new`
+with the form cleared. Flash cookies (`book_created` code plus the title in
+`flash_detail`) fire on both paths so either redirect target shows
+"Added to the catalog: **Title**" in the banner. The edit form shows only
+"Save Changes" -- add-another is a create-only affordance. Any unexpected
+`submit_action` value falls through to the default `/books/:id` redirect. The same
+pattern will apply to Patrons (#21) where the bulk-entry vs single-add tension also
+exists (a receptionist processing a stack of sign-up sheets vs. adding one patron
+to immediately check their record).
+**Rationale:** Django-admin pattern, battle-tested across years of CRUD UX. Gives
+both workflows without sacrificing either, which the single-button alternatives
+could not. The handler-side branch is one string comparison; the template-side
+addition is one extra `<button>` gated on `{{if .ShowAddAnother}}`. Surface area is
+small, the affordance is obvious to admins familiar with any other admin console,
+and it generalizes cleanly to the next CRUD surface.

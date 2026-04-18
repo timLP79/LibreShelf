@@ -354,7 +354,7 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
   - `handlers_admin.go`: `GET /admin/export`, `POST /admin/import`
   - `templates/admin.html`: export button, import file picker, system stats
   - Uses Go standard library `archive/zip` -- no extra dependencies
-  - ZIP contains: SQLite database file + cover images from `static/images/covers/`
+  - ZIP contains: SQLite database file + cover images from `data/covers/` (DATA_DIR-relative path since #20 moved cover storage out of `static/`)
   - Zip Slip protection on extract per security.md
 - [#24](https://github.com/timLP79/cs408-go-stack/issues/24) -- Testing, polish, and deploy
   - `SecurityHeaders()` middleware (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy) per security.md
