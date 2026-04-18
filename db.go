@@ -372,7 +372,10 @@ func (dm *DatabaseManager) DeleteSession(token string) error {
 func (dm *DatabaseManager) SeedDefaultUsers() {
 	adminPassword := os.Getenv("ADMIN_PASSWORD")
 	if adminPassword == "" {
-		adminPassword = "admin123"
+		adminPassword = "Admin123!"
+	}
+	if err := ValidatePassword(adminPassword); err != nil {
+		log.Fatalf("ADMIN_PASSWORD does not meet requirements: %v", err)
 	}
 
 	var count int
@@ -395,7 +398,7 @@ func (dm *DatabaseManager) SeedDefaultUsers() {
 		log.Fatalf("Failed to check for patron1 user: %v", err)
 	}
 	if count == 0 {
-		hash, err := bcrypt.GenerateFromPassword([]byte("patron123"), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte("Patron123!"), bcrypt.DefaultCost)
 		if err != nil {
 			log.Fatalf("Failed to hash patron 1 password: %v", err)
 		}
@@ -409,7 +412,7 @@ func (dm *DatabaseManager) SeedDefaultUsers() {
 		log.Fatalf("Failed to check for staff1 user: %v", err)
 	}
 	if count == 0 {
-		hash, err := bcrypt.GenerateFromPassword([]byte("staff123"), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte("Staff123!"), bcrypt.DefaultCost)
 		if err != nil {
 			log.Fatalf("Failed to hash staff1 password: %v", err)
 		}
@@ -420,6 +423,17 @@ func (dm *DatabaseManager) SeedDefaultUsers() {
 	}
 }
 
+type seedBook struct {
+	title       string
+	isbn        string
+	year        int
+	publisher   string
+	description string
+	genre       string
+	quantity    int
+	authors     []string
+}
+
 func (dm *DatabaseManager) SeedBooks() {
 	var count int
 	if err := dm.db.QueryRow("SELECT COUNT(*) FROM books").Scan(&count); err != nil {
@@ -427,17 +441,6 @@ func (dm *DatabaseManager) SeedBooks() {
 	}
 	if count > 0 {
 		return
-	}
-
-	type seedBook struct {
-		title       string
-		isbn        string
-		year        int
-		publisher   string
-		description string
-		genre       string
-		quantity    int
-		authors     []string
 	}
 
 	books := []seedBook{
@@ -504,42 +507,58 @@ func (dm *DatabaseManager) SeedBooks() {
 	}
 
 	for _, b := range books {
-		result, err := dm.db.Exec(`
-			INSERT INTO books (title, isbn, year, publisher, description, genre,
-			                   quantity_total, quantity_available)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			b.title, b.isbn, b.year, b.publisher, b.description, b.genre,
-			b.quantity, b.quantity)
-		if err != nil {
+		if err := dm.seedOneBook(b); err != nil {
 			log.Fatalf("Failed to seed book %q: %v", b.title, err)
-		}
-		bookID, err := result.LastInsertId()
-		if err != nil {
-			log.Fatalf("Failed to get book ID for %q: %v", b.title, err)
-		}
-
-		for _, authorName := range b.authors {
-			var authorID int64
-			err := dm.db.QueryRow("SELECT id FROM authors WHERE name = ?", authorName).Scan(&authorID)
-			if err == sql.ErrNoRows {
-				res, err := dm.db.Exec("INSERT INTO authors (name) VALUES (?)", authorName)
-				if err != nil {
-					log.Fatalf("Failed to seed author %q: %v", authorName, err)
-				}
-				authorID, err = res.LastInsertId()
-				if err != nil {
-					log.Fatalf("Failed to get author ID for %q: %v", authorName, err)
-				}
-			} else if err != nil {
-				log.Fatalf("Failed to check author %q: %v", authorName, err)
-			}
-
-			if _, err := dm.db.Exec("INSERT INTO book_authors (book_id, author_id) VALUES (?, ?)",
-				bookID, authorID); err != nil {
-				log.Fatalf("Failed to link book-author: %v", err)
-			}
 		}
 	}
 
 	log.Printf("Seeded %d books", len(books))
+}
+
+func (dm *DatabaseManager) seedOneBook(b seedBook) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	result, err := tx.Exec(`
+		INSERT INTO books (title, isbn, year, publisher, description, genre,
+		                   quantity_total, quantity_available)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		b.title, b.isbn, b.year, b.publisher, b.description, b.genre,
+		b.quantity, b.quantity)
+	if err != nil {
+		return err
+	}
+	bookID, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+
+	for _, authorName := range b.authors {
+		var authorID int64
+		err := tx.QueryRow("SELECT id FROM authors WHERE name = ?", authorName).Scan(&authorID)
+		if err == sql.ErrNoRows {
+			res, execErr := tx.Exec("INSERT INTO authors (name) VALUES (?)", authorName)
+			if execErr != nil {
+				return execErr
+			}
+			authorID, err = res.LastInsertId()
+			if err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+
+		if _, err := tx.Exec(
+			"INSERT INTO book_authors (book_id, author_id) VALUES (?, ?)",
+			bookID, authorID,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
