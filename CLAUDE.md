@@ -14,7 +14,6 @@ return transactions are staff-only.
 
 **Live at:** EC2 instance (URL available on request)
 **Repo:** github.com/timLP79/cs408-go-stack
-**Status:** In development -- CP4 complete, CP5 in progress on branch `cp5-crud`
 
 ---
 
@@ -64,6 +63,20 @@ Do not use Write/Edit tools to create or modify Go files. Tim writes all Go code
 
 ---
 
+## Commands
+
+```bash
+go run .                # start the app on :3000 (PORT env to override)
+go build -o go-full-stack .
+go test ./...           # full suite (35 passing on cp5-crud)
+go test -v -run TestX   # run a specific test
+sqlite3 data/database.sqlite  # inspect the local DB
+```
+
+Deploy guide: `docs/week6/deployment.md` (build, scp, systemctl).
+
+---
+
 ## Dev Environments
 
 - **Laptop:** Ubuntu 24.04
@@ -104,10 +117,19 @@ Files that exist:
 - Use environment variables for all secrets -- never hardcode
 - Return correct HTTP status codes
 - Validate and sanitize inputs server-side on every endpoint
-- New endpoints need rate limiting and CORS handling from the start
+- Rate limiting and CORS are CP7 scope. When you add a new endpoint before CP7, note the gap rather than assuming middleware exists.
 - Always use parameterized queries (`?` placeholders) -- never string concatenation
 - Commits should be descriptive and reference issue numbers where applicable
 - Keep solutions lightweight -- consistent with the Absolute Code philosophy
+
+---
+
+## Gotchas
+
+- **SQLite driver name.** `modernc.org/sqlite` registers as `"sqlite"`, not `"sqlite3"`. Don't copy-paste snippets from `mattn/go-sqlite3` docs (DEC-002).
+- **Seed passwords are fresh-install-only.** `SeedDefaultUsers` skips users that already exist. Bumping a seed value does NOT update existing rows; `rm data/database.sqlite*` to re-seed locally.
+- **Test router does not mirror production middleware** (#35). `main_test.go`'s `setupTestRouter` registers handlers directly, so auth and CSRF middleware are not exercised. Close #35 before writing new handler tests or they'll encode the workaround.
+- **Schema changes don't migrate.** `createSchema` uses `CREATE TABLE IF NOT EXISTS`. Altering a column requires either `ALTER TABLE` or nuking `data/database.sqlite` locally.
 
 ---
 
@@ -124,19 +146,9 @@ Files that exist:
 
 ## Open Issues / Current Focus
 
-### CP3 (complete)
-- [x] #19 -- Book catalog: list and detail pages
-- [x] #28 -- Fix: `CreateSession` error silently ignored in login handler
-- [x] #29 -- Fix: `SeedDefaultUsers` ignores multiple errors
-- [x] #30 -- Fix: `renderPage` template name mismatch causes blank 404
-- [x] #40 -- Responsive sidebar with offcanvas mobile menu
+### CP1-CP4 (complete)
 
-### CP4 (complete)
-- [x] #34 -- Add `lang="en"` to HTML tags (WCAG 2.1)
-- [x] #38 -- Three-role model: admin, staff, patron
-- [x] #31 -- `ExecuteTemplate` errors never checked in render helpers
-- [x] #33 -- Username enumeration via login timing side-channel
-- [x] #32 -- CSRF protection via session-bound synchronizer token
+See `Current State` above for the per-CP summary. Closed issues and scope live in `docs/plan.md` and `git log`.
 
 ### CP5 -- CRUD Features (Books, Patrons, Staff)
 
