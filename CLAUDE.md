@@ -146,33 +146,46 @@ Files that exist:
 
 ## Open Issues / Current Focus
 
+**Deadline: 2026-05-01.** Scope rescoped on 2026-04-18 to fit the calendar. CP boundaries preserved; a few items moved between checkpoints and a few sub-features deferred post-submission (see bottom).
+
+**Target close dates:** CP5 by 4/24, CP6 by 4/27, CP7 by 4/30. Buffer day 5/1.
+
 ### CP1-CP4 (complete)
 
 See `Current State` above for the per-CP summary. Closed issues and scope live in `docs/plan.md` and `git log`.
 
-### CP5 -- CRUD Features (Books, Patrons, Staff)
+### CP5 -- CRUD Features (Staff, Books, Patrons) -- in progress on `cp5-crud`
 
-Order: Staff (#39) first, then Books (#20), then Patrons (#21). All on branch `cp5-crud`.
+Order: close #39, then #35, then #20, then #21.
 
-- [ ] #39 -- Staff management: list, add, edit, delete
-    - Design locked (see DEC-019, DEC-020). Template + JS + DECISIONS.md done.
+- [ ] #35 -- Fix: Test router does not mirror production middleware (**moved from CP7**; unblocks handler tests for the rest of CP5)
+- [ ] #39 -- Staff management: close out
+    - Design locked (see DEC-019, DEC-020). Template, JS, sidebar link, favicon done.
     - `db.go` methods done: `GetAllStaff`, `GetUserByID`, `UpdateStaffUser`, `DeleteUser` (transactional), `CountAdmins`. `CreateUser` is reusable as-is.
     - `validators.go` done: `ValidateUsername`, `ValidatePassword` (see DEC-021).
     - `SeedBooks` retrofitted into `seedOneBook` per-book transaction (see DEC-022).
     - `SeedDefaultUsers` bumped to `Admin123!` / `Staff123!` / `Patron123!` and validates `ADMIN_PASSWORD` at startup.
-    - Tests done: `validators_test.go` (username + password rules, table-driven), `db_test.go` (staff list, ordering, lookup, update, delete transaction, admin count). Full suite 35 passing on `cp5-crud`.
-    - Remaining (tutor mode): `handlers_staff.go` (new file), route registration in `main.go`, and `handlers_staff_test.go` for the guard rules. Worth resolving #35 before writing handler tests so the test router actually exercises the auth + CSRF middleware chain.
-- [ ] #20 -- Book CRUD and Open Library API lookup
-- [ ] #21 -- Patron management: CRUD, metadata, and CSV import
+    - Tests done: `validators_test.go`, `db_test.go`. Full suite 35 passing on `cp5-crud`.
+    - Remaining (tutor mode): `handlers_staff.go` (new file), route registration in `main.go`, `handlers_staff_test.go` for the guard rules. Close #35 first so the handler tests exercise the real auth + CSRF middleware chain.
+- [ ] #20 -- Book CRUD + Open Library API
+    - Handlers, DB methods (transactional: books + authors + book_authors per DEC-022), cover upload with MIME/size/extension validation, Open Library proxy endpoint, tests.
+- [ ] #21 -- Patron CRUD (**CSV import deferred post-submission**)
+    - Handlers, DB methods (`CreatePatron` transactional: patrons + users per DEC-022), patron list template with modals, auto-generated username, policy-compliant temp password, tests.
 
-### CP6 -- Loans + Kiosk + SSE
-- [ ] #22 -- Loan system: kiosk browse, holds, and SSE availability
-- [ ] #37 -- Server-side pagination and filtering for catalog
+### CP6 -- Loans + Kiosk + Pagination
 
-### CP7 -- Admin Panel + Testing + Deploy
-- [ ] #23 -- Admin panel: ZIP export and import
-- [ ] #35 -- Fix: Test router does not mirror production middleware
+- [ ] #22 -- Loan system: checkout/return + kiosk browse + favorites (**SSE and patron holds deferred post-submission**)
+- [ ] #37 -- Server-side pagination and filtering for catalog (needed once Open Library grows the catalog past ~6 books)
+
+### CP7 -- Admin Panel + Security Hardening + Deploy
+
+- [ ] #23 -- Admin panel: ZIP export and import (with Zip Slip protection)
 - [ ] #24 -- Testing, polish, and deploy
+    - `SecurityHeaders` middleware, `SetTrustedProxies`, `go mod verify`, `govulncheck`, final EC2 redeploy with a clean DB to pick up new seed passwords.
 
-### Backlog
-- [ ] #17 -- Automate deployment via GitHub Actions (low priority)
+### Deferred post-submission backlog
+
+- CSV patron import (from #21)
+- SSE live availability updates (from #22)
+- Patron holds on checked-out books (from #22)
+- [ ] #17 -- Automate deployment via GitHub Actions (already low-priority backlog)

@@ -289,24 +289,42 @@ All checkout and return transactions are staff-only. Patrons cannot self-checkou
 
 ---
 
-### CP5 -- CRUD Features (Books, Patrons, Staff)
-**Goal:** Full CRUD for books (with Open Library API), patrons (with metadata and CSV import), and staff accounts.
+### Deadline Rescope (2026-04-18)
 
+Project due 2026-05-01. Remaining scope was rebalanced within CP5/CP6/CP7 to fit the calendar. CP boundaries preserved; a few items moved between checkpoints and a few sub-features deferred to a post-submission backlog. See also the "Open Issues / Current Focus" section of `CLAUDE.md` for the authoritative per-session task list.
+
+**Target close dates:** CP5 by 4/24, CP6 by 4/27, CP7 by 4/30. Buffer day 5/1.
+
+**Deferred to post-submission backlog (not abandoned, captured for later):**
+
+- CSV patron import (from #21). Manual patron entry is sufficient for demo.
+- SSE live availability updates (from #22). Page reload shows the same info.
+- Patron holds on checked-out books (from #22). Favorites are enough to demonstrate optional patron login.
+- [#17](https://github.com/timLP79/cs408-go-stack/issues/17) GitHub Actions deploy. Already labeled backlog.
+
+---
+
+### CP5 -- CRUD Features (Books, Patrons, Staff)
+**Goal:** Full CRUD for books (with Open Library API), patrons, and staff accounts. Test harness fix (#35) pulled into CP5 since handler tests for #39/#20/#21 depend on it.
+
+- [#35](https://github.com/timLP79/cs408-go-stack/issues/35) -- Fix: Test router does not mirror production middleware (moved from CP7; unblocks all new handler tests)
+- [#39](https://github.com/timLP79/cs408-go-stack/issues/39) -- Staff management: list, add, edit, delete (close out)
+  - `handlers_staff.go`: list, add, edit, delete staff accounts
+  - `handlers_staff_test.go`: one test per guard rule (self-delete, self-demote, last-admin delete/demote, role whitelist, admin-only access)
+  - Template, JS, sidebar link, db methods, validators, DECISIONS entries already complete
+  - Safety guards: cannot delete self, cannot demote self, cannot delete/demote last admin
 - [#20](https://github.com/timLP79/cs408-go-stack/issues/20) -- Book CRUD and Open Library API lookup
-  - `handlers_books.go`: `POST /books`, `PUT /books/:id`, `DELETE /books/:id`
+  - `handlers_books.go`: `POST /books`, `POST /books/:id/edit`, `POST /books/:id/delete`
   - `handlers_admin.go`: `GET /api/openlibrary?isbn=...` (server-side proxy)
-  - `db.go`: `CreateBook()`, `UpdateBook()`, `DeleteBook()`
-- [#21](https://github.com/timLP79/cs408-go-stack/issues/21) -- Patron management: CRUD, metadata, and CSV import
-  - `handlers_patrons.go`: list, add, edit, delete, CSV import
-  - `db.go`: `Patron` struct with `metadata TEXT` (JSON, nullable), all patron CRUD methods
-  - `templates/patrons.html`: patron list with modals, CSV upload
+  - `db.go`: `CreateBook()`, `UpdateBook()`, `DeleteBook()` -- transactional per DEC-022 (books + authors + book_authors)
+  - Cover image upload with MIME/size/extension validation and sanitized filename (security.md CP5 rules)
+- [#21](https://github.com/timLP79/cs408-go-stack/issues/21) -- Patron management: CRUD (CSV import deferred post-submission)
+  - `handlers_patrons.go`: list, add, edit, delete
+  - `db.go`: `Patron` struct with `metadata TEXT` (JSON, nullable), all patron CRUD methods -- `CreatePatron` is transactional (patrons + linked users row per DEC-022)
+  - `templates/patrons.html`: patron list with modals
   - Creating a patron also creates a linked `users` record (patron role)
   - Auto-generated username: first-initial + last-name with collision handling
-  - Default password: `changeme` (bcrypt-hashed)
-- [#39](https://github.com/timLP79/cs408-go-stack/issues/39) -- Staff management: list, add, edit, delete
-  - `handlers_staff.go`: list, add, edit, delete staff accounts
-  - `templates/staff.html`: staff list with modals
-  - Safety guards: cannot delete self, cannot delete last admin
+  - Default password: policy-compliant temporary (documented in DEC-021)
 
 **Open Library API:**
 ```
@@ -316,39 +334,34 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 
 ---
 
-### CP6 -- Loans + Kiosk + SSE
-**Goal:** Kiosk provides public catalog browse with optional patron login. Admin and staff handle all checkout and return transactions on the book detail page. SSE pushes live availability updates. Catalog gets server-side pagination.
+### CP6 -- Loans + Kiosk + Pagination
+**Goal:** Kiosk provides public catalog browse with optional patron login for favorites. Admin and staff handle all checkout and return transactions on the book detail page. Catalog gets server-side pagination. SSE and patron holds deferred post-submission.
 
-- [#22](https://github.com/timLP79/cs408-go-stack/issues/22) -- Loan system: kiosk browse, holds, and SSE availability
-  - `handlers_loans.go`: `GET /events` SSE endpoint
+- [#22](https://github.com/timLP79/cs408-go-stack/issues/22) -- Loan system: kiosk browse + favorites (SSE and holds deferred)
+  - `handlers_loans.go`: checkout/return on book detail page; transactional (`loans` + `books.quantity_available` per DEC-022)
   - `handlers_books.go`: `HandleKiosk` -- public catalog browse (no auth required)
-  - `db.go`: `GetActiveLoans()`, `GetLoanHistory()`
-  - `templates/kiosk.html`: public browse page; optional login for favorites and holds
-  - Checkout/return on book detail page: admin and staff select a patron and perform the transaction. Patrons cannot self-checkout.
-- [#37](https://github.com/timLP79/cs408-go-stack/issues/37) -- Server-side pagination and filtering for catalog (replaces CP3 client-side filtering)
-
-**SSE protocol:**
-- Endpoint: `GET /events`
-- Message format: `data: book_id=N available=0\n\n`
-- Catalog page JS listens and updates availability badges without page reload
+  - `db.go`: `GetActiveLoans()`, checkout/return methods; favorites table and methods
+  - `templates/kiosk.html`: public browse; optional login surfaces favorites
+  - Patrons cannot self-checkout; admin/staff select a patron and transact
+- [#37](https://github.com/timLP79/cs408-go-stack/issues/37) -- Server-side pagination and filtering for catalog (needed because the Open Library import in CP5 will scale the catalog past what client-side filtering can handle)
 
 ---
 
-### CP7 -- Admin Panel + Testing + Deploy
-**Goal:** ZIP export/import, test coverage, security hardening, final EC2 redeploy.
+### CP7 -- Admin Panel + Security Hardening + Deploy
+**Goal:** ZIP export/import, security headers, dependency audit, final EC2 redeploy.
 
 - [#23](https://github.com/timLP79/cs408-go-stack/issues/23) -- Admin panel: ZIP export and import
   - `handlers_admin.go`: `GET /admin/export`, `POST /admin/import`
   - `templates/admin.html`: export button, import file picker, system stats
   - Uses Go standard library `archive/zip` -- no extra dependencies
   - ZIP contains: SQLite database file + cover images from `static/images/covers/`
-- [#35](https://github.com/timLP79/cs408-go-stack/issues/35) -- Test router does not mirror production middleware (false-positive tests)
+  - Zip Slip protection on extract per security.md
 - [#24](https://github.com/timLP79/cs408-go-stack/issues/24) -- Testing, polish, and deploy
-  - Expand `db_test.go` to cover remaining DB methods (book catalog, loan history, session lifecycle). Staff + validator tests were added in CP5 (#39).
-  - `handlers_test.go`: integration tests for all HTTP handlers including auth flows (handler-level tests for #39 land alongside the staff handlers in CP5)
-  - `scripts/install.sh`, `scripts/configure.sh`: EC2 automation scripts
-  - Security headers middleware, trusted proxies config
-  - Run `go mod verify` and dependency audit
+  - `SecurityHeaders()` middleware (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy) per security.md
+  - `router.SetTrustedProxies([]string{"127.0.0.1"})` so Gin only trusts nginx for X-Forwarded-For
+  - `go mod verify` + `govulncheck ./...` on a clean checkout
+  - Expand `db_test.go` and `handlers_test.go` for any untested surface from earlier CPs
+  - Final EC2 redeploy with clean DB (gets the new seed passwords from CP5)
   - ~~[#36](https://github.com/timLP79/cs408-go-stack/issues/36) -- Empty `app.js` loaded on every page~~ (resolved in CP3)
 
 ---
