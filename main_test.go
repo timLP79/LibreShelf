@@ -52,7 +52,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
 		"index", "catalog", "book_detail",
-		"patrons", "admin", "kiosk", "error",
+		"patrons", "admin", "kiosk", "staff", "error",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -85,9 +85,14 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	staff.GET("/patrons", HandlePatrons)
 	staff.GET("/admin", HandleAdmin)
 
-	// Admin-only routes (no routes yet; group still present to mirror main.go)
+	// Admin-only routes
 	admin := router.Group("/")
 	admin.Use(RequireAuth, RequireAdmin, CSRFProtect)
+	admin.GET("/staff", HandleStaffList)
+	admin.POST("/staff", HandleStaffCreate)
+	admin.POST("/staff/:id/edit", HandleStaffEdit)
+	admin.POST("/staff/:id/delete", HandleStaffDelete)
+	admin.POST("/staff/:id/password", HandleStaffResetPassword)
 
 	router.NoRoute(HandleNotFound)
 
@@ -214,7 +219,7 @@ func TestStaffRoutesReturn200AsStaff(t *testing.T) {
 func TestProtectedRoutesRedirectWithoutAuth(t *testing.T) {
 	router, _ := setupTestRouter(t)
 
-	for _, route := range []string{"/", "/catalog", "/books/1", "/patrons", "/admin"} {
+	for _, route := range []string{"/", "/catalog", "/books/1", "/patrons", "/admin", "/staff"} {
 		req, _ := http.NewRequest("GET", route, nil)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
@@ -232,11 +237,13 @@ func TestProtectedRoutesRedirectWithoutAuth(t *testing.T) {
 // TestPatronCannotAccessStaffRoutes asserts the RequireStaff middleware
 // actually rejects a patron-role session with 403, not 200 or redirect.
 // Regression pin for the role chain, separate from the auth chain.
+// Covers both staff-group routes (/patrons, /admin) and admin-group
+// routes (/staff) -- patrons must be rejected by both.
 func TestPatronCannotAccessStaffRoutes(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, _ := loginAs(t, dm, "patron1", "patron")
 
-	for _, route := range []string{"/patrons", "/admin"} {
+	for _, route := range []string{"/patrons", "/admin", "/staff"} {
 		req, _ := http.NewRequest("GET", route, nil)
 		req.AddCookie(sess)
 		rr := httptest.NewRecorder()
@@ -244,6 +251,29 @@ func TestPatronCannotAccessStaffRoutes(t *testing.T) {
 
 		if rr.Code != http.StatusForbidden {
 			t.Errorf("%s: expected 403, got %d", route, rr.Code)
+		}
+	}
+}
+
+// TestStaffRoleCannotAccessAdminRoutes asserts that a staff-role session
+// is rejected by the admin-group middleware chain with 403. /staff is
+// admin-only even though /patrons and /admin (the routes) are reachable
+// by any staff-tier user. Regression pin for the RequireAdmin boundary:
+// if a future edit accidentally drops RequireAdmin from the admin group,
+// a staff session would start passing through to HandleStaffList and this
+// test would fire.
+func TestStaffRoleCannotAccessAdminRoutes(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "staff1", "staff")
+
+	for _, route := range []string{"/staff"} {
+		req, _ := http.NewRequest("GET", route, nil)
+		req.AddCookie(sess)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("%s: expected 403 for staff-role session on admin route, got %d", route, rr.Code)
 		}
 	}
 }
