@@ -51,6 +51,13 @@
                                 Edit
                             </button>
 
+                            <button type="button" class="btn btn-sm btn-outline-warning reset-btn"
+                                    data-bs-toggle="modal" data-bs-target="#resetPasswordModal"
+                                    data-user-id="{{.ID}}"
+                                    data-username="{{.Username}}">
+                                Reset Password
+                            </button>
+
                             {{if eq .ID $.CurrentUserID}}
                             <button type="button" class="btn btn-sm btn-outline-danger" disabled title="Cannot delete your own account">Delete</button>
                             {{else if and (eq .Role "admin") (eq $.AdminCount 1)}}
@@ -76,7 +83,7 @@
 <!-- Add Staff Modal -->
 <div class="modal fade" id="addStaffModal" tabindex="-1" aria-labelledby="addStaffModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <form method="POST" action="/staff" class="modal-content" autocomplete="off">
+        <form method="POST" action="/staff" id="addStaffForm" class="modal-content" autocomplete="off" novalidate>
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="modal-header">
                 <h5 class="modal-title" id="addStaffModalLabel">Add Staff Account</h5>
@@ -85,17 +92,21 @@
             <div class="modal-body">
                 <div class="mb-3">
                     <label for="add-username" class="form-label">Username</label>
-                    <input type="text" id="add-username" name="username" class="form-control" required maxlength="50" pattern="[A-Za-z0-9._-]+"
-                           title="Letters, numbers, dots, hyphens, and underscores only">
+                    <input type="text" id="add-username" name="username" class="form-control" required maxlength="32" minlength="3" pattern="[A-Za-z0-9_]+"
+                           title="Letters, numbers, and underscores only (3-32 characters)">
+                    <div class="invalid-feedback">Username must be 3-32 characters, letters, numbers, or underscores only.</div>
                 </div>
                 <div class="mb-3">
                     <label for="add-password" class="form-label">Password</label>
-                    <input type="password" id="add-password" name="password" class="form-control" required minlength="8">
-                    <div class="form-text">Minimum 8 characters.</div>
+                    <input type="password" id="add-password" name="password" class="form-control" required minlength="8"
+                           pattern="(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}">
+                    <div class="form-text">Minimum 8 characters, one uppercase letter, one digit, one special character.</div>
+                    <div class="invalid-feedback">Password must be 8+ characters with an uppercase letter, a digit, and a special character.</div>
                 </div>
                 <div class="mb-3">
                     <label for="add-password-confirm" class="form-label">Confirm Password</label>
                     <input type="password" id="add-password-confirm" name="password_confirm" class="form-control" required minlength="8">
+                    <div class="invalid-feedback">Passwords do not match.</div>
                 </div>
                 <div class="mb-3">
                     <label for="add-role" class="form-label">Role</label>
@@ -103,6 +114,7 @@
                         <option value="staff">Staff</option>
                         <option value="admin">Admin</option>
                     </select>
+                    <div class="invalid-feedback">Please select a role.</div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -116,7 +128,7 @@
 <!-- Edit Staff Modal -->
 <div class="modal fade" id="editStaffModal" tabindex="-1" aria-labelledby="editStaffModalLabel" aria-hidden="true">
     <div class="modal-dialog">
-        <form method="POST" id="editStaffForm" class="modal-content" autocomplete="off">
+        <form method="POST" id="editStaffForm" class="modal-content" autocomplete="off" novalidate>
             <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
             <div class="modal-header">
                 <h5 class="modal-title" id="editStaffModalLabel">Edit Account</h5>
@@ -125,8 +137,9 @@
             <div class="modal-body">
                 <div class="mb-3">
                     <label for="edit-username" class="form-label">Username</label>
-                    <input type="text" id="edit-username" name="username" class="form-control" required maxlength="50" pattern="[A-Za-z0-9._-]+"
-                           title="Letters, numbers, dots, hyphens, and underscores only">
+                    <input type="text" id="edit-username" name="username" class="form-control" required maxlength="32" minlength="3" pattern="[A-Za-z0-9_]+"
+                           title="Letters, numbers, and underscores only (3-32 characters)">
+                    <div class="invalid-feedback">Username must be 3-32 characters, letters, numbers, or underscores only.</div>
                 </div>
                 <div class="mb-3">
                     <label for="edit-role" class="form-label">Role</label>
@@ -135,11 +148,45 @@
                         <option value="admin">Admin</option>
                     </select>
                     <div id="edit-role-note" class="form-text"></div>
+                    <div class="invalid-feedback">Please select a role.</div>
                 </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="submit" class="btn" style="background-color: #1e3a5f; color: #ffffff;">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Reset Password Modal -->
+<div class="modal fade" id="resetPasswordModal" tabindex="-1" aria-labelledby="resetPasswordModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" id="resetPasswordForm" class="modal-content" autocomplete="off" novalidate>
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="modal-header">
+                <h5 class="modal-title" id="resetPasswordModalLabel">Reset Password</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Reset password for <strong id="reset-target-name"></strong>.</p>
+                <p class="text-muted">Active sessions for this user will be signed out. Share the new password with them through a trusted channel.</p>
+                <div class="mb-3">
+                    <label for="reset-password" class="form-label">New Password</label>
+                    <input type="password" id="reset-password" name="password" class="form-control" required minlength="8"
+                           pattern="(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}">
+                    <div class="form-text">Minimum 8 characters, one uppercase letter, one digit, one special character.</div>
+                    <div class="invalid-feedback">Password must be 8+ characters with an uppercase letter, a digit, and a special character.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="reset-password-confirm" class="form-label">Confirm New Password</label>
+                    <input type="password" id="reset-password-confirm" name="password_confirm" class="form-control" required minlength="8">
+                    <div class="invalid-feedback">Passwords do not match.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn" style="background-color: #1e3a5f; color: #ffffff;">Reset Password</button>
             </div>
         </form>
     </div>

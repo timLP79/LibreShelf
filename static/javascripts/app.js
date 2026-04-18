@@ -65,7 +65,8 @@ function initCatalogFilter() {
 function initStaffManagement() {
     var editModal = document.getElementById("editStaffModal");
     var deleteModal = document.getElementById("deleteStaffModal");
-    if (!editModal && !deleteModal) return;
+    var resetModal = document.getElementById("resetPasswordModal");
+    if (!editModal && !deleteModal && !resetModal) return;
 
     // Populate Edit modal from clicked row's data attributes
     if (editModal) {
@@ -139,6 +140,130 @@ function initStaffManagement() {
         deleteModal.addEventListener("hidden.bs.modal", function () {
             deleteInput.value = "";
             deleteBtn.disabled = true;
+        });
+    }
+
+    // Reset Password modal
+    if (resetModal) {
+        var resetForm = document.getElementById("resetPasswordForm");
+        var resetTargetName = document.getElementById("reset-target-name");
+        var resetPassword = document.getElementById("reset-password");
+        var resetPasswordConfirm = document.getElementById("reset-password-confirm");
+
+        document.querySelectorAll(".reset-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var id = btn.getAttribute("data-user-id");
+                var username = btn.getAttribute("data-username");
+
+                resetForm.action = "/staff/" + id + "/password";
+                resetTargetName.textContent = username;
+                resetPassword.value = "";
+                resetPasswordConfirm.value = "";
+            });
+        });
+
+        resetModal.addEventListener("hidden.bs.modal", function () {
+            resetPassword.value = "";
+            resetPasswordConfirm.value = "";
+        });
+    }
+
+    attachFormValidation(document.getElementById("addStaffForm"), {
+        password: "#add-password",
+        confirm: "#add-password-confirm",
+        modal: document.getElementById("addStaffModal"),
+    });
+    attachFormValidation(document.getElementById("editStaffForm"), {
+        modal: editModal,
+    });
+    attachFormValidation(document.getElementById("resetPasswordForm"), {
+        password: "#reset-password",
+        confirm: "#reset-password-confirm",
+        modal: resetModal,
+    });
+}
+
+// attachFormValidation wires Bootstrap 5 per-field live validation onto
+// a form. Each non-hidden input/select gets input+blur listeners that
+// toggle .is-invalid or .is-valid on the field based on its validity,
+// so the red/green feedback and .invalid-feedback message appear as the
+// user types. Empty fields stay neutral (no red until the user has
+// interacted or submitted) so the modal does not nag on open. On submit,
+// every field is forced through validation so untouched empty requireds
+// also light up red. Server-side validation remains the source of truth;
+// this is the client-side short-circuit so the user does not round-trip
+// for client-detectable mistakes.
+function attachFormValidation(form, options) {
+    if (!form) return;
+    options = options || {};
+    var passwordField = options.password ? form.querySelector(options.password) : null;
+    var confirmField = options.confirm ? form.querySelector(options.confirm) : null;
+
+    function checkMatch() {
+        if (!passwordField || !confirmField) return;
+        if (confirmField.value && passwordField.value !== confirmField.value) {
+            confirmField.setCustomValidity("mismatch");
+        } else {
+            confirmField.setCustomValidity("");
+        }
+    }
+
+    function markField(field, includeEmpty) {
+        if (!includeEmpty && field.value === "") {
+            field.classList.remove("is-invalid");
+            field.classList.remove("is-valid");
+            return;
+        }
+        if (field.checkValidity()) {
+            field.classList.add("is-valid");
+            field.classList.remove("is-invalid");
+        } else {
+            field.classList.add("is-invalid");
+            field.classList.remove("is-valid");
+        }
+    }
+
+    var fields = [];
+    form.querySelectorAll("input, select, textarea").forEach(function (f) {
+        if (f.type !== "hidden") fields.push(f);
+    });
+
+    fields.forEach(function (field) {
+        field.addEventListener("input", function () {
+            if (field === passwordField || field === confirmField) {
+                checkMatch();
+            }
+            markField(field, false);
+            if (field === passwordField && confirmField && confirmField.value) {
+                markField(confirmField, false);
+            }
+        });
+        field.addEventListener("blur", function () {
+            if (field === passwordField || field === confirmField) {
+                checkMatch();
+            }
+            markField(field, false);
+        });
+    });
+
+    form.addEventListener("submit", function (e) {
+        checkMatch();
+        fields.forEach(function (field) {
+            markField(field, true);
+        });
+        if (!form.checkValidity()) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    });
+
+    if (options.modal) {
+        options.modal.addEventListener("hidden.bs.modal", function () {
+            if (confirmField) confirmField.setCustomValidity("");
+            fields.forEach(function (field) {
+                field.classList.remove("is-invalid");
+                field.classList.remove("is-valid");
+            });
         });
     }
 }
