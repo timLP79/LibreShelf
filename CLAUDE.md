@@ -100,11 +100,12 @@ Deploy guide: `docs/week6/deployment.md` (build, scp, systemctl).
 **CP2 -- Authentication:** Complete. Login/logout, sessions, bcrypt, role-based access control.
 **CP3 -- Book Catalog & Detail Pages:** Complete. Catalog with search/filter, book detail with metadata and loan history, bug fixes #28/#29/#30, responsive sidebar.
 **CP4 -- Security Hardening + Three-Role Model:** Complete. Three-role model, ExecuteTemplate buffer-based rendering, constant-time login, session-bound CSRF protection with pre-session double-submit cookie for login, SameSite=Strict on session cookie, canonical UTC datetime format for session expiry. 15 tests passing.
+**CP5 -- Staff Management (#39):** Complete. `handlers_staff.go` covers list/create/edit/delete/reset-password with IDOR, self-demote/delete, and last-admin guards. Flash-cookie-based PRG messaging via `flash.go` (HttpOnly + SameSite=Strict, error-code slugs mapped to banner text server-side). Bootstrap inline live validation across all three modals (per-field `is-invalid`/`is-valid` as the user types, `novalidate` on forms). `UpdateUserPassword` DB method atomically wipes target sessions (DEC-022). 55 tests passing on `cp5-crud` -- 20 new handler tests plus admin-group route boundary coverage.
 
 Files that exist:
-- `main.go`, `db.go`, `handlers.go`, `handlers_auth.go`, `handlers_books.go`, `validators.go`, `main_test.go`
+- `main.go`, `db.go`, `handlers.go`, `handlers_auth.go`, `handlers_books.go`, `handlers_staff.go`, `flash.go`, `validators.go`, `main_test.go`
 - All HTML templates including `staff.html` (on branch `cp5-crud`), layout with responsive offcanvas sidebar and admin-only Staff link
-- `static/javascripts/app.js` (client-side catalog filtering, plus staff management modal logic on `cp5-crud`)
+- `static/javascripts/app.js` (client-side catalog filtering, staff management modal logic, Bootstrap live validation)
 - `static/stylesheets/style.css` (custom styles including availability badges, responsive sidebar)
 - `static/images/favicon.svg` (custom bookshelf icon)
 
@@ -130,6 +131,7 @@ Files that exist:
 - **Seed passwords are fresh-install-only.** `SeedDefaultUsers` skips users that already exist. Bumping a seed value does NOT update existing rows; `rm data/database.sqlite*` to re-seed locally.
 - **Test router uses the production middleware chain** (fixed in #35). `setupTestRouter` returns `(router, dm)` and mirrors `main.go` route groups exactly. Use `loginAs(t, dm, username, role)` to get a session cookie + CSRF token, then `req.AddCookie(sess)` and set `csrf_token` on POSTs. `logoutHelper` exists for the logout path.
 - **Schema changes don't migrate.** `createSchema` uses `CREATE TABLE IF NOT EXISTS`. Altering a column requires either `ALTER TABLE` or nuking `data/database.sqlite` locally.
+- **Go has no hot-reload.** Template edits take effect only after a process restart (templates are parsed once at startup via `template.Must` in `main.go`). Go source edits take effect only after re-running `go run .`. Symptom of forgetting: the browser sees the old behavior with no errors. If something "didn't do anything," restart the server first.
 
 ---
 
@@ -156,17 +158,10 @@ See `Current State` above for the per-CP summary. Closed issues and scope live i
 
 ### CP5 -- CRUD Features (Staff, Books, Patrons) -- in progress on `cp5-crud`
 
-Order: close #39, then #20, then #21.
+Order: #39 closed, next is #20, then #21.
 
 - [x] #35 -- Fix: Test router does not mirror production middleware (closed in b9ce9ed). `setupTestRouter` mirrors main.go route groups. Added `loginAs` and `logoutHelper` test helpers. Three new regression-pin tests cover the middleware chain.
-- [ ] #39 -- Staff management: close out
-    - Design locked (see DEC-019, DEC-020). Template, JS, sidebar link, favicon done.
-    - `db.go` methods done: `GetAllStaff`, `GetUserByID`, `UpdateStaffUser`, `DeleteUser` (transactional), `CountAdmins`. `CreateUser` is reusable as-is.
-    - `validators.go` done: `ValidateUsername`, `ValidatePassword` (see DEC-021).
-    - `SeedBooks` retrofitted into `seedOneBook` per-book transaction (see DEC-022).
-    - `SeedDefaultUsers` bumped to `Admin123!` / `Staff123!` / `Patron123!` and validates `ADMIN_PASSWORD` at startup.
-    - Tests done: `validators_test.go`, `db_test.go`. Full suite 35 passing on `cp5-crud`.
-    - Remaining (tutor mode): `handlers_staff.go` (new file), route registration in `main.go`, `handlers_staff_test.go` for the guard rules. Close #35 first so the handler tests exercise the real auth + CSRF middleware chain.
+- [x] #39 -- Staff management: closed. `handlers_staff.go` holds list/create/edit/delete/reset-password handlers. Admin-only route group registered in `main.go`. Flash-cookie messaging (`flash.go`) replaces URL query-param error surface; codes map to banner text server-side so operator text never transits the cookie jar. `UpdateUserPassword` is transactional and wipes target sessions on every reset. Bootstrap live validation across Add/Edit/Reset modals. 20 new handler tests plus three admin-group boundary tests in `main_test.go`. Full suite 55 passing on `cp5-crud`.
 - [ ] #20 -- Book CRUD + Open Library API
     - Handlers, DB methods (transactional: books + authors + book_authors per DEC-022), cover upload with MIME/size/extension validation, Open Library proxy endpoint, tests.
 - [ ] #21 -- Patron CRUD (**CSV import deferred post-submission**)
@@ -188,4 +183,6 @@ Order: close #39, then #20, then #21.
 - CSV patron import (from #21)
 - SSE live availability updates (from #22)
 - Patron holds on checked-out books (from #22)
+- Staff table responsive polish (from #39): "Reset Password" label wraps mid-word on narrow viewports; raw ISO-8601 timestamps (`2026-04-18T04:54:01Z`) break awkwardly; Actions column buttons get cramped below `md`. Options: friendly date format (server-side or via template helper), icon-only action buttons with tooltips, or stacked-card layout below `md`. Same treatment will be needed for patron and book tables once CP5/CP6 land, so solve it once and reuse.
+- Password-reset Variant 2 (from #39): server-generated temporary password + force-change-on-next-login flow. Requires a `must_change_password` column on `users`, login-middleware branch that redirects flagged users to a `/change-password` page, a self-service password-change handler + template, and a one-shot display of the generated temp password. Variant 1 (admin-chosen password, current implementation) is acceptable for a small trusted staff; Variant 2 is the stronger posture where the admin never learns the user's long-term password.
 - [ ] #17 -- Automate deployment via GitHub Actions (already low-priority backlog)
