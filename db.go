@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"log"
 	"os"
 	"path/filepath"
@@ -116,10 +117,11 @@ func (dm *DatabaseManager) GetBookByID(id int) (*Book, error) {
 		return nil, err
 	}
 
-	rows, err := dm.db.Query(`                                                                                                                                                            
-                SELECT a.name FROM authors a         
-                JOIN book_authors ba ON a.id = ba.author_id                                                                                                                                   
-                WHERE ba.book_id = ?`, id)
+	rows, err := dm.db.Query(`
+                SELECT a.name FROM authors a
+                JOIN book_authors ba ON a.id = ba.author_id
+                WHERE ba.book_id = ?
+                ORDER BY ba.position`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -140,6 +142,17 @@ func (dm *DatabaseManager) GetBookByID(id int) (*Book, error) {
 
 	return book, nil
 
+}
+
+func (dm *DatabaseManager) GetBookByISBN(isbn string) (*Book, error) {
+	book := &Book{}
+	err := dm.db.QueryRow(
+		"SELECT id, title FROM books WHERE isbn = ?", isbn,
+	).Scan(&book.ID, &book.Title)
+	if err != nil {
+		return nil, err
+	}
+	return book, nil
 }
 
 func (dm *DatabaseManager) GetLoanHistory(bookID int) ([]LoanRecord, error) {
@@ -217,12 +230,13 @@ func (dm *DatabaseManager) createSchema() {
 
 	CREATE TABLE IF NOT EXISTS authors (
 		id   INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL UNIQUE
+		name TEXT NOT NULL UNIQUE COLLATE NOCASE
 	);
 
 	CREATE TABLE IF NOT EXISTS book_authors (
-		book_id   INTEGER REFERENCES books(id),
-		author_id INTEGER REFERENCES authors(id),
+		book_id   INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+		author_id INTEGER NOT NULL REFERENCES authors(id) ON DELETE CASCADE,
+		position  INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (book_id, author_id)
 	);
 
@@ -579,6 +593,135 @@ func (dm *DatabaseManager) seedOneBook(b seedBook) error {
 		); err != nil {
 			return err
 		}
+	}
+
+	return tx.Commit()
+}
+
+func findOrCreateAuthor(tx *sql.Tx, name string) (int, error) {
+	var id int
+	err := tx.QueryRow("SELECT id FROM authors WHERE name = ?", name).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if err != sql.ErrNoRows {
+		return 0, err
+	}
+	result, err := tx.Exec("INSERT INTO authors (name) VALUES (?)", name)
+	if err != nil {
+		return 0, err
+	}
+	id64, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return int(id64), nil
+}
+
+func (dm *DatabaseManager) CreateBook(book *Book, authors []string) (int, error) {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	result, err := tx.Exec(`
+			INSERT INTO books (title, isbn, cover_filename, year, publisher, description, genre, quantity_total, quantity_available)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		book.Title, book.ISBN, book.CoverFilename, book.Year,
+		book.Publisher, book.Description, book.Genre,
+		book.QuantityTotal, book.QuantityAvailable)
+	if err != nil {
+		return 0, err
+	}
+
+	bookID64, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	bookID := int(bookID64)
+
+	for i, name := range authors {
+		authorID, err := findOrCreateAuthor(tx, name)
+		if err != nil {
+			return 0, err
+		}
+		if _, err := tx.Exec(
+			"INSERT INTO book_authors (book_id, author_id, position) VALUES (?, ?, ?)",
+			bookID, authorID, i+1,
+		); err != nil {
+			return 0, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return bookID, nil
+}
+
+func (dm *DatabaseManager) UpdateBook(id int, book *Book, authors []string) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`
+		UPDATE books
+		SET title = ?, isbn = ?, cover_filename = ?, year = ?, publisher = ?,
+		    description = ?, genre = ?, quantity_total = ?, quantity_available = ?
+		WHERE id = ?`,
+		book.Title, book.ISBN, book.CoverFilename, book.Year,
+		book.Publisher, book.Description, book.Genre,
+		book.QuantityTotal, book.QuantityAvailable, id); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec("DELETE FROM book_authors WHERE book_id = ?", id); err != nil {
+		return err
+	}
+
+	for i, name := range authors {
+		authorID, err := findOrCreateAuthor(tx, name)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(
+			"INSERT INTO book_authors (book_id, author_id, position) VALUES (?, ?, ?)",
+			id, authorID, i+1,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (dm *DatabaseManager) UpdateBookCover(id int, filename string) error {
+	_, err := dm.db.Exec("UPDATE books SET cover_filename = ? WHERE id = ?", filename, id)
+	return err
+}
+
+var ErrBookHasLoans = errors.New("db: book has loan history, cannot delete")
+
+func (dm *DatabaseManager) DeleteBook(id int) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var loanCount int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM loans WHERE book_id = ?", id).Scan(&loanCount); err != nil {
+		return err
+	}
+	if loanCount > 0 {
+		return ErrBookHasLoans
+	}
+
+	if _, err := tx.Exec("DELETE FROM books WHERE id = ?", id); err != nil {
+		return err
 	}
 
 	return tx.Commit()
