@@ -49,7 +49,7 @@ func main() {
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
 		"index", "catalog", "book_detail",
-		"patrons", "admin", "kiosk",
+		"patrons", "admin", "kiosk", "staff",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -100,6 +100,11 @@ func main() {
 	// Admin-only routes
 	admin := router.Group("/")
 	admin.Use(RequireAuth, RequireAdmin, CSRFProtect)
+	admin.GET("/staff", HandleStaffList)
+	admin.POST("/staff", HandleStaffCreate)
+	admin.POST("/staff/:id/edit", HandleStaffEdit)
+	admin.POST("/staff/:id/delete", HandleStaffDelete)
+	admin.POST("/staff/:id/password", HandleStaffResetPassword)
 
 	router.NoRoute(HandleNotFound)
 
