@@ -89,10 +89,11 @@ Do not use Write/Edit tools to create or modify Go files. Tim writes all Go code
 **CP4 -- Security Hardening + Three-Role Model:** Complete. Three-role model, ExecuteTemplate buffer-based rendering, constant-time login, session-bound CSRF protection with pre-session double-submit cookie for login, SameSite=Strict on session cookie, canonical UTC datetime format for session expiry. 15 tests passing.
 
 Files that exist:
-- `main.go`, `db.go`, `handlers.go`, `handlers_auth.go`, `handlers_books.go`, `main_test.go`
-- All 9 HTML templates, layout with responsive offcanvas sidebar
-- `static/javascripts/app.js` (client-side catalog filtering)
+- `main.go`, `db.go`, `handlers.go`, `handlers_auth.go`, `handlers_books.go`, `validators.go`, `main_test.go`
+- All HTML templates including `staff.html` (on branch `cp5-crud`), layout with responsive offcanvas sidebar and admin-only Staff link
+- `static/javascripts/app.js` (client-side catalog filtering, plus staff management modal logic on `cp5-crud`)
 - `static/stylesheets/style.css` (custom styles including availability badges, responsive sidebar)
+- `static/images/favicon.svg` (custom bookshelf icon)
 
 ---
 
@@ -143,7 +144,11 @@ Order: Staff (#39) first, then Books (#20), then Patrons (#21). All on branch `c
 
 - [ ] #39 -- Staff management: list, add, edit, delete
     - Design locked (see DEC-019, DEC-020). Template + JS + DECISIONS.md done.
-    - Remaining (tutor mode): `db.go` methods (`GetAllStaff`, `GetUserByID`, `CreateStaffUser`, `UpdateStaffUser`, `DeleteUser`, `CountAdmins`), `handlers_staff.go` (new file), route registration in `main.go`, and tests.
+    - `db.go` methods done: `GetAllStaff`, `GetUserByID`, `UpdateStaffUser`, `DeleteUser` (transactional), `CountAdmins`. `CreateUser` is reusable as-is.
+    - `validators.go` done: `ValidateUsername`, `ValidatePassword` (see DEC-021).
+    - `SeedBooks` retrofitted into `seedOneBook` per-book transaction (see DEC-022).
+    - `SeedDefaultUsers` bumped to `Admin123!` / `Staff123!` / `Patron123!` and validates `ADMIN_PASSWORD` at startup.
+    - Remaining (tutor mode): `handlers_staff.go` (new file), route registration in `main.go`, and tests.
 - [ ] #20 -- Book CRUD and Open Library API lookup
 - [ ] #21 -- Patron management: CRUD, metadata, and CSV import
 

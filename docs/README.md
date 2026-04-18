@@ -278,7 +278,7 @@ air
 | `PORT` | `3000` | HTTP server port |
 | `DATA_DIR` | `data` | Directory for SQLite database |
 | `DB_NAME` | `database.sqlite` | Database filename |
-| `ADMIN_PASSWORD` | `admin123` | Override default admin password |
+| `ADMIN_PASSWORD` | `Admin123!` | Override default admin password. Must pass `ValidatePassword` (8+ chars, uppercase, digit, special) or startup fails (DEC-021). |
 | `APP_ENV` | (none) | Set to `production` to enable Secure cookie flag |
 
 ---

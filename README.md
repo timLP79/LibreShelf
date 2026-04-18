@@ -34,9 +34,11 @@ These accounts are created automatically on first run:
 
 | Username | Password | Role |
 |----------|----------|------|
-| `admin` | `admin123` | Admin -- full access to all pages |
-| `staff1` | `staff123` | Staff -- day-to-day operations, no staff/system management |
-| `patron1` | `patron123` | Patron -- catalog and book detail only |
+| `admin` | `Admin123!` | Admin -- full access to all pages |
+| `staff1` | `Staff123!` | Staff -- day-to-day operations, no staff/system management |
+| `patron1` | `Patron123!` | Patron -- catalog and book detail only |
+
+Passwords must be 8+ characters with at least one uppercase letter, one digit, and one special character. See [DEC-021](./DECISIONS.md) for the policy.
 
 ## Pages
 

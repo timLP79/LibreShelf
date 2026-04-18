@@ -117,9 +117,9 @@ Created automatically on first startup if they don't exist:
 
 | Username | Password | Role | Notes |
 |----------|----------|------|-------|
-| `admin` | `admin123` | admin | Overridable via `ADMIN_PASSWORD` env var |
-| `staff1` | `staff123` | staff | Added in CP4 with the three-role model |
-| `patron1` | `patron123` | patron | Not linked to a patron record yet (CP5) |
+| `admin` | `Admin123!` | admin | Overridable via `ADMIN_PASSWORD` env var; must pass `ValidatePassword` (DEC-021) |
+| `staff1` | `Staff123!` | staff | Added in CP4 with the three-role model |
+| `patron1` | `Patron123!` | patron | Not linked to a patron record yet (CP5) |
 
 ---
 
@@ -209,8 +209,8 @@ go-full-stack/
 | `RequireAuth` (kiosk) | `POST /kiosk/holds` |
 
 **Seed accounts (created on first run):**
-- `admin` / `admin123` (role: admin) -- password overridable via `ADMIN_PASSWORD` env var
-- `patron1` / `patron123` (role: patron) -- linked to a seed patron record
+- `admin` / `Admin123!` (role: admin) -- password overridable via `ADMIN_PASSWORD` env var (validated on startup; see DEC-021)
+- `patron1` / `Patron123!` (role: patron) -- linked to a seed patron record
 
 **Verification:**
 - `GET /` redirects to `/login` when not logged in
@@ -254,7 +254,7 @@ go-full-stack/
   - `RequireAdmin` refactored to chain after `RequireAuth`
   - Route groups restructured: public, auth, staff, admin
   - Sidebar nav adapts for three roles
-  - Seed staff account: `staff1` / `staff123`
+  - Seed staff account: `staff1` / `Staff123!`
 - ✅ [#31](https://github.com/timLP79/cs408-go-stack/issues/31) -- `ExecuteTemplate` errors never checked in render helpers
   - `renderTemplate` and `renderPage` now buffer template output before writing to the response
   - Failed template execution returns a clean 500 instead of a half-written page

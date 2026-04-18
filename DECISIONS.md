@@ -302,3 +302,62 @@ admin` is a consequence of the CP4 three-role model: the patron role has a `patr
 foreign key relationship and a different lifecycle, so co-mingling it with staff edits
 would invite bugs. Server-side checks are authoritative; the UI restrictions are UX
 polish only.
+
+---
+
+## DEC-021: Password complexity policy, enforced everywhere passwords are set
+
+**Date:** 2026-04-17 (CP5)
+**Context:** Until now the seed accounts used short, lowercase passwords (`admin123`,
+`staff123`, `patron123`) and there was no policy on operator-chosen passwords for the
+`ADMIN_PASSWORD` env override or future staff/patron create handlers. Staff management
+(#39) needs to validate passwords at every entry point, not just at the handler layer,
+or a seeded/override account can sidestep the rule.
+**Decision:** Enforce a single `ValidatePassword` function in `validators.go` that
+requires 8+ characters with at least one uppercase letter, one digit, and one special
+character (anything `unicode.IsPunct` or `unicode.IsSymbol`). Seed passwords bumped to
+`Admin123!`, `Staff123!`, `Patron123!`. `SeedDefaultUsers` calls `ValidatePassword` on
+the resolved `ADMIN_PASSWORD` before hashing and `log.Fatalf`s on failure so an
+invalid env override fails fast at startup. Every future password-setting path
+(staff create, staff password reset, patron create, admin password change) must pass
+through the same validator.
+**Rationale:** Centralizing the rule in one function prevents drift. Fatal-on-invalid
+for the env override is the right failure mode: silent-accept would let weak passwords
+through, and warn-and-fallback would silently swap the admin password without notice.
+Username format uses a separate `ValidateUsername` helper with lighter rules (3-32
+chars, alphanumeric + underscore) because username complexity serves a different
+purpose (collision avoidance, URL/log sanity) from password complexity.
+
+---
+
+## DEC-022: Multi-statement DB writes must run inside a transaction
+
+**Date:** 2026-04-17 (CP5)
+**Context:** CP5 introduces several operations that touch more than one table in a
+single logical write: staff `DeleteUser` removes sessions + user rows, patron create
+(#21) will insert into `patrons` + `users`, book create (#20) will insert into
+`books` + `authors` + `book_authors`, CP6 checkout will touch `loans` +
+`books.quantity_available`. The existing `SeedBooks` code did the book + author +
+book_author inserts as independent `Exec` calls with no atomicity. A failure partway
+through would leave a book with no authors, or partially-linked authors.
+**Decision:** Any multi-statement DB write is wrapped in a `sql.Tx` using the
+standard idiom:
+```go
+tx, err := dm.db.Begin()
+if err != nil { return err }
+defer tx.Rollback() // no-op after successful Commit
+// ... tx.Exec / tx.QueryRow for every write ...
+return tx.Commit()
+```
+`SeedBooks` was retrofitted into a loop that calls `seedOneBook(b seedBook) error`,
+with the transaction scoped per book (so a failure on one book still seeds the
+rest). `DeleteUser` already followed the pattern. Future multi-table writes in CP5
+and CP6 (`CreatePatron` with its linked user, `CreateBook` with authors, checkout
+and return, ZIP import) will use the same idiom.
+**Rationale:** The `defer tx.Rollback()` + explicit `tx.Commit()` pattern is the
+shortest correct way to handle transactions in Go: any early return rolls back
+automatically, and a successful commit makes the deferred rollback a no-op. Partial
+writes are the most common source of latent data-integrity bugs, and the cost of
+wrapping in a transaction is a single extra function call per write. Adopting this
+as a project standard now means every new handler in CP5-CP7 inherits the guarantee
+by default.
