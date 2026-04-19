@@ -38,7 +38,7 @@ func main() {
 	// their covers. 60s total budget so a slow OL (or network block)
 	// cannot wedge the server at boot -- the inner HTTP client also
 	// has its own 10s per-request timeout.
-	seedCoverCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	seedCoverCtx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	dm.FetchAndStoreSeedCovers(seedCoverCtx)
 	cancel()
 
