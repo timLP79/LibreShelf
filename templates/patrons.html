@@ -1,4 +1,179 @@
 {{define "content"}}
-<h1>Patrons</h1>
-<p>Patron list coming soon</p>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="mb-1">Patrons</h1>
+        <p class="text-muted mb-0">Manage patron accounts and contact information</p>
+    </div>
+    <button type="button" class="btn" style="background-color: #1e3a5f; color: #ffffff;"
+            data-bs-toggle="modal" data-bs-target="#addPatronModal">
+        + Add Patron
+    </button>
+</div>
+
+{{if .Error}}<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    {{.Error}}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>{{end}}
+
+{{if .Success}}<div class="alert alert-success alert-dismissible fade show" role="alert">
+    {{.Success}}{{with .SuccessDetail}} <strong>{{.}}</strong>{{end}}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>{{end}}
+
+<div class="card">
+    <div class="card-body">
+        {{if .Patrons}}
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Username</th>
+                        <th>Joined</th>
+                        <th class="text-end">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Patrons}}
+                    <tr>
+                        <td>{{.Name}}</td>
+                        <td>{{if .Email}}{{deref .Email}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                        <td>{{if .Phone}}{{deref .Phone}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
+                        <td><code>{{.Username}}</code></td>
+                        <td class="text-muted">{{.JoinedDate}}</td>
+                        <td class="text-end">
+                            <button type="button" class="btn btn-sm btn-outline-secondary patron-edit-btn"
+                                    data-bs-toggle="modal" data-bs-target="#editPatronModal"
+                                    data-patron-id="{{.ID}}"
+                                    data-patron-name="{{.Name}}"
+                                    data-patron-email="{{if .Email}}{{deref .Email}}{{end}}"
+                                    data-patron-phone="{{if .Phone}}{{deref .Phone}}{{end}}">
+                                Edit
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger patron-delete-btn"
+                                    data-bs-toggle="modal" data-bs-target="#deletePatronModal"
+                                    data-patron-id="{{.ID}}"
+                                    data-patron-name="{{.Name}}">
+                                Delete
+                            </button>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{else}}
+        <p class="text-muted mb-0">No patrons yet. Click "+ Add Patron" to create the first one.</p>
+        {{end}}
+    </div>
+</div>
+
+<!-- Add Patron Modal -->
+<div class="modal fade" id="addPatronModal" tabindex="-1" aria-labelledby="addPatronModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" action="/patrons" id="addPatronForm" class="modal-content" autocomplete="off" novalidate>
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addPatronModalLabel">Add Patron</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="add-patron-name" class="form-label">Name</label>
+                    <input type="text" id="add-patron-name" name="name" class="form-control" required maxlength="255">
+                    <div class="form-text">A username will be generated automatically from the name.</div>
+                    <div class="invalid-feedback">Name is required.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="add-patron-email" class="form-label">Email <span class="text-muted">(optional)</span></label>
+                    <input type="email" id="add-patron-email" name="email" class="form-control" maxlength="255">
+                    <div class="invalid-feedback">Enter a valid email address or leave blank.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="add-patron-phone" class="form-label">Phone <span class="text-muted">(optional)</span></label>
+                    <input type="tel" id="add-patron-phone" name="phone" class="form-control" maxlength="40">
+                </div>
+                <div class="mb-3">
+                    <label for="add-patron-password" class="form-label">Initial Password</label>
+                    <input type="password" id="add-patron-password" name="password" class="form-control" required minlength="8"
+                           pattern="(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}">
+                    <div class="form-text">Minimum 8 characters, one uppercase letter, one digit, one special character. Share with the patron through a trusted channel.</div>
+                    <div class="invalid-feedback">Password must be 8+ characters with an uppercase letter, a digit, and a special character.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="add-patron-password-confirm" class="form-label">Confirm Password</label>
+                    <input type="password" id="add-patron-password-confirm" name="password_confirm" class="form-control" required minlength="8">
+                    <div class="invalid-feedback">Passwords do not match.</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn" style="background-color: #1e3a5f; color: #ffffff;">Create Patron</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Patron Modal -->
+<div class="modal fade" id="editPatronModal" tabindex="-1" aria-labelledby="editPatronModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" id="editPatronForm" class="modal-content" autocomplete="off" novalidate>
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editPatronModalLabel">Edit Patron</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="edit-patron-name" class="form-label">Name</label>
+                    <input type="text" id="edit-patron-name" name="name" class="form-control" required maxlength="255">
+                    <div class="form-text">The auto-generated username is not changed by edits.</div>
+                    <div class="invalid-feedback">Name is required.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="edit-patron-email" class="form-label">Email <span class="text-muted">(optional)</span></label>
+                    <input type="email" id="edit-patron-email" name="email" class="form-control" maxlength="255">
+                    <div class="invalid-feedback">Enter a valid email address or leave blank.</div>
+                </div>
+                <div class="mb-3">
+                    <label for="edit-patron-phone" class="form-label">Phone <span class="text-muted">(optional)</span></label>
+                    <input type="tel" id="edit-patron-phone" name="phone" class="form-control" maxlength="40">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn" style="background-color: #1e3a5f; color: #ffffff;">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Delete Patron Modal (type-to-confirm) -->
+<div class="modal fade" id="deletePatronModal" tabindex="-1" aria-labelledby="deletePatronModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" id="deletePatronForm" class="modal-content" autocomplete="off">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="modal-header">
+                <h5 class="modal-title" id="deletePatronModalLabel">Delete Patron</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>You are about to permanently delete <strong id="delete-patron-target-name"></strong>.</p>
+                <p class="text-muted">This cannot be undone. The patron's login will be removed along with their record. Patrons with loan history cannot be deleted.</p>
+                <div class="mb-3">
+                    <label for="delete-patron-confirm-input" class="form-label">Type the patron's name to confirm:</label>
+                    <input type="text" id="delete-patron-confirm-input" class="form-control" autocomplete="off">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" id="delete-patron-confirm-btn" class="btn btn-danger" disabled>Delete Patron</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script src="/javascripts/app.js"></script>
 {{end}}

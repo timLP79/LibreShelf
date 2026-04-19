@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", function () {
     initCatalogFilter();
     initStaffManagement();
+    initPatronManagement();
     initBookDetail();
     initBookForm();
 });
@@ -182,6 +183,77 @@ function initStaffManagement() {
         password: "#reset-password",
         confirm: "#reset-password-confirm",
         modal: resetModal,
+    });
+}
+
+function initPatronManagement() {
+    var editModal = document.getElementById("editPatronModal");
+    var deleteModal = document.getElementById("deletePatronModal");
+    var addModal = document.getElementById("addPatronModal");
+    if (!editModal && !deleteModal && !addModal) return;
+
+    // Populate Edit modal from the clicked row's data attributes.
+    // Mirrors initStaffManagement but without the role/is-self logic
+    // (patron edit only covers name/email/phone; username is not
+    // editable per the #21 design).
+    if (editModal) {
+        var editForm = document.getElementById("editPatronForm");
+        var editName = document.getElementById("edit-patron-name");
+        var editEmail = document.getElementById("edit-patron-email");
+        var editPhone = document.getElementById("edit-patron-phone");
+
+        document.querySelectorAll(".patron-edit-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var id = btn.getAttribute("data-patron-id");
+                editForm.action = "/patrons/" + id + "/edit";
+                editName.value = btn.getAttribute("data-patron-name") || "";
+                editEmail.value = btn.getAttribute("data-patron-email") || "";
+                editPhone.value = btn.getAttribute("data-patron-phone") || "";
+            });
+        });
+    }
+
+    // Type-to-confirm delete. Same pattern as initStaffManagement;
+    // patron name is the token the admin must type to enable submit.
+    if (deleteModal) {
+        var deleteForm = document.getElementById("deletePatronForm");
+        var deleteTarget = document.getElementById("delete-patron-target-name");
+        var deleteInput = document.getElementById("delete-patron-confirm-input");
+        var deleteBtn = document.getElementById("delete-patron-confirm-btn");
+        var expectedName = "";
+
+        document.querySelectorAll(".patron-delete-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var id = btn.getAttribute("data-patron-id");
+                expectedName = btn.getAttribute("data-patron-name");
+                deleteForm.action = "/patrons/" + id + "/delete";
+                deleteTarget.textContent = expectedName;
+                deleteInput.value = "";
+                deleteBtn.disabled = true;
+            });
+        });
+
+        deleteInput.addEventListener("input", function () {
+            deleteBtn.disabled = deleteInput.value !== expectedName;
+        });
+
+        deleteModal.addEventListener("hidden.bs.modal", function () {
+            deleteInput.value = "";
+            deleteBtn.disabled = true;
+        });
+    }
+
+    // Bootstrap live validation on all three patron forms. Add form
+    // has password + confirm pair (same as staff Add), Edit form has
+    // no password fields, Delete form has none either (type-to-
+    // confirm is handled separately above).
+    attachFormValidation(document.getElementById("addPatronForm"), {
+        password: "#add-patron-password",
+        confirm: "#add-patron-password-confirm",
+        modal: addModal,
+    });
+    attachFormValidation(document.getElementById("editPatronForm"), {
+        modal: editModal,
     });
 }
 
