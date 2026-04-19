@@ -98,3 +98,9 @@
   background-color: #dc3545;
   color: #ffffff;
 }
+
+.book-cover-placeholder img {
+  width: 100%;
+  height: 280px;
+  object-fit: cover;
+}
