@@ -38,9 +38,9 @@ are handled exclusively by staff on the book detail page.
 | `GET /` | Dashboard | Any logged-in user |
 | `GET /catalog` | Catalog | Any logged-in user |
 | `GET /books/:id` | Book Detail | Any logged-in user |
-| `GET /kiosk` | Kiosk | **Public** (login optional) |
-| `POST /kiosk/favorites` | Save favorite | Login optional (silently no-op if not logged in) |
-| `POST /kiosk/holds` | Request hold | Requires login |
+| `GET /kiosk` | Kiosk (stub today; CP6 adds real browse) | **Public** (login optional) |
+| `POST /kiosk/favorites` | Save favorite *(planned, CP6)* | Login optional (silently no-op if not logged in) |
+| `POST /kiosk/holds` | Request hold *(deferred post-submission)* | Requires login |
 | `GET /patrons` | Patrons | Admin + staff |
 | `POST /patrons` | Create patron | Admin + staff |
 | `POST /patrons/:id/edit` | Edit patron | Admin + staff |
@@ -57,7 +57,7 @@ are handled exclusively by staff on the book detail page.
 | `POST /books/:id/delete` | Delete book | Admin only |
 | `GET /api/openlibrary/isbn/:isbn` | OL lookup proxy (JSON) | Admin + staff |
 | `GET /admin` | Admin panel | Admin only |
-| `GET /events` | SSE stream | Any logged-in user |
+| `GET /events` | SSE stream *(deferred post-submission)* | Any logged-in user |
 
 ---
 
@@ -71,20 +71,21 @@ CREATE TABLE books (
     publisher          TEXT,
     year               INTEGER,
     description        TEXT,
-    cover_filename     TEXT,                     -- filename only, file in static/covers/
+    cover_filename     TEXT,                     -- filename only, file in DATA_DIR/covers/ (default data/covers/; moved in #20)
     genre              TEXT,
     quantity_total     INTEGER DEFAULT 1,
-    quantity_available INTEGER DEFAULT 1         -- decremented on checkout, incremented on return
+    quantity_available INTEGER DEFAULT 1         -- decremented on checkout, incremented on return (CP6)
 );
 
 CREATE TABLE authors (
     id   INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL UNIQUE
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE     -- case-insensitive uniqueness per project identifier standard (#20)
 );
 
 CREATE TABLE book_authors (
-    book_id   INTEGER REFERENCES books(id),
-    author_id INTEGER REFERENCES authors(id),
+    book_id   INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    author_id INTEGER NOT NULL REFERENCES authors(id) ON DELETE CASCADE,
+    position  INTEGER NOT NULL DEFAULT 0,        -- 1-indexed author order shown on the book jacket (#20)
     PRIMARY KEY (book_id, author_id)
 );
 
@@ -93,35 +94,36 @@ CREATE TABLE patrons (
     name        TEXT NOT NULL,
     email       TEXT,
     phone       TEXT,
-    joined_date TEXT    -- ISO 8601 date string
+    joined_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    metadata    TEXT                             -- JSON TEXT, nullable (DEC-016); UI deferred post-submission
 );
 
 CREATE TABLE loans (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     book_id        INTEGER REFERENCES books(id),
     patron_id      INTEGER REFERENCES patrons(id),
-    checked_out_at TEXT,   -- ISO 8601 timestamp
-    due_date       TEXT,   -- ISO 8601 date string
-    returned_at    TEXT    -- NULL if still checked out
+    checked_out_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    due_date       DATETIME,
+    returned_at    DATETIME                      -- NULL while still checked out
 );
 
 -- Overdue status is never stored -- always computed at query time:
 -- returned_at IS NULL AND due_date < CURRENT_TIMESTAMP
 
 CREATE TABLE users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,         -- bcrypt hash
-    role TEXT NOT NULL CHECK(role IN ('admin', 'staff', 'patron')),
-    patron_id INTEGER REFERENCES patrons(id),  -- NULL for admin and staff
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT NOT NULL UNIQUE,          -- COLLATE NOCASE fix queued for CP7; today the CreatePatron check guards case-insensitively
+    password_hash TEXT NOT NULL,                 -- bcrypt hash
+    role          TEXT NOT NULL CHECK(role IN ('admin', 'staff', 'patron')),
+    patron_id     INTEGER REFERENCES patrons(id), -- NULL for admin and staff
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE sessions (
-    token TEXT PRIMARY KEY,              -- crypto/rand generated
-    user_id INTEGER NOT NULL REFERENCES users(id),
-    csrf_token TEXT NOT NULL,            -- crypto/rand generated, bound to session (CP4, DEC-017)
-    expires_at DATETIME NOT NULL         -- canonical UTC "YYYY-MM-DD HH:MM:SS" (DEC-018)
+    token      TEXT PRIMARY KEY,                 -- crypto/rand generated
+    user_id    INTEGER NOT NULL REFERENCES users(id),
+    csrf_token TEXT NOT NULL,                    -- crypto/rand generated, bound to session (CP4, DEC-017)
+    expires_at DATETIME NOT NULL                 -- canonical UTC "YYYY-MM-DD HH:MM:SS" (DEC-018)
 );
 ```
 
@@ -133,47 +135,67 @@ Created automatically on first startup if they don't exist:
 |----------|----------|------|-------|
 | `admin` | `Admin123!` | admin | Overridable via `ADMIN_PASSWORD` env var; must pass `ValidatePassword` (DEC-021) |
 | `staff1` | `Staff123!` | staff | Added in CP4 with the three-role model |
-| `patron1` | `Patron123!` | patron | Not linked to a patron record yet (CP5) |
+| `patron1` | `Patron123!` | patron | `users.patron_id` is NULL. Seed user can log in but has no `patrons` row; tracked as a legacy cleanup item. |
 
 ---
 
 ## Directory Structure
 
+Actual tree as of end of CP5 on the `cp5-crud` branch. Files marked *(planned)* are still to come; everything else exists.
+
 ```
 go-full-stack/
-├── main.go                    # Entry point: router, template loading, middleware, server
-├── db.go                      # DatabaseManager: schema creation + all CRUD methods
-├── handlers.go                # HTTP handler functions for all pages
-├── handlers_auth.go           # Login, logout, session management
-├── handlers_books.go          # Book-specific handlers (catalog, detail, CRUD)
-├── handlers_patrons.go        # Patron handlers
-├── handlers_loans.go          # Loan/kiosk handlers + SSE endpoint
-├── handlers_admin.go          # Admin handlers (ZIP export, import, Open Library proxy)
+├── main.go                       # Entry point: router, template loading, middleware, server
+├── main_test.go                  # HTTP boundary + role tests; setupTestRouter + loginAs helpers
+├── db.go                         # DatabaseManager: schema creation + all CRUD methods
+├── db_test.go                    # DB method tests (users, seed, transactions)
+├── handlers.go                   # renderTemplate / renderPage helpers + dashboard / admin / kiosk / not-found
+├── handlers_auth.go              # Login, logout, session middleware, RequireAuth / RequireStaff / RequireAdmin, CSRFProtect
+├── handlers_books.go             # Catalog, detail, Create / Edit / Update / Delete, Open Library proxy
+├── handlers_books_test.go        # Book handler tests (28 tests)
+├── handlers_patrons.go           # Patron list, create, edit, delete
+├── handlers_patrons_test.go      # Patron handler tests (13 tests)
+├── handlers_staff.go             # Staff list, create, edit, delete, reset-password
+├── handlers_staff_test.go        # Staff handler tests
+├── handlers_loans.go             # (planned, CP6) Checkout / return / favorites
+├── handlers_admin.go             # (planned, CP7) ZIP export / import; the Open Library proxy landed in handlers_books.go instead
+├── openlibrary.go                # Open Library API client (DEC-008)
+├── covers.go                     # Cover upload + OL-URL download with MIME / size / extension validation
+├── flash.go                      # HttpOnly flash cookies (success + error + detail companion)
+├── validators.go                 # IsValidISBN, ValidateUsername, ValidatePassword, generateBaseUsername, normalizeFreeText
+├── validators_test.go            # Validator unit tests
 ├── templates/
-│   ├── layout.html            # Base layout with sidebar nav (wireframe-based)
-│   ├── login.html             # Login page
-│   ├── index.html             # Dashboard page
-│   ├── catalog.html           # Book catalog list
-│   ├── book_detail.html       # Single book view
-│   ├── patrons.html           # Patron list
-│   ├── admin.html             # Admin panel
-│   ├── kiosk.html             # Public catalog browse (optional patron login)
-│   └── error.html             # 404/500 error page
+│   ├── layout.html               # Base layout with responsive offcanvas sidebar
+│   ├── login.html                # Standalone login (no sidebar)
+│   ├── index.html                # Dashboard
+│   ├── catalog.html              # 4-wide book grid, search / filter, admin "+ Add Book" button
+│   ├── book_detail.html          # Single book view + Edit / Delete affordances (type-to-confirm delete)
+│   ├── book_form.html            # Shared new / edit form: ISBN + OL Lookup, cover preview, Variant B submit
+│   ├── patrons.html              # Patron list + Add / Edit / Delete modals
+│   ├── staff.html                # Staff list + Add / Edit / Delete / Reset Password modals
+│   ├── admin.html                # Admin panel (stub; CP7 adds ZIP export / import)
+│   ├── kiosk.html                # Public kiosk (stub; CP6 adds real browse)
+│   └── error.html                # 404 / 500 error page
 ├── static/
 │   ├── stylesheets/
-│   │   └── style.css          # Custom styles (minimal, Bootstrap handles most)
+│   │   ├── bootstrap.min.css     # Bootstrap 5.3 (local, offline-ready)
+│   │   └── style.css             # Custom styles: sidebar, availability badges, letterboxed covers
 │   ├── javascripts/
-│   │   └── app.js             # Client JS (catalog filtering; SSE listener added in CP6)
-│   ├── images/
-│   └── favicon.svg
+│   │   ├── bootstrap.bundle.min.js
+│   │   └── app.js                # Catalog filter, staff / patron / book modal init, OL Lookup, cover preview, live validation
+│   └── images/
+│       └── favicon.svg
+├── data/                         # gitignored; holds database.sqlite, covers/, WAL files
 ├── scripts/
-│   ├── install.sh             # EC2 install script
-│   └── configure.sh           # EC2 configure script
+│   ├── install.sh                # EC2 install script
+│   └── configure.sh              # EC2 configure script
 ├── deploy/
-│   └── go-full-stack.service  # systemd unit
-├── docs/
-│   ├── plan.md                # This file
-│   └── week6/deployment.md    # EC2 + nginx + systemd deployment guide
+│   └── go-full-stack.service     # systemd unit
+├── docs/                         # Plan, security, deployment, tutorials (see docs/README.md)
+├── .tool-versions                # Go toolchain pin (asdf / mise)
+├── CLAUDE.md                     # Session working agreements + current task list
+├── DECISIONS.md                  # Numbered architectural decisions (DEC-001 through DEC-023)
+├── README.md                     # Public-facing overview
 ├── go.mod
 ├── go.sum
 └── .gitignore
@@ -205,33 +227,34 @@ go-full-stack/
 ### CP2 -- Authentication & Session Management ✅
 **Goal:** All routes protected by login. Admin and patron roles enforced. Seed accounts created on first run.
 
-- `layout.html`: Updated to sidebar navigation based on wireframes (replaces top navbar)
-- `handlers_auth.go`: `HandleLogin` (GET/POST), `HandleLogout`
-- `db.go`: `users` and `sessions` tables, `CreateUser()`, `GetUserByUsername()`, `CreateSession()`, `GetSession()`, `DeleteSession()`, `SeedDefaultUsers()`
-- `db.go`: Enable WAL mode (`PRAGMA journal_mode=WAL`) -- required by spec
-- `templates/login.html`: login form
-- `main.go`: `RequireAuth()` and `RequireAdmin()` middleware applied to all routes
-- Dependency: `golang.org/x/crypto/bcrypt` for password hashing
+- ✅ `layout.html`: Updated to sidebar navigation based on wireframes (replaces top navbar)
+- ✅ `handlers_auth.go`: `HandleLogin` (GET/POST), `HandleLogout`
+- ✅ `db.go`: `users` and `sessions` tables, `CreateUser()`, `GetUserByUsername()`, `CreateSession()`, `GetSession()`, `DeleteSession()`, `SeedDefaultUsers()`
+- ✅ `db.go`: Enable WAL mode (`PRAGMA journal_mode=WAL`) -- required by spec
+- ✅ `templates/login.html`: login form
+- ✅ `main.go`: `RequireAuth()` and `RequireAdmin()` middleware applied to all routes
+- ✅ Dependency: `golang.org/x/crypto/bcrypt` for password hashing
 
-**Access control applied:**
+**Access control applied (as of end of CP5; CP6/CP7 will add loan and admin-panel routes):**
 | Middleware | Routes |
 |-----------|--------|
-| `RequireAuth` | `/`, `/catalog`, `/books/:id`, `/events` |
-| `RequireAdmin` | `/patrons`, `/admin`, all CRUD endpoints |
-| Public | `/login`, `/logout`, `GET /kiosk`, static files |
-| `LoadUser` (optional) | `POST /kiosk/favorites` |
-| `RequireAuth` (kiosk) | `POST /kiosk/holds` |
+| `RequireAuth` | `/`, `/catalog`, `/books/:id`, `POST /logout` |
+| `RequireStaff` (admin + staff) | `/patrons` + patron CRUD, `/admin`, `/books/new`, `POST /books`, book edit, `/api/openlibrary/isbn/:isbn` |
+| `RequireAdmin` | `/staff` + staff CRUD + staff password reset, `POST /books/:id/delete` |
+| Public | `GET /login`, `POST /login`, `GET /kiosk`, static files |
+| `LoadUser` (optional, *planned CP6*) | `POST /kiosk/favorites` |
+| `RequireAuth` (kiosk, *deferred*) | `POST /kiosk/holds` |
 
 **Seed accounts (created on first run):**
 - `admin` / `Admin123!` (role: admin) -- password overridable via `ADMIN_PASSWORD` env var (validated on startup; see DEC-021)
-- `patron1` / `Patron123!` (role: patron) -- linked to a seed patron record
+- `patron1` / `Patron123!` (role: patron) -- `users.patron_id` is NULL; the seeded user can log in but has no `patrons` row. New patrons created via `HandlePatronCreate` get a linked `patrons` row per DEC-022. The seed mismatch is legacy and doesn't affect login / role gating.
 
 **Verification:**
-- `GET /` redirects to `/login` when not logged in
-- `GET /kiosk` loads without login
-- Admin can log in and access all routes
-- Patron gets 403 on `/patrons` and `/admin`
-- `POST /logout` clears session and redirects to `/login`
+- ✅ `GET /` redirects to `/login` when not logged in
+- ✅ `GET /kiosk` loads without login
+- ✅ Admin can log in and access all routes
+- ✅ Patron gets 403 on `/patrons` and `/admin`
+- ✅ `POST /logout` clears session and redirects to `/login`
 
 ---
 
@@ -291,13 +314,18 @@ go-full-stack/
 | Capability | Admin | Staff | Patron |
 |---|---|---|---|
 | Dashboard, catalog, book detail | Yes | Yes | Yes |
-| Checkout/return books | Yes | Yes | No |
-| Book CRUD | Yes | Yes | No |
+| Loan history on book detail page | Yes | Yes | No |
+| Checkout / return books *(CP6)* | Yes | Yes | No |
+| Book add / edit | Yes | Yes | No |
+| Book delete | Yes | No | No |
+| Open Library ISBN lookup | Yes | Yes | No |
 | View patron list | Yes | Yes | No |
-| Patron CRUD | Yes | No | No |
-| CSV patron import | Yes | Yes | No |
-| Admin panel (export/import) | Yes | Yes | No |
-| Staff management | Yes | No | No |
+| Patron CRUD (name / email / phone) | Yes | Yes | No |
+| Staff management (list / add / edit / delete / reset password) | Yes | No | No |
+| Admin panel page (stub today) | Yes | Yes | No |
+| ZIP export / import *(CP7)* | Yes | No | No |
+
+*CSV patron import and patron reset-password are deferred post-submission; patron holds and SSE availability are deferred post-submission; see "Deferred to post-submission backlog" in the rescope section below.*
 
 All checkout and return transactions are staff-only. Patrons cannot self-checkout; their login exists for browsing, favorites, and requesting holds on the kiosk.
 
@@ -311,34 +339,46 @@ Project due 2026-05-01. Remaining scope was rebalanced within CP5/CP6/CP7 to fit
 
 **Deferred to post-submission backlog (not abandoned, captured for later):**
 
-- CSV patron import (from #21). Manual patron entry is sufficient for demo.
+- CSV patron import (from #21). Manual entry sufficient for demo.
+- Patron reset-password handler + modal (from #21 rescope). Today's recovery path is admin delete + recreate; acceptable for a small library but worth adding for UX.
+- Patron metadata column UI (from #21 rescope). `patrons.metadata` stays in schema and null on create.
+- Patron activate / deactivate flag (raised during #21 smoke test). Soft-deactivation for suspending patrons without destroying history; needs schema column, login-middleware rejection, session wipe on deactivate, UI toggle.
+- Orphan cover cleanup on post-cover-save validation failure (from #20). Low-frequency leak when duplicate-ISBN check fires after a cover has already been saved to disk.
+- Offline detection for the Open Library Lookup button (from #20). `navigator.onLine` + `online`/`offline` events plus first-failure-hides-button.
 - SSE live availability updates (from #22). Page reload shows the same info.
 - Patron holds on checked-out books (from #22). Favorites are enough to demonstrate optional patron login.
+- Staff table responsive polish (from #39). Column overflow on narrow viewports.
+- Password-reset Variant 2, server-generated temp + force-change-on-next-login (from #39). The stronger long-term posture; Variant 1 is acceptable for a small trusted staff.
 - [#17](https://github.com/timLP79/cs408-go-stack/issues/17) GitHub Actions deploy. Already labeled backlog.
+
+Full details for each item live in `CLAUDE.md` "Deferred post-submission backlog"; this list is the planning-doc mirror.
 
 ---
 
 ### CP5 -- CRUD Features (Books, Patrons, Staff) ✅
-**Goal:** Full CRUD for books (with Open Library API), patrons, and staff accounts. Test harness fix (#35) pulled into CP5 since handler tests for #39/#20/#21 depend on it.
+**Goal:** Full CRUD for books (with Open Library API), patrons, and staff accounts. Test harness fix (#35) pulled into CP5 since handler tests for #39/#20/#21 depend on it. Closed 2026-04-18, 6 days ahead of the 4/24 target.
 
-- [#35](https://github.com/timLP79/cs408-go-stack/issues/35) -- Fix: Test router does not mirror production middleware (moved from CP7; unblocks all new handler tests)
-- [#39](https://github.com/timLP79/cs408-go-stack/issues/39) -- Staff management: list, add, edit, delete (close out)
-  - `handlers_staff.go`: list, add, edit, delete staff accounts
-  - `handlers_staff_test.go`: one test per guard rule (self-delete, self-demote, last-admin delete/demote, role whitelist, admin-only access)
-  - Template, JS, sidebar link, db methods, validators, DECISIONS entries already complete
+- ✅ [#35](https://github.com/timLP79/cs408-go-stack/issues/35) -- Test router mirror fix. `setupTestRouter` now mirrors `main.go` route groups byte-for-byte. `loginAs` and `logoutHelper` test helpers added. Three regression-pin tests cover the middleware chain.
+- ✅ [#39](https://github.com/timLP79/cs408-go-stack/issues/39) -- Staff management: list, add, edit, delete, reset-password.
+  - `handlers_staff.go` + `handlers_staff_test.go` -- all five handlers with one test per guard rule (self-delete, self-demote, last-admin delete/demote, role whitelist, admin-only access, IDOR on patron target)
+  - Flash-cookie PRG messaging (`flash.go`), Bootstrap live validation across Add / Edit / Reset modals
+  - `UpdateUserPassword` is transactional (DEC-022) and wipes target sessions on every reset
   - Safety guards: cannot delete self, cannot demote self, cannot delete/demote last admin
-- [#20](https://github.com/timLP79/cs408-go-stack/issues/20) -- Book CRUD and Open Library API lookup
-  - `handlers_books.go`: `POST /books`, `POST /books/:id/edit`, `POST /books/:id/delete`
-  - `handlers_admin.go`: `GET /api/openlibrary?isbn=...` (server-side proxy)
-  - `db.go`: `CreateBook()`, `UpdateBook()`, `DeleteBook()` -- transactional per DEC-022 (books + authors + book_authors)
-  - Cover image upload with MIME/size/extension validation and sanitized filename (security.md CP5 rules)
-- [#21](https://github.com/timLP79/cs408-go-stack/issues/21) -- Patron management: CRUD (CSV import deferred post-submission)
-  - `handlers_patrons.go`: list, add, edit, delete
-  - `db.go`: `Patron` struct with `metadata TEXT` (JSON, nullable), all patron CRUD methods -- `CreatePatron` is transactional (patrons + linked users row per DEC-022)
-  - `templates/patrons.html`: patron list with modals
-  - Creating a patron also creates a linked `users` record (patron role)
-  - Auto-generated username: first-initial + last-name with collision handling
-  - Default password: policy-compliant temporary (documented in DEC-021)
+- ✅ [#20](https://github.com/timLP79/cs408-go-stack/issues/20) -- Book CRUD and Open Library API lookup.
+  - `handlers_books.go`: `HandleBookNew`, `HandleBookCreate`, `HandleBookEdit`, `HandleBookUpdate`, `HandleBookDelete`, plus `HandleOpenLibraryLookup` (routes: `GET /api/openlibrary/isbn/:isbn`, staff+admin; `POST /books/:id/delete` admin-only; create/edit staff+admin)
+  - `openlibrary.go` server-side OL client (DEC-008); `covers.go` upload + OL-URL download with size / extension / magic-byte MIME validation, storage under `DATA_DIR/covers/`; `flash.go` detail-cookie companion
+  - `db.go`: `CreateBook`, `UpdateBook`, `DeleteBook`, `GetBookByISBN`, `findOrCreateAuthor` -- transactional per DEC-022 (books + authors + book_authors)
+  - Shared `templates/book_form.html` renders both new and edit with Variant B two-button submit (DEC-023)
+  - Cover routing on update: upload > OL URL > preserve existing, with old-file cleanup after `UpdateBook` succeeds
+  - `ErrBookHasLoans` sentinel blocks delete when loans exist (surfaces as a form banner, not a 500)
+  - Duplicate-ISBN guard excludes the book being edited from the conflict check
+- ✅ [#21](https://github.com/timLP79/cs408-go-stack/issues/21) -- Patron management: CRUD. *(CSV import, reset-password, metadata UI, and activate/deactivate deferred post-submission.)*
+  - `handlers_patrons.go`: list, add, edit, delete -- all four in the staff+admin route group
+  - `db.go`: `Patron` struct (including nullable `metadata TEXT` JSON column from DEC-016), `CreatePatron` transactional (patrons + linked users row per DEC-022) with username auto-generation + collision-retry loop inside the transaction, `DeletePatron` transactional (sessions + users + patrons) with `ErrPatronHasLoans` guard mirroring the book pattern
+  - `templates/patrons.html` modeled on `staff.html`: Add / Edit / Delete modals (no Reset modal per rescope), type-to-confirm delete
+  - `validators.go`: `generateBaseUsername` produces first-initial + last-word lowercased with non-alphanumerics stripped; empty input rejected at handler level before DB call
+  - Admin-typed temp password at create (Variant 1, DEC-021). Username is not editable post-create (rename via delete-recreate)
+  - Catalog polish pass also landed alongside #21: 4-wide grid on desktop, letterboxed covers against near-black slot (`#212529`) with natural aspect preserved
 
 **Open Library API:**
 ```
@@ -394,16 +434,16 @@ For full details see [`docs/security.md`](./security.md).
 
 | CP | Risk | Mitigation |
 |----|------|-----------|
-| CP2 | Weak password storage | Use `bcrypt` -- never store plain text or MD5/SHA passwords |
-| CP2 | Session hijacking | `HttpOnly`, `Secure`, `SameSite=Strict` cookie; server-side session store (SameSite=Strict actually wired in CP4, see DEC-004 addendum) |
-| CP2 | Session fixation | Regenerate session token after successful login |
-| CP2 | Brute force login | Bcrypt's cost factor adds natural delay; rate limit `/login` POST in CP7 |
-| CP3 | SQL injection via book/patron IDs | Always use parameterized queries (`?` placeholders) -- never string concatenation |
+| CP2 ✅ | Weak password storage | Use `bcrypt` -- never store plain text or MD5/SHA passwords |
+| CP2 ✅ | Session hijacking | `HttpOnly`, `Secure`, `SameSite=Strict` cookie; server-side session store (SameSite=Strict actually wired in CP4, see DEC-004 addendum) |
+| CP2 ✅ | Session fixation | Regenerate session token after successful login |
+| CP2 | Brute force login | Bcrypt's cost factor adds natural delay; rate limit `/login` POST still CP7 |
+| CP3 ✅ | SQL injection via book/patron IDs | Always use parameterized queries (`?` placeholders) -- never string concatenation |
 | CP4 ✅ | CSRF on state-changing forms | Session-bound synchronizer token for authenticated routes, pre-session double-submit cookie for login (#32, DEC-017) |
 | CP4 ✅ | Username enumeration via login timing | `HandleLoginPost` always runs bcrypt against a dummy hash when the user does not exist (#33) |
-| CP5 | File upload (cover images) | Validate MIME type, restrict extensions, limit file size, sanitize filename |
-| CP5 | Open Library proxy | Validate ISBN format server-side before making outbound request |
-| CP5 | PII exposure (patron emails) | Never log patron data; keep `email` field optional |
+| CP5 ✅ | File upload (cover images) | `covers.go` validates size (2 MB cap), extension whitelist (jpg/png/webp), and magic-byte MIME via `http.DetectContentType`; sanitized filename is a random 32-hex generated server-side (#20) |
+| CP5 ✅ | Open Library proxy | `IsValidISBN` runs server-side before any outbound request; `HandleOpenLibraryLookup` rejects malformed ISBNs with 400 before opening a socket (#20) |
+| CP5 ✅ | PII exposure (patron emails) | `email` column stays optional; handlers never log patron data; the flash detail cookie is URL-escaped but still avoids serializing email / phone (#21) |
 | CP6 | Hold request abuse | Validate patron login before allowing holds; rate limit hold requests |
 | CP6 | SSE data exposure | Event stream must not include patron PII -- book ID and availability only |
 | CP7 | Zip Slip (path traversal) | Validate every file path in uploaded ZIP before extracting; reject `../` paths |

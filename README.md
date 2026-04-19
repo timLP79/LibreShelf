@@ -51,8 +51,8 @@ Passwords must be 8+ characters with at least one uppercase letter, one digit, a
 | `/books/:id/edit` | Edit-book form | Staff + admin |
 | `/patrons` | Patron management -- list + add / edit / delete modals | Staff + admin |
 | `/staff` | Staff management -- list + add / edit / delete / reset-password modals | Admin only |
-| `/admin` | Admin panel -- ZIP export / import (CP7) | Admin only |
-| `/kiosk` | Public browse -- optional login for favorites and holds | Public |
+| `/admin` | Admin panel -- stub today; CP7 adds ZIP export / import | Staff + admin (CP7 ZIP features will be admin-only) |
+| `/kiosk` | Public browse -- stub today; CP6 adds favorites and patron login (holds deferred post-submission) | Public |
 
 ## Documentation
 
