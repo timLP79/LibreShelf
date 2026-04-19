@@ -41,8 +41,22 @@ are handled exclusively by staff on the book detail page.
 | `GET /kiosk` | Kiosk | **Public** (login optional) |
 | `POST /kiosk/favorites` | Save favorite | Login optional (silently no-op if not logged in) |
 | `POST /kiosk/holds` | Request hold | Requires login |
-| `GET /patrons` | Patrons | Admin only |
-| `GET /admin` | Admin | Admin only |
+| `GET /patrons` | Patrons | Admin + staff |
+| `POST /patrons` | Create patron | Admin + staff |
+| `POST /patrons/:id/edit` | Edit patron | Admin + staff |
+| `POST /patrons/:id/delete` | Delete patron | Admin + staff |
+| `GET /staff` | Staff management | Admin only |
+| `POST /staff` | Create staff / admin | Admin only |
+| `POST /staff/:id/edit` | Edit staff / admin | Admin only |
+| `POST /staff/:id/delete` | Delete staff / admin | Admin only |
+| `POST /staff/:id/password` | Reset staff password | Admin only |
+| `GET /books/new` | Add-book form | Admin + staff |
+| `POST /books` | Create book | Admin + staff |
+| `GET /books/:id/edit` | Edit-book form | Admin + staff |
+| `POST /books/:id/edit` | Update book | Admin + staff |
+| `POST /books/:id/delete` | Delete book | Admin only |
+| `GET /api/openlibrary/isbn/:isbn` | OL lookup proxy (JSON) | Admin + staff |
+| `GET /admin` | Admin panel | Admin only |
 | `GET /events` | SSE stream | Any logged-in user |
 
 ---
@@ -188,7 +202,7 @@ go-full-stack/
 
 ---
 
-### CP2 -- Authentication & Session Management
+### CP2 -- Authentication & Session Management ✅
 **Goal:** All routes protected by login. Admin and patron roles enforced. Seed accounts created on first run.
 
 - `layout.html`: Updated to sidebar navigation based on wireframes (replaces top navbar)
@@ -304,7 +318,7 @@ Project due 2026-05-01. Remaining scope was rebalanced within CP5/CP6/CP7 to fit
 
 ---
 
-### CP5 -- CRUD Features (Books, Patrons, Staff)
+### CP5 -- CRUD Features (Books, Patrons, Staff) ✅
 **Goal:** Full CRUD for books (with Open Library API), patrons, and staff accounts. Test harness fix (#35) pulled into CP5 since handler tests for #39/#20/#21 depend on it.
 
 - [#35](https://github.com/timLP79/cs408-go-stack/issues/35) -- Fix: Test router does not mirror production middleware (moved from CP7; unblocks all new handler tests)

@@ -7,7 +7,7 @@ A self-hostable library management system built with Go.
 LibreShelf lets a small library (school, office, personal collection) manage books,
 patrons, and loans through a simple web UI. A public kiosk supports self-service
 browsing with optional patron login for favorites and holds. All checkout and return
-transactions are staff-only. Real-time availability updates via Server-Sent Events.
+transactions are staff-only. (SSE live availability is on the post-submission roadmap.)
 
 ## Tech Stack
 
@@ -42,14 +42,17 @@ Passwords must be 8+ characters with at least one uppercase letter, one digit, a
 
 ## Pages
 
-| Route | Page |
-|-------|------|
-| `/` | Dashboard -- stats and recent activity |
-| `/catalog` | Book catalog -- searchable and filterable |
-| `/books/:id` | Book detail -- info, availability, loan history |
-| `/patrons` | Patron management |
-| `/admin` | Admin panel -- ZIP export/import |
-| `/kiosk` | Public browse -- optional login for favorites and holds |
+| Route | Page | Access |
+|-------|------|--------|
+| `/` | Dashboard -- stats and recent activity | Any logged-in user |
+| `/catalog` | Book catalog -- searchable and filterable, 4-wide grid | Any logged-in user |
+| `/books/:id` | Book detail -- info, availability, loan history | Any logged-in user |
+| `/books/new` | Add-book form with Open Library ISBN lookup | Staff + admin |
+| `/books/:id/edit` | Edit-book form | Staff + admin |
+| `/patrons` | Patron management -- list + add / edit / delete modals | Staff + admin |
+| `/staff` | Staff management -- list + add / edit / delete / reset-password modals | Admin only |
+| `/admin` | Admin panel -- ZIP export / import (CP7) | Admin only |
+| `/kiosk` | Public browse -- optional login for favorites and holds | Public |
 
 ## Documentation
 

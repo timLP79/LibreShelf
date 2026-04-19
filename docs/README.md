@@ -34,7 +34,7 @@ This is a solo developer project.
 
 ## Project Status
 
-**Current Sprint:** LibreShelf CP4 complete; CP5 next.
+**Current Sprint:** LibreShelf CP5 complete (landed 6 days ahead of the 4/24 target); CP6 next.
 
 **Project history:**
 - ✅ Milestone 1: Hello World App ([Issue #1](https://github.com/timLP79/cs408-go-stack/issues/1)) — Gin server, template layout, Bootstrap
@@ -45,6 +45,7 @@ This is a solo developer project.
 - ✅ **CP2 complete** ([Issue #25](https://github.com/timLP79/cs408-go-stack/issues/25)) — authentication merged, tagged v2
 - ✅ **CP3 complete** ([Issue #19](https://github.com/timLP79/cs408-go-stack/issues/19)): book catalog with search/filter, book detail with loan history, responsive sidebar, bug fixes #28/#29/#30
 - ✅ **CP4 complete**: security hardening, three-role model (#38), template error handling (#31), constant-time login (#33), session-bound CSRF protection (#32), `lang="en"` accessibility (#34)
+- ✅ **CP5 complete** ([#35](https://github.com/timLP79/cs408-go-stack/issues/35), [#39](https://github.com/timLP79/cs408-go-stack/issues/39), [#20](https://github.com/timLP79/cs408-go-stack/issues/20), [#21](https://github.com/timLP79/cs408-go-stack/issues/21)): full CRUD for staff, books, and patrons. Test router mirror fix (#35), staff management with flash-cookie PRG messaging and live-validation modals (#39), book CRUD with Open Library proxy + cover upload/download validation + Variant B two-button submit (#20, DEC-023), patron CRUD with transactional `CreatePatron` and username auto-generation (#21). 93 tests passing on `cp5-crud`, 6 days ahead of the 4/24 target.
 
 **CP1 — complete:**
 - ✅ All 6 template stubs created
@@ -72,18 +73,26 @@ This is a solo developer project.
 - ✅ Color scheme — slate blue sidebar, soft white-gray background, accent stat cards
 - ✅ Merged PR #27, tagged v2
 
-**Next up:** CP5 for CRUD features (books, patrons, staff management).
+**Next up:** CP6 — loan system (#22) and server-side pagination (#37).
 
 **Open milestones:**
-- [CP5 #20](https://github.com/timLP79/cs408-go-stack/issues/20) Book CRUD and Open Library API lookup
-- [CP5 #21](https://github.com/timLP79/cs408-go-stack/issues/21) Patron management: CRUD, metadata, CSV import
-- [CP5 #39](https://github.com/timLP79/cs408-go-stack/issues/39) Staff management: list, add, edit, delete
-- [CP6 #22](https://github.com/timLP79/cs408-go-stack/issues/22) Loan system: kiosk browse, holds, SSE availability
+- [CP6 #22](https://github.com/timLP79/cs408-go-stack/issues/22) Loan system: checkout/return + kiosk browse + favorites (SSE and patron holds deferred post-submission)
 - [CP6 #37](https://github.com/timLP79/cs408-go-stack/issues/37) Server-side pagination and filtering for catalog
-- [CP7 #23](https://github.com/timLP79/cs408-go-stack/issues/23) Admin panel: ZIP export and import
-- [CP7 #35](https://github.com/timLP79/cs408-go-stack/issues/35) Fix: test router does not mirror production middleware
-- [CP7 #24](https://github.com/timLP79/cs408-go-stack/issues/24) Testing, polish, deploy
+- [CP7 #23](https://github.com/timLP79/cs408-go-stack/issues/23) Admin panel: ZIP export and import (Zip Slip protection)
+- [CP7 #24](https://github.com/timLP79/cs408-go-stack/issues/24) Testing, polish, final EC2 redeploy
 - Backlog: [#17](https://github.com/timLP79/cs408-go-stack/issues/17) Automate deployment via GitHub Actions (low priority)
+
+**Post-submission backlog** (items cut from the 4/24-5/1 calendar; see CLAUDE.md for full context):
+- CSV patron import (from #21)
+- Patron reset-password handler + modal (from #21)
+- Patron metadata column UI (from #21)
+- Patron activate / deactivate (raised during #21 smoke test)
+- SSE live availability updates (from #22)
+- Patron holds on checked-out books (from #22)
+- Staff table responsive polish (from #39)
+- Password-reset Variant 2, server-generated temp + force-change-on-next-login (from #39)
+- Orphan cover cleanup on post-cover-save validation failure (from #20)
+- Offline detection for the Open Library Lookup button (from #20)
 
 ---
 
@@ -165,9 +174,9 @@ See [`plan.md`](./plan.md) for the full LibreShelf architecture. Summary:
 | CP2 | ✅ | Authentication: login, sessions, role-based access ([#25](https://github.com/timLP79/cs408-go-stack/issues/25)) |
 | CP3 | ✅ | Book catalog and detail pages ([#19](https://github.com/timLP79/cs408-go-stack/issues/19)) |
 | CP4 | ✅ | Security hardening: three-role model, CSRF, constant-time login, ExecuteTemplate fix |
-| CP5 | 🔄 | CRUD: book CRUD + Open Library, patron management, staff management ([#20](https://github.com/timLP79/cs408-go-stack/issues/20), [#21](https://github.com/timLP79/cs408-go-stack/issues/21), [#39](https://github.com/timLP79/cs408-go-stack/issues/39)) |
-| CP6 | | Loans, kiosk, SSE availability, server-side pagination ([#22](https://github.com/timLP79/cs408-go-stack/issues/22), [#37](https://github.com/timLP79/cs408-go-stack/issues/37)) |
-| CP7 | | Admin panel (ZIP export/import), test router fixes, final polish and deploy ([#23](https://github.com/timLP79/cs408-go-stack/issues/23), [#35](https://github.com/timLP79/cs408-go-stack/issues/35), [#24](https://github.com/timLP79/cs408-go-stack/issues/24)) |
+| CP5 | ✅ | CRUD: book CRUD + Open Library, patron management, staff management, test router mirror fix ([#20](https://github.com/timLP79/cs408-go-stack/issues/20), [#21](https://github.com/timLP79/cs408-go-stack/issues/21), [#39](https://github.com/timLP79/cs408-go-stack/issues/39), [#35](https://github.com/timLP79/cs408-go-stack/issues/35)) |
+| CP6 | 🔄 | Loans (checkout / return / kiosk / favorites) + server-side pagination ([#22](https://github.com/timLP79/cs408-go-stack/issues/22), [#37](https://github.com/timLP79/cs408-go-stack/issues/37)) |
+| CP7 | | Admin panel (ZIP export / import), security headers, final polish and deploy ([#23](https://github.com/timLP79/cs408-go-stack/issues/23), [#24](https://github.com/timLP79/cs408-go-stack/issues/24)) |
 
 ---
 
