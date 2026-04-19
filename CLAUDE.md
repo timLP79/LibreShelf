@@ -164,8 +164,9 @@ Order: #39 and #20 closed, next is #21.
 - [x] #35 -- Fix: Test router does not mirror production middleware (closed in b9ce9ed). `setupTestRouter` mirrors main.go route groups. Added `loginAs` and `logoutHelper` test helpers. Three new regression-pin tests cover the middleware chain.
 - [x] #39 -- Staff management: closed. `handlers_staff.go` holds list/create/edit/delete/reset-password handlers. Admin-only route group registered in `main.go`. Flash-cookie messaging (`flash.go`) replaces URL query-param error surface; codes map to banner text server-side so operator text never transits the cookie jar. `UpdateUserPassword` is transactional and wipes target sessions on every reset. Bootstrap live validation across Add/Edit/Reset modals. 20 new handler tests plus three admin-group boundary tests in `main_test.go`.
 - [x] #20 -- Book CRUD + Open Library API: closed. `handlers_books.go` holds Create / Edit / Update / Delete plus the `/api/openlibrary/isbn/:isbn` JSON proxy. Routes split across staff group (create + edit) and admin group (delete) per #20 design. `openlibrary.go` (DEC-008) + `covers.go` (upload validation, DATA_DIR/covers storage) + `flash.go` (detail cookie companion) back the handlers. Shared `book_form.html` template with Variant B two-button submit (DEC-023). Cover routing on update: upload > OL URL > preserve existing, with old-file cleanup after successful `UpdateBook`. Delete runs the `ErrBookHasLoans` guard and removes the cover file best-effort. 28 new handler tests in `handlers_books_test.go` plus `/books/new` and `/books/:id/edit` added to the auth/role boundary loops in `main_test.go`. Full suite 79 passing on `cp5-crud`.
-- [ ] #21 -- Patron CRUD (**CSV import deferred post-submission**)
-    - Handlers, DB methods (`CreatePatron` transactional: patrons + users per DEC-022), patron list template with modals, auto-generated username, policy-compliant temp password, tests.
+- [ ] #21 -- Patron CRUD (**CSV import, reset-password, and metadata UI deferred post-submission**)
+    - Scope: list / create / edit / delete handlers, `CreatePatron` transactional (patrons + users per DEC-022), `ErrPatronHasLoans` guard on delete (mirrors the book pattern), auto-generated username (firstinitial+lastname lowercased, digit-suffix on collision, matches `[a-zA-Z0-9_]+`), admin-typed temp password at create time (Variant 1, same policy as staff create).
+    - Cut to keep CP5 shippable on 4/24: no patron reset-password handler / modal (admin deletes + recreates if a patron forgets), no metadata column UI (leave `patrons.metadata` null on create).
 
 ### CP6 -- Loans + Kiosk + Pagination
 
@@ -181,6 +182,8 @@ Order: #39 and #20 closed, next is #21.
 ### Deferred post-submission backlog
 
 - CSV patron import (from #21)
+- Patron reset-password handler + modal (cut from #21 to keep CP5 shippable on 4/24): mirrors the staff reset-password pattern (Variant 1 admin-typed). Today's recovery path is "admin deletes the patron and recreates with a new password", which is acceptable for a small library but not great UX. Straightforward add when we have the time: one POST handler + one modal + ~3 tests. Variant 2 (server-generated temp + force-change) is the stronger long-term path, tracked separately in the staff Variant 2 entry below.
+- Patron metadata column UI (cut from #21): `patrons.metadata` is a JSON TEXT column per DEC-016, left null by #21's create flow. Future work could add a free-form notes textarea or structured fields (student ID, library card number) for libraries that want to track more than name/email/phone.
 - SSE live availability updates (from #22)
 - Patron holds on checked-out books (from #22)
 - Staff table responsive polish (from #39): "Reset Password" label wraps mid-word on narrow viewports; raw ISO-8601 timestamps (`2026-04-18T04:54:01Z`) break awkwardly; Actions column buttons get cramped below `md`. Options: friendly date format (server-side or via template helper), icon-only action buttons with tooltips, or stacked-card layout below `md`. Same treatment will be needed for patron and book tables once CP5/CP6 land, so solve it once and reuse.
