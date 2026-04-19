@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -901,4 +902,80 @@ func (dm *DatabaseManager) DeletePatron(id int) error {
 	}
 
 	return tx.Commit()
+}
+
+// FetchAndStoreSeedCovers scans the books table for rows that have an
+// ISBN but no cover_filename and opportunistically backfills covers
+// from Open Library. Safe to call every startup: after a successful
+// first run the SELECT returns zero rows and the function exits fast.
+// Per-book failures (OL not-found, network, bad content, DB update)
+// log a warning and continue -- never panic, never block the server
+// from starting. Called from main.go after SeedBooks so a fresh DB
+// gets real cover art for the seed books instead of placeholder slots.
+//
+// The network budget comes from the ctx the caller passes, plus a
+// 10s per-request timeout inside FetchOpenLibraryBook and
+// SaveCoverFromURL. If ctx fires, remaining books get skipped and
+// their covers can be backfilled on the next startup.
+func (dm *DatabaseManager) FetchAndStoreSeedCovers(ctx context.Context) {
+	rows, err := dm.db.Query(`
+		SELECT id, isbn FROM books
+		WHERE cover_filename IS NULL AND isbn IS NOT NULL AND isbn != ''`)
+	if err != nil {
+		log.Printf("FetchAndStoreSeedCovers: SELECT: %v", err)
+		return
+	}
+
+	type missing struct {
+		id   int
+		isbn string
+	}
+	var pending []missing
+	for rows.Next() {
+		var m missing
+		if err := rows.Scan(&m.id, &m.isbn); err != nil {
+			log.Printf("FetchAndStoreSeedCovers: scan: %v", err)
+			rows.Close()
+			return
+		}
+		pending = append(pending, m)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		log.Printf("FetchAndStoreSeedCovers: rows.Err: %v", err)
+		return
+	}
+	if len(pending) == 0 {
+		return
+	}
+
+	log.Printf("FetchAndStoreSeedCovers: backfilling %d cover(s) from Open Library", len(pending))
+	start := time.Now()
+	saved := 0
+	for _, m := range pending {
+		if err := ctx.Err(); err != nil {
+			log.Printf("FetchAndStoreSeedCovers: context cancelled, skipping remaining %d book(s): %v", len(pending)-saved, err)
+			break
+		}
+		book, err := FetchOpenLibraryBook(ctx, m.isbn)
+		if err != nil {
+			log.Printf("FetchAndStoreSeedCovers: OL fetch for ISBN %s: %v", m.isbn, err)
+			continue
+		}
+		if book.CoverURL == "" {
+			log.Printf("FetchAndStoreSeedCovers: no cover URL from OL for ISBN %s", m.isbn)
+			continue
+		}
+		filename, err := SaveCoverFromURL(book.CoverURL)
+		if err != nil {
+			log.Printf("FetchAndStoreSeedCovers: SaveCoverFromURL for ISBN %s: %v", m.isbn, err)
+			continue
+		}
+		if err := dm.UpdateBookCover(m.id, filename); err != nil {
+			log.Printf("FetchAndStoreSeedCovers: UpdateBookCover for book %d: %v", m.id, err)
+			continue
+		}
+		saved++
+	}
+	log.Printf("FetchAndStoreSeedCovers: saved %d/%d cover(s) in %v", saved, len(pending), time.Since(start).Round(time.Millisecond))
 }

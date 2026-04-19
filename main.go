@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"html/template"
 	"log"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,6 +31,16 @@ func main() {
 	dm := NewDatabaseManager(dataDir + "/" + dbName)
 	dm.SeedDefaultUsers()
 	dm.SeedBooks()
+
+	// Opportunistically backfill covers from Open Library for any book
+	// that has an ISBN but no cover file yet. Safe to call every
+	// startup: the inner SELECT is a no-op after all seed books have
+	// their covers. 60s total budget so a slow OL (or network block)
+	// cannot wedge the server at boot -- the inner HTTP client also
+	// has its own 10s per-request timeout.
+	seedCoverCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	dm.FetchAndStoreSeedCovers(seedCoverCtx)
+	cancel()
 
 	// Template helpers
 	funcMap := template.FuncMap{
