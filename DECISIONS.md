@@ -107,7 +107,7 @@ server-side ISBN format validation before making the outbound request.
 **Context:** Admin needs to export and import the full database and cover images.
 **Decision:** Use Go's `archive/zip` standard library package.
 **Rationale:** No third-party dependency needed. ZIP contains the SQLite file and cover images
-from `static/images/covers/`.
+from `data/covers/` (the DATA_DIR-relative path since cover storage moved in #20).
 
 ---
 
@@ -259,3 +259,134 @@ The `"2006-01-02 15:04:05"` layout is Go's reference time; it produces exactly t
 SQLite's `CURRENT_TIMESTAMP` returns. Discovered via `TestAuthenticatedPOSTWithCSRF`, which
 was the first test to exercise the full `CreateSession` to `GetSession` round trip and caught
 the latent bug immediately.
+
+---
+
+## DEC-019: Type-to-confirm over delayed deletion queue for staff accounts
+
+**Date:** 2026-04-16 (CP5 design)
+**Context:** Admin staff deletion needs a safety net against accidental or mistaken deletion.
+Proposed design was a 48-hour delayed-deletion queue with cancellation. Evaluated against
+LibreShelf's actual threat model (single-admin class deployment) and the engineering cost.
+**Decision:** Use a type-to-confirm modal instead of a delayed queue. The delete button opens
+a Bootstrap modal containing the target username. The confirm button stays disabled until
+the admin types the username exactly. Deletion is immediate on confirm. No background job,
+no pending state, no cancellation flow. Last-admin and self-deletion checks run server-side
+and also gate the UI (delete button is disabled on rows that violate either rule).
+**Rationale:** A 48-hour queue would require a new pending-deletions table, a startup
+catch-up pass, a periodic scheduler goroutine, a cancellation UI, and a dual last-admin
+check (at schedule time and execution time, because two admins could schedule each other
+and leave zero admins). Each of those is a non-trivial lift and would need its own tests.
+Type-to-confirm captures most of the "oops" protection value in one modal with roughly
+fifty lines of client JS. Consistent with the Absolute Code philosophy: build the simpler
+thing first; revisit if the threat model changes.
+
+---
+
+## DEC-020: Combined username + role edit, restricted role transitions
+
+**Date:** 2026-04-16 (CP5 design)
+**Context:** Staff management needs to support renames and role changes. Options: separate
+endpoints per field (cleaner REST but more handlers), one combined edit endpoint, or
+promote/demote as explicit actions.
+**Decision:** One `POST /staff/:id/edit` endpoint updates both username and role in a
+single call. Allowed role transitions are `staff <-> admin` only. Patron role changes are
+out of scope and will be handled in `/patrons` (#21). Self role changes are forbidden
+(cannot demote yourself, prevents accidental admin lockout). The last admin cannot be
+demoted (same `CountAdmins() > 1` check used for deletion). The UI disables the `staff`
+option in the role dropdown when the target is the last admin, and disables the role
+field entirely when the target is the current user.
+**Rationale:** Combining username and role into one form matches the UX of a standard
+edit dialog and keeps the handler count low. Restricting role transitions to `staff <->
+admin` is a consequence of the CP4 three-role model: the patron role has a `patron_id`
+foreign key relationship and a different lifecycle, so co-mingling it with staff edits
+would invite bugs. Server-side checks are authoritative; the UI restrictions are UX
+polish only.
+
+---
+
+## DEC-021: Password complexity policy, enforced everywhere passwords are set
+
+**Date:** 2026-04-17 (CP5)
+**Context:** Until now the seed accounts used short, lowercase passwords (`admin123`,
+`staff123`, `patron123`) and there was no policy on operator-chosen passwords for the
+`ADMIN_PASSWORD` env override or future staff/patron create handlers. Staff management
+(#39) needs to validate passwords at every entry point, not just at the handler layer,
+or a seeded/override account can sidestep the rule.
+**Decision:** Enforce a single `ValidatePassword` function in `validators.go` that
+requires 8+ characters with at least one uppercase letter, one digit, and one special
+character (anything `unicode.IsPunct` or `unicode.IsSymbol`). Seed passwords bumped to
+`Admin123!`, `Staff123!`, `Patron123!`. `SeedDefaultUsers` calls `ValidatePassword` on
+the resolved `ADMIN_PASSWORD` before hashing and `log.Fatalf`s on failure so an
+invalid env override fails fast at startup. Every future password-setting path
+(staff create, staff password reset, patron create, admin password change) must pass
+through the same validator.
+**Rationale:** Centralizing the rule in one function prevents drift. Fatal-on-invalid
+for the env override is the right failure mode: silent-accept would let weak passwords
+through, and warn-and-fallback would silently swap the admin password without notice.
+Username format uses a separate `ValidateUsername` helper with lighter rules (3-32
+chars, alphanumeric + underscore) because username complexity serves a different
+purpose (collision avoidance, URL/log sanity) from password complexity.
+
+---
+
+## DEC-022: Multi-statement DB writes must run inside a transaction
+
+**Date:** 2026-04-17 (CP5)
+**Context:** CP5 introduces several operations that touch more than one table in a
+single logical write: staff `DeleteUser` removes sessions + user rows, patron create
+(#21) will insert into `patrons` + `users`, book create (#20) will insert into
+`books` + `authors` + `book_authors`, CP6 checkout will touch `loans` +
+`books.quantity_available`. The existing `SeedBooks` code did the book + author +
+book_author inserts as independent `Exec` calls with no atomicity. A failure partway
+through would leave a book with no authors, or partially-linked authors.
+**Decision:** Any multi-statement DB write is wrapped in a `sql.Tx` using the
+standard idiom:
+```go
+tx, err := dm.db.Begin()
+if err != nil { return err }
+defer tx.Rollback() // no-op after successful Commit
+// ... tx.Exec / tx.QueryRow for every write ...
+return tx.Commit()
+```
+`SeedBooks` was retrofitted into a loop that calls `seedOneBook(b seedBook) error`,
+with the transaction scoped per book (so a failure on one book still seeds the
+rest). `DeleteUser` already followed the pattern. Future multi-table writes in CP5
+and CP6 (`CreatePatron` with its linked user, `CreateBook` with authors, checkout
+and return, ZIP import) will use the same idiom.
+**Rationale:** The `defer tx.Rollback()` + explicit `tx.Commit()` pattern is the
+shortest correct way to handle transactions in Go: any early return rolls back
+automatically, and a successful commit makes the deferred rollback a no-op. Partial
+writes are the most common source of latent data-integrity bugs, and the cost of
+wrapping in a transaction is a single extra function call per write. Adopting this
+as a project standard now means every new handler in CP5-CP7 inherits the guarantee
+by default.
+
+---
+
+## DEC-023: Variant B two-button submit for bulk-entry forms
+
+**Date:** 2026-04-18 (CP5)
+**Context:** After shipping book Create with a PRG redirect to `/books/:id`, it became
+clear the single-destination flow hurt bulk-entry use cases (processing a donation
+stack, manually importing a shelf of titles). Three options on the table: always
+redirect back to `/books/new` after save, keep the single `/books/:id` redirect but
+add a "View book" link in the success banner, or give the admin an explicit choice
+at the moment of save with two submit buttons.
+**Decision:** Two submit buttons on the create form. "Save" posts with
+`submit_action=save` and redirects to `/books/:id` (detail page). "Save and Add
+Another" posts with `submit_action=add_another` and redirects back to `/books/new`
+with the form cleared. Flash cookies (`book_created` code plus the title in
+`flash_detail`) fire on both paths so either redirect target shows
+"Added to the catalog: **Title**" in the banner. The edit form shows only
+"Save Changes" -- add-another is a create-only affordance. Any unexpected
+`submit_action` value falls through to the default `/books/:id` redirect. The same
+pattern will apply to Patrons (#21) where the bulk-entry vs single-add tension also
+exists (a receptionist processing a stack of sign-up sheets vs. adding one patron
+to immediately check their record).
+**Rationale:** Django-admin pattern, battle-tested across years of CRUD UX. Gives
+both workflows without sacrificing either, which the single-button alternatives
+could not. The handler-side branch is one string comparison; the template-side
+addition is one extra `<button>` gated on `{{if .ShowAddAnother}}`. Surface area is
+small, the affordance is obvious to admins familiar with any other admin console,
+and it generalizes cleanly to the next CRUD surface.

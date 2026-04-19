@@ -1,4 +1,12 @@
 document.addEventListener("DOMContentLoaded", function () {
+    initCatalogFilter();
+    initStaffManagement();
+    initPatronManagement();
+    initBookDetail();
+    initBookForm();
+});
+
+function initCatalogFilter() {
     var searchInput = document.getElementById("catalog-search");
     var genreFilter = document.getElementById("genre-filter");
     var availableFilter = document.getElementById("available-filter");
@@ -55,4 +63,418 @@ document.addEventListener("DOMContentLoaded", function () {
     searchInput.addEventListener("input", filterBooks);
     genreFilter.addEventListener("change", filterBooks);
     availableFilter.addEventListener("change", filterBooks);
-});
+}
+
+function initStaffManagement() {
+    var editModal = document.getElementById("editStaffModal");
+    var deleteModal = document.getElementById("deleteStaffModal");
+    var resetModal = document.getElementById("resetPasswordModal");
+    if (!editModal && !deleteModal && !resetModal) return;
+
+    // Populate Edit modal from clicked row's data attributes
+    if (editModal) {
+        var editForm = document.getElementById("editStaffForm");
+        var editUsername = document.getElementById("edit-username");
+        var editRole = document.getElementById("edit-role");
+        var editNote = document.getElementById("edit-role-note");
+
+        document.querySelectorAll(".edit-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var id = btn.getAttribute("data-user-id");
+                var username = btn.getAttribute("data-username");
+                var role = btn.getAttribute("data-role");
+                var isSelf = btn.getAttribute("data-is-self") === "true";
+                var isLastAdmin = btn.getAttribute("data-is-last-admin") === "true";
+
+                editForm.action = "/staff/" + id + "/edit";
+                editUsername.value = username;
+                editRole.value = role;
+
+                // Reset options
+                Array.from(editRole.options).forEach(function (opt) {
+                    opt.disabled = false;
+                });
+                editRole.disabled = false;
+                editNote.textContent = "";
+
+                if (isSelf) {
+                    // Cannot change own role
+                    editRole.disabled = true;
+                    editNote.textContent = "You cannot change your own role.";
+                } else if (isLastAdmin) {
+                    // Cannot demote the last admin
+                    Array.from(editRole.options).forEach(function (opt) {
+                        if (opt.value === "staff") opt.disabled = true;
+                    });
+                    editNote.textContent = "This is the last admin account. Create another admin before demoting.";
+                }
+            });
+        });
+    }
+
+    // Type-to-confirm delete
+    if (deleteModal) {
+        var deleteForm = document.getElementById("deleteStaffForm");
+        var deleteTargetName = document.getElementById("delete-target-name");
+        var deleteTargetRole = document.getElementById("delete-target-role");
+        var deleteInput = document.getElementById("delete-confirm-input");
+        var deleteBtn = document.getElementById("delete-confirm-btn");
+        var expectedUsername = "";
+
+        document.querySelectorAll(".delete-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var id = btn.getAttribute("data-user-id");
+                expectedUsername = btn.getAttribute("data-username");
+                var role = btn.getAttribute("data-role");
+
+                deleteForm.action = "/staff/" + id + "/delete";
+                deleteTargetName.textContent = expectedUsername;
+                deleteTargetRole.textContent = role;
+                deleteInput.value = "";
+                deleteBtn.disabled = true;
+            });
+        });
+
+        deleteInput.addEventListener("input", function () {
+            deleteBtn.disabled = deleteInput.value !== expectedUsername;
+        });
+
+        // Reset on close
+        deleteModal.addEventListener("hidden.bs.modal", function () {
+            deleteInput.value = "";
+            deleteBtn.disabled = true;
+        });
+    }
+
+    // Reset Password modal
+    if (resetModal) {
+        var resetForm = document.getElementById("resetPasswordForm");
+        var resetTargetName = document.getElementById("reset-target-name");
+        var resetPassword = document.getElementById("reset-password");
+        var resetPasswordConfirm = document.getElementById("reset-password-confirm");
+
+        document.querySelectorAll(".reset-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var id = btn.getAttribute("data-user-id");
+                var username = btn.getAttribute("data-username");
+
+                resetForm.action = "/staff/" + id + "/password";
+                resetTargetName.textContent = username;
+                resetPassword.value = "";
+                resetPasswordConfirm.value = "";
+            });
+        });
+
+        resetModal.addEventListener("hidden.bs.modal", function () {
+            resetPassword.value = "";
+            resetPasswordConfirm.value = "";
+        });
+    }
+
+    attachFormValidation(document.getElementById("addStaffForm"), {
+        password: "#add-password",
+        confirm: "#add-password-confirm",
+        modal: document.getElementById("addStaffModal"),
+    });
+    attachFormValidation(document.getElementById("editStaffForm"), {
+        modal: editModal,
+    });
+    attachFormValidation(document.getElementById("resetPasswordForm"), {
+        password: "#reset-password",
+        confirm: "#reset-password-confirm",
+        modal: resetModal,
+    });
+}
+
+function initPatronManagement() {
+    var editModal = document.getElementById("editPatronModal");
+    var deleteModal = document.getElementById("deletePatronModal");
+    var addModal = document.getElementById("addPatronModal");
+    if (!editModal && !deleteModal && !addModal) return;
+
+    // Populate Edit modal from the clicked row's data attributes.
+    // Mirrors initStaffManagement but without the role/is-self logic
+    // (patron edit only covers name/email/phone; username is not
+    // editable per the #21 design).
+    if (editModal) {
+        var editForm = document.getElementById("editPatronForm");
+        var editName = document.getElementById("edit-patron-name");
+        var editEmail = document.getElementById("edit-patron-email");
+        var editPhone = document.getElementById("edit-patron-phone");
+
+        document.querySelectorAll(".patron-edit-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var id = btn.getAttribute("data-patron-id");
+                editForm.action = "/patrons/" + id + "/edit";
+                editName.value = btn.getAttribute("data-patron-name") || "";
+                editEmail.value = btn.getAttribute("data-patron-email") || "";
+                editPhone.value = btn.getAttribute("data-patron-phone") || "";
+            });
+        });
+    }
+
+    // Type-to-confirm delete. Same pattern as initStaffManagement;
+    // patron name is the token the admin must type to enable submit.
+    if (deleteModal) {
+        var deleteForm = document.getElementById("deletePatronForm");
+        var deleteTarget = document.getElementById("delete-patron-target-name");
+        var deleteInput = document.getElementById("delete-patron-confirm-input");
+        var deleteBtn = document.getElementById("delete-patron-confirm-btn");
+        var expectedName = "";
+
+        document.querySelectorAll(".patron-delete-btn").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+                var id = btn.getAttribute("data-patron-id");
+                expectedName = btn.getAttribute("data-patron-name");
+                deleteForm.action = "/patrons/" + id + "/delete";
+                deleteTarget.textContent = expectedName;
+                deleteInput.value = "";
+                deleteBtn.disabled = true;
+            });
+        });
+
+        deleteInput.addEventListener("input", function () {
+            deleteBtn.disabled = deleteInput.value !== expectedName;
+        });
+
+        deleteModal.addEventListener("hidden.bs.modal", function () {
+            deleteInput.value = "";
+            deleteBtn.disabled = true;
+        });
+    }
+
+    // Bootstrap live validation on all three patron forms. Add form
+    // has password + confirm pair (same as staff Add), Edit form has
+    // no password fields, Delete form has none either (type-to-
+    // confirm is handled separately above).
+    attachFormValidation(document.getElementById("addPatronForm"), {
+        password: "#add-patron-password",
+        confirm: "#add-patron-password-confirm",
+        modal: addModal,
+    });
+    attachFormValidation(document.getElementById("editPatronForm"), {
+        modal: editModal,
+    });
+}
+
+function initBookDetail() {
+    var deleteModal = document.getElementById("deleteBookModal");
+    if (!deleteModal) return;
+
+    var deleteForm = document.getElementById("deleteBookForm");
+    var titleTarget = document.getElementById("delete-book-title");
+    var confirmInput = document.getElementById("delete-book-confirm-input");
+    var confirmBtn = document.getElementById("delete-book-confirm-btn");
+    var expectedTitle = "";
+
+    document.querySelectorAll('[data-bs-target="#deleteBookModal"]').forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            var id = btn.getAttribute("data-book-id");
+            expectedTitle = btn.getAttribute("data-book-title");
+            deleteForm.action = "/books/" + id + "/delete";
+            titleTarget.textContent = expectedTitle;
+            confirmInput.value = "";
+            confirmBtn.disabled = true;
+        });
+    });
+
+    confirmInput.addEventListener("input", function () {
+        confirmBtn.disabled = confirmInput.value !== expectedTitle;
+    });
+
+    deleteModal.addEventListener("hidden.bs.modal", function () {
+        confirmInput.value = "";
+        confirmBtn.disabled = true;
+    });
+}
+
+function initBookForm() {
+    var form = document.getElementById("bookForm");
+    if (!form) return;
+
+    // Open Library lookup: fetch metadata for the ISBN in the form,
+    // prefill title/authors/year/publisher, and stage a cover URL in the
+    // hidden cover_url field so the server can download it on submit.
+    // The admin can still override any field before saving.
+    var lookupBtn = document.getElementById("ol-lookup-btn");
+    var isbnField = document.getElementById("book-isbn");
+    var titleField = document.getElementById("book-title");
+    var authorsField = document.getElementById("book-authors");
+    var yearField = document.getElementById("book-year");
+    var publisherField = document.getElementById("book-publisher");
+    var coverUrlField = document.getElementById("cover-url");
+    var coverPreview = document.getElementById("cover-preview");
+    var coverPlaceholder = document.getElementById("cover-placeholder");
+    var coverUrlNote = document.getElementById("cover-url-note");
+
+    function setStatus(msg, kind) {
+        var existing = document.getElementById("ol-lookup-status");
+        if (existing) existing.remove();
+        if (!msg) return;
+        var div = document.createElement("div");
+        div.id = "ol-lookup-status";
+        div.className = "form-text mt-2 " + (kind === "error" ? "text-danger" : "text-success");
+        div.textContent = msg;
+        lookupBtn.parentElement.appendChild(div);
+    }
+
+    if (lookupBtn && isbnField) {
+        lookupBtn.addEventListener("click", function () {
+            var isbn = isbnField.value.replace(/[\s-]/g, "");
+            if (!isbn) {
+                setStatus("Enter an ISBN first.", "error");
+                return;
+            }
+            setStatus("Looking up...", "info");
+            lookupBtn.disabled = true;
+
+            fetch("/api/openlibrary/isbn/" + encodeURIComponent(isbn), {
+                headers: { "Accept": "application/json" }
+            }).then(function (resp) {
+                lookupBtn.disabled = false;
+                if (resp.status === 404) {
+                    setStatus("No match in Open Library. Fill in manually.", "error");
+                    return null;
+                }
+                if (resp.status === 400) {
+                    setStatus("ISBN must be 10 or 13 characters.", "error");
+                    return null;
+                }
+                if (!resp.ok) {
+                    setStatus("Couldn't reach Open Library. Try again or fill in manually.", "error");
+                    return null;
+                }
+                return resp.json();
+            }).then(function (data) {
+                if (!data) return;
+                if (data.title) titleField.value = data.title;
+                if (Array.isArray(data.authors) && data.authors.length) {
+                    authorsField.value = data.authors.join(", ");
+                }
+                if (data.publish_year) yearField.value = data.publish_year;
+                if (data.publisher) publisherField.value = data.publisher;
+                if (data.cover_url) {
+                    coverUrlField.value = data.cover_url;
+                    if (coverPreview) {
+                        coverPreview.src = data.cover_url;
+                        coverPreview.style.display = "";
+                    }
+                    if (coverPlaceholder) coverPlaceholder.style.display = "none";
+                    if (coverUrlNote) coverUrlNote.style.display = "";
+                }
+                setStatus("Prefilled from Open Library. Review before saving.", "success");
+            }).catch(function () {
+                lookupBtn.disabled = false;
+                setStatus("Couldn't reach Open Library. Try again or fill in manually.", "error");
+            });
+        });
+    }
+
+    // Local cover-file preview so admins see what they selected without
+    // submitting. Uploading a file also clears any staged OL cover_url so
+    // the server routing (upload > URL > preserve existing) matches.
+    var coverInput = document.getElementById("cover-file");
+    if (coverInput) {
+        coverInput.addEventListener("change", function () {
+            var file = coverInput.files && coverInput.files[0];
+            if (!file) return;
+            if (coverUrlField) coverUrlField.value = "";
+            if (coverUrlNote) coverUrlNote.style.display = "none";
+            if (!coverPreview) return;
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                coverPreview.src = e.target.result;
+                coverPreview.style.display = "";
+                if (coverPlaceholder) coverPlaceholder.style.display = "none";
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    attachFormValidation(form, {});
+}
+
+// attachFormValidation wires Bootstrap 5 per-field live validation onto
+// a form. Each non-hidden input/select gets input+blur listeners that
+// toggle .is-invalid or .is-valid on the field based on its validity,
+// so the red/green feedback and .invalid-feedback message appear as the
+// user types. Empty fields stay neutral (no red until the user has
+// interacted or submitted) so the modal does not nag on open. On submit,
+// every field is forced through validation so untouched empty requireds
+// also light up red. Server-side validation remains the source of truth;
+// this is the client-side short-circuit so the user does not round-trip
+// for client-detectable mistakes.
+function attachFormValidation(form, options) {
+    if (!form) return;
+    options = options || {};
+    var passwordField = options.password ? form.querySelector(options.password) : null;
+    var confirmField = options.confirm ? form.querySelector(options.confirm) : null;
+
+    function checkMatch() {
+        if (!passwordField || !confirmField) return;
+        if (confirmField.value && passwordField.value !== confirmField.value) {
+            confirmField.setCustomValidity("mismatch");
+        } else {
+            confirmField.setCustomValidity("");
+        }
+    }
+
+    function markField(field, includeEmpty) {
+        if (!includeEmpty && field.value === "") {
+            field.classList.remove("is-invalid");
+            field.classList.remove("is-valid");
+            return;
+        }
+        if (field.checkValidity()) {
+            field.classList.add("is-valid");
+            field.classList.remove("is-invalid");
+        } else {
+            field.classList.add("is-invalid");
+            field.classList.remove("is-valid");
+        }
+    }
+
+    var fields = [];
+    form.querySelectorAll("input, select, textarea").forEach(function (f) {
+        if (f.type !== "hidden") fields.push(f);
+    });
+
+    fields.forEach(function (field) {
+        field.addEventListener("input", function () {
+            if (field === passwordField || field === confirmField) {
+                checkMatch();
+            }
+            markField(field, false);
+            if (field === passwordField && confirmField && confirmField.value) {
+                markField(confirmField, false);
+            }
+        });
+        field.addEventListener("blur", function () {
+            if (field === passwordField || field === confirmField) {
+                checkMatch();
+            }
+            markField(field, false);
+        });
+    });
+
+    form.addEventListener("submit", function (e) {
+        checkMatch();
+        fields.forEach(function (field) {
+            markField(field, true);
+        });
+        if (!form.checkValidity()) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    });
+
+    if (options.modal) {
+        options.modal.addEventListener("hidden.bs.modal", function () {
+            if (confirmField) confirmField.setCustomValidity("");
+            fields.forEach(function (field) {
+                field.classList.remove("is-invalid");
+                field.classList.remove("is-valid");
+            });
+        });
+    }
+}

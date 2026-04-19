@@ -12,17 +12,28 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 )
 
-func setupTestRouter(t *testing.T) *gin.Engine {
+// setupTestRouter builds a router that mirrors the production middleware
+// chain from main.go: public routes, an auth group with RequireAuth +
+// CSRFProtect, a staff group with RequireAuth + RequireStaff + CSRFProtect,
+// and an admin group with RequireAuth + RequireAdmin + CSRFProtect. Tests
+// that need auth call loginAs to create a user + session and get the
+// cookie and CSRF token to send with requests. Closes #35.
+func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	t.Helper()
 
-	// Create a temp database
-	tmpDir, err := os.MkdirTemp("", "librashelf-test-*")
+	tmpDir, err := os.MkdirTemp("", "libreshelf-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	// Route DATA_DIR into the per-test tmp dir so SaveUploadedCover and
+	// coversDir() write under tmpDir/covers/ rather than polluting ./data/
+	// in the repo. t.Setenv auto-restores on test end.
+	t.Setenv("DATA_DIR", tmpDir)
 
 	dm := NewDatabaseManager(tmpDir + "/test.sqlite")
 	dm.SeedBooks()
@@ -45,35 +56,114 @@ func setupTestRouter(t *testing.T) *gin.Engine {
 
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
-		"index", "catalog", "book_detail",
-		"patrons", "admin", "kiosk", "error",
+		"index", "catalog", "book_detail", "book_form",
+		"patrons", "admin", "kiosk", "staff", "error",
 	}
-
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
 			"templates/layout.html",
 			"templates/"+name+".html",
 		))
 	}
+	templates["login"] = template.Must(template.ParseFiles("templates/login.html"))
 
 	gin.SetMode(gin.TestMode)
-	router := gin.Default()
+	router := gin.New()
 	router.Use(DatabaseMiddleware(dm))
-	router.GET("/", HandleIndex)
-	router.GET("/catalog", HandleCatalog)
-	router.GET("/books/:id", HandleBookDetail)
-	router.GET("/patrons", HandlePatrons)
-	router.GET("/admin", HandleAdmin)
+
+	// Public routes
+	router.GET("/login", HandleLogin)
+	router.POST("/login", LoginCSRFProtect, HandleLoginPost)
 	router.GET("/kiosk", HandleKiosk)
+
+	// Authenticated routes -- any logged in user
+	auth := router.Group("/")
+	auth.Use(RequireAuth, CSRFProtect)
+	auth.GET("/", HandleIndex)
+	auth.GET("/catalog", HandleCatalog)
+	auth.GET("/books/:id", HandleBookDetail)
+	auth.POST("/logout", HandleLogout)
+
+	// Staff routes -- admin + staff
+	staff := router.Group("/")
+	staff.Use(RequireAuth, RequireStaff, CSRFProtect)
+	staff.GET("/patrons", HandlePatronList)
+	staff.POST("/patrons", HandlePatronCreate)
+	staff.POST("/patrons/:id/edit", HandlePatronEdit)
+	staff.POST("/patrons/:id/delete", HandlePatronDelete)
+	staff.GET("/admin", HandleAdmin)
+	staff.GET("/api/openlibrary/isbn/:isbn", HandleOpenLibraryLookup)
+	staff.GET("/books/new", HandleBookNew)
+	staff.POST("/books", HandleBookCreate)
+	staff.GET("/books/:id/edit", HandleBookEdit)
+	staff.POST("/books/:id/edit", HandleBookUpdate)
+
+	// Admin-only routes
+	admin := router.Group("/")
+	admin.Use(RequireAuth, RequireAdmin, CSRFProtect)
+	admin.GET("/staff", HandleStaffList)
+	admin.POST("/staff", HandleStaffCreate)
+	admin.POST("/staff/:id/edit", HandleStaffEdit)
+	admin.POST("/staff/:id/delete", HandleStaffDelete)
+	admin.POST("/staff/:id/password", HandleStaffResetPassword)
+	admin.POST("/books/:id/delete", HandleBookDelete)
+
 	router.NoRoute(HandleNotFound)
 
-	return router
+	return router, dm
+}
+
+// loginAs creates a user with the given role and a valid session, and
+// returns the session cookie plus the CSRF token to send on POSTs.
+// The bcrypt hash is computed against a fixed test password; callers
+// never need the password because they use the returned cookie directly.
+func loginAs(t *testing.T, dm *DatabaseManager, username, role string) (*http.Cookie, string) {
+	t.Helper()
+
+	hash, err := bcrypt.GenerateFromPassword([]byte("TestPass1!"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("bcrypt: %v", err)
+	}
+	if err := dm.CreateUser(username, string(hash), role, nil); err != nil {
+		t.Fatalf("CreateUser(%q, %q): %v", username, role, err)
+	}
+	user, err := dm.GetUserByUsername(username)
+	if err != nil {
+		t.Fatalf("GetUserByUsername(%q): %v", username, err)
+	}
+
+	sessionToken := "test-session-" + username
+	csrfToken := "test-csrf-" + username
+	if err := dm.CreateSession(sessionToken, user.ID, csrfToken, time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	return &http.Cookie{Name: "session", Value: sessionToken}, csrfToken
+}
+
+// logoutHelper performs POST /logout through the router with the given
+// session cookie and CSRF token. Returns the response recorder so the
+// caller can assert on status, cookie clearing, etc.
+func logoutHelper(t *testing.T, router *gin.Engine, sessionCookie *http.Cookie, csrfToken string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	form := url.Values{}
+	form.Set("csrf_token", csrfToken)
+	req := httptest.NewRequest("POST", "/logout", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(sessionCookie)
+
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	return rr
 }
 
 func TestIndexRoute(t *testing.T) {
-	router := setupTestRouter(t)
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin", "admin")
 
 	req, _ := http.NewRequest("GET", "/", nil)
+	req.AddCookie(sess)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
@@ -83,26 +173,153 @@ func TestIndexRoute(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), "Dashboard") {
 		t.Errorf("Expected body to contain 'Dashboard'")
 	}
-	t.Log("Index route test passed!")
 }
 
-func TestAllRoutesReturn200(t *testing.T) {
-	router := setupTestRouter(t)
+// TestPublicRoutesReturn200 verifies routes registered outside the auth
+// group serve 200 without any session cookie.
+func TestPublicRoutesReturn200(t *testing.T) {
+	router, _ := setupTestRouter(t)
 
-	routes := []string{"/", "/catalog", "/patrons", "/admin", "/kiosk", "/books/1"}
-	for _, route := range routes {
+	for _, route := range []string{"/kiosk", "/login"} {
 		req, _ := http.NewRequest("GET", route, nil)
 		rr := httptest.NewRecorder()
 		router.ServeHTTP(rr, req)
-
 		if rr.Code != http.StatusOK {
-			t.Errorf("Route %s: expected 200, got %d", route, rr.Code)
+			t.Errorf("%s: expected 200, got %d", route, rr.Code)
 		}
 	}
 }
 
+// TestAuthedRoutesReturn200AsAdmin verifies the auth group routes (dashboard,
+// catalog, book detail) serve 200 when the caller holds a valid session.
+func TestAuthedRoutesReturn200AsAdmin(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin", "admin")
+
+	for _, route := range []string{"/", "/catalog", "/books/1"} {
+		req, _ := http.NewRequest("GET", route, nil)
+		req.AddCookie(sess)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("%s: expected 200, got %d", route, rr.Code)
+		}
+	}
+}
+
+// TestStaffRoutesReturn200AsStaff verifies the staff group routes serve
+// 200 for a staff-role session. Admin routes not tested here because the
+// admin group has no routes registered yet.
+func TestStaffRoutesReturn200AsStaff(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "staff1", "staff")
+
+	for _, route := range []string{"/patrons", "/admin"} {
+		req, _ := http.NewRequest("GET", route, nil)
+		req.AddCookie(sess)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Errorf("%s: expected 200, got %d", route, rr.Code)
+		}
+	}
+}
+
+// TestProtectedRoutesRedirectWithoutAuth asserts that every non-public
+// route redirects to /login when no session cookie is present. This is
+// the regression pin for #35: if a future edit forgets to attach
+// RequireAuth to a route group, one of these hits will return 200
+// instead of 302 and the test fires.
+func TestProtectedRoutesRedirectWithoutAuth(t *testing.T) {
+	router, _ := setupTestRouter(t)
+
+	for _, route := range []string{"/", "/catalog", "/books/1", "/books/new", "/books/1/edit", "/patrons", "/admin", "/staff", "/api/openlibrary/isbn/9780553213119"} {
+		req, _ := http.NewRequest("GET", route, nil)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusFound {
+			t.Errorf("%s: expected 302 redirect, got %d", route, rr.Code)
+			continue
+		}
+		if loc := rr.Header().Get("Location"); loc != "/login" {
+			t.Errorf("%s: expected redirect to /login, got %q", route, loc)
+		}
+	}
+}
+
+// TestPatronCannotAccessStaffRoutes asserts the RequireStaff middleware
+// actually rejects a patron-role session with 403, not 200 or redirect.
+// Regression pin for the role chain, separate from the auth chain.
+// Covers both staff-group routes (/patrons, /admin) and admin-group
+// routes (/staff) -- patrons must be rejected by both.
+func TestPatronCannotAccessStaffRoutes(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "patron1", "patron")
+
+	for _, route := range []string{"/patrons", "/admin", "/staff", "/books/new", "/books/1/edit", "/api/openlibrary/isbn/9780553213119"} {
+		req, _ := http.NewRequest("GET", route, nil)
+		req.AddCookie(sess)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("%s: expected 403, got %d", route, rr.Code)
+		}
+	}
+}
+
+// TestStaffRoleCannotAccessAdminRoutes asserts that a staff-role session
+// is rejected by the admin-group middleware chain with 403. /staff is
+// admin-only even though /patrons and /admin (the routes) are reachable
+// by any staff-tier user. Regression pin for the RequireAdmin boundary:
+// if a future edit accidentally drops RequireAdmin from the admin group,
+// a staff session would start passing through to HandleStaffList and this
+// test would fire.
+func TestStaffRoleCannotAccessAdminRoutes(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "staff1", "staff")
+
+	for _, route := range []string{"/staff"} {
+		req, _ := http.NewRequest("GET", route, nil)
+		req.AddCookie(sess)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("%s: expected 403 for staff-role session on admin route, got %d", route, rr.Code)
+		}
+	}
+}
+
+// TestLogoutClearsSessionAndRedirectsProtectedRoutes verifies that after
+// a successful logout, the session row is gone and protected routes that
+// were previously accessible now redirect to /login. Exercises the full
+// RequireAuth -> CSRFProtect -> HandleLogout chain via logoutHelper and
+// then probes the downstream effect.
+func TestLogoutClearsSessionAndRedirectsProtectedRoutes(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	logoutRR := logoutHelper(t, router, sess, csrf)
+	if logoutRR.Code != http.StatusFound {
+		t.Fatalf("logout: expected 302, got %d. body: %s", logoutRR.Code, logoutRR.Body.String())
+	}
+
+	// Old cookie should now be rejected since the session row is gone.
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusFound || rr.Header().Get("Location") != "/login" {
+		t.Errorf("after logout, / should redirect to /login; got status=%d location=%q",
+			rr.Code, rr.Header().Get("Location"))
+	}
+}
+
 func TestNotFoundReturns404(t *testing.T) {
-	router := setupTestRouter(t)
+	router, _ := setupTestRouter(t)
 
 	req, _ := http.NewRequest("GET", "/doesnotexist", nil)
 	rr := httptest.NewRecorder()
@@ -114,9 +331,11 @@ func TestNotFoundReturns404(t *testing.T) {
 }
 
 func TestBookDetailNotFoundReturns404(t *testing.T) {
-	router := setupTestRouter(t)
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin", "admin")
 
 	req, _ := http.NewRequest("GET", "/books/9999", nil)
+	req.AddCookie(sess)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
@@ -126,9 +345,11 @@ func TestBookDetailNotFoundReturns404(t *testing.T) {
 }
 
 func TestBookDetailNonNumericReturns404(t *testing.T) {
-	router := setupTestRouter(t)
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin", "admin")
 
 	req, _ := http.NewRequest("GET", "/books/abc", nil)
+	req.AddCookie(sess)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 
@@ -142,9 +363,11 @@ func TestBookDetailNonNumericReturns404(t *testing.T) {
 // sniffing, which worked accidentally; the buffer-based rewrite sets it
 // explicitly and this test pins that behavior.
 func TestResponseContentTypeIsHTML(t *testing.T) {
-	router := setupTestRouter(t)
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin", "admin")
 
 	req, _ := http.NewRequest("GET", "/", nil)
+	req.AddCookie(sess)
 	rr := httptest.NewRecorder()
 	router.ServeHTTP(rr, req)
 

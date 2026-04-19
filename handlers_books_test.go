@@ -1,0 +1,982 @@
+package main
+
+import (
+	"bytes"
+	"fmt"
+	"mime/multipart"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+)
+
+// postBookMultipart POSTs a multipart/form-data body to path. The book
+// form always submits multipart so HandleBookCreate can accept a cover
+// upload; tests must match that content type or ParseMultipartForm
+// returns ErrNotMultipart and the handler rejects the request as
+// "Invalid form submission."
+//
+// If coverFilename is empty, no file part is attached. Otherwise,
+// coverBytes is written as that file under form field "cover".
+func postBookMultipart(t *testing.T, router *gin.Engine, path string, sess *http.Cookie, csrf string, fields map[string]string, coverFilename string, coverBytes []byte) *httptest.ResponseRecorder {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+
+	if err := writer.WriteField("csrf_token", csrf); err != nil {
+		t.Fatalf("WriteField csrf_token: %v", err)
+	}
+	for k, v := range fields {
+		if err := writer.WriteField(k, v); err != nil {
+			t.Fatalf("WriteField %s: %v", k, err)
+		}
+	}
+
+	if coverFilename != "" {
+		part, err := writer.CreateFormFile("cover", coverFilename)
+		if err != nil {
+			t.Fatalf("CreateFormFile: %v", err)
+		}
+		if _, err := part.Write(coverBytes); err != nil {
+			t.Fatalf("cover part write: %v", err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		t.Fatalf("multipart close: %v", err)
+	}
+
+	req := httptest.NewRequest("POST", path, &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	return rr
+}
+
+// validBookFields returns a minimal-valid field set for HandleBookCreate.
+// Tests copy and mutate individual fields to exercise single-field
+// validation failures without respelling the full form each time.
+func validBookFields() map[string]string {
+	return map[string]string{
+		"title":    "New Book",
+		"authors":  "Example Author",
+		"quantity": "3",
+	}
+}
+
+// minimalJPEG is enough bytes for http.DetectContentType to classify as
+// image/jpeg (signature is \xFF\xD8\xFF) and for SaveUploadedCover to
+// write a non-empty file to disk. Not a valid image; tests only care
+// about the sniff + write paths, not image decoding.
+var minimalJPEG = append([]byte{0xFF, 0xD8, 0xFF, 0xDB}, bytes.Repeat([]byte{0x00}, 128)...)
+
+// minimalPNG is the PNG magic bytes plus padding. Used to drive the
+// "extension says jpg but contents are png" MIME-mismatch test.
+var minimalPNG = append([]byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, bytes.Repeat([]byte{0x00}, 128)...)
+
+// ---------- Happy paths ----------
+
+// TestBookCreateHappyPath verifies minimal-valid POST /books inserts the
+// book, links exactly one author, and redirects to /books/:id with a
+// success flash. Pins the end-to-end path: multipart parse, validation
+// chain, CreateBook transaction, PRG redirect, flash cookies.
+func TestBookCreateHappyPath(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, validBookFields(), "", nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	loc := rr.Header().Get("Location")
+	if !strings.HasPrefix(loc, "/books/") || loc == "/books/new" {
+		t.Errorf("expected redirect to /books/:id, got %q", loc)
+	}
+	assertNoFlashError(t, rr)
+	assertFlashSuccessSet(t, rr)
+
+	// Minimal path sends no ISBN, so query by title via GetAllBooks.
+	books, err := dm.GetAllBooks()
+	if err != nil {
+		t.Fatalf("GetAllBooks: %v", err)
+	}
+	found := false
+	for _, b := range books {
+		if b.Title == "New Book" && b.Authors == "Example Author" && b.QuantityTotal == 3 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'New Book' with author 'Example Author' and quantity 3 in catalog, got %+v", books)
+	}
+}
+
+// TestBookCreateHappyPathFullFields verifies all optional fields (ISBN,
+// year, publisher, genre, description) are persisted when provided.
+// Without this, a regression that silently dropped an optional field
+// would only surface in manual testing.
+func TestBookCreateHappyPathFullFields(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	fields := validBookFields()
+	fields["title"] = "Full Book"
+	fields["isbn"] = "9781234567897"
+	fields["year"] = "1999"
+	fields["publisher"] = "Test House"
+	fields["genre"] = "Test Genre"
+	fields["description"] = "A book used as a full-fields test fixture."
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+
+	book, err := dm.GetBookByISBN("9781234567897")
+	if err != nil {
+		t.Fatalf("GetBookByISBN: %v", err)
+	}
+	// GetBookByISBN only selects id+title; fetch the full row via GetBookByID.
+	full, err := dm.GetBookByID(book.ID)
+	if err != nil {
+		t.Fatalf("GetBookByID: %v", err)
+	}
+	if full.Title != "Full Book" {
+		t.Errorf("title: got %q", full.Title)
+	}
+	if full.ISBN == nil || *full.ISBN != "9781234567897" {
+		t.Errorf("ISBN not stored: %+v", full.ISBN)
+	}
+	if full.Year == nil || *full.Year != 1999 {
+		t.Errorf("year not stored: %+v", full.Year)
+	}
+	if full.Publisher == nil || *full.Publisher != "Test House" {
+		t.Errorf("publisher not stored: %+v", full.Publisher)
+	}
+	if full.Genre == nil || *full.Genre != "Test Genre" {
+		t.Errorf("genre not stored: %+v", full.Genre)
+	}
+	if full.Description == nil || !strings.Contains(*full.Description, "full-fields test fixture") {
+		t.Errorf("description not stored: %+v", full.Description)
+	}
+}
+
+// TestBookCreateAddAnotherRedirectsToNew pins the Variant B branching:
+// when submit_action=add_another is set, the handler must redirect back
+// to /books/new (not /books/:id). Flash is still set so the form page
+// shows a success banner.
+func TestBookCreateAddAnotherRedirectsToNew(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	fields := validBookFields()
+	fields["submit_action"] = "add_another"
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	if loc := rr.Header().Get("Location"); loc != "/books/new" {
+		t.Errorf("expected redirect to /books/new, got %q", loc)
+	}
+	assertFlashSuccessSet(t, rr)
+}
+
+// TestBookCreateSaveDefaultRedirectsToDetail mirrors the branching test:
+// the "save" submit_action (or none at all) must redirect to the
+// /books/:id detail page, not back to the form.
+func TestBookCreateSaveDefaultRedirectsToDetail(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	fields := validBookFields()
+	fields["submit_action"] = "save"
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	loc := rr.Header().Get("Location")
+	if loc == "/books/new" || !strings.HasPrefix(loc, "/books/") {
+		t.Errorf("expected redirect to /books/:id, got %q", loc)
+	}
+}
+
+// ---------- Validation rejections ----------
+
+// TestBookCreateRejectsMissingTitle verifies an empty title re-renders
+// the form (400) rather than 302-redirecting. Book must NOT be created.
+func TestBookCreateRejectsMissingTitle(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	before, _ := dm.GetAllBooks()
+
+	fields := validBookFields()
+	fields["title"] = ""
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 re-render, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	after, _ := dm.GetAllBooks()
+	if len(after) != len(before) {
+		t.Errorf("book count changed on invalid submit: before=%d after=%d", len(before), len(after))
+	}
+}
+
+// TestBookCreateRejectsNoAuthors verifies the authors-required validator.
+// An empty authors field must re-render, not create a book.
+func TestBookCreateRejectsNoAuthors(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	before, _ := dm.GetAllBooks()
+
+	fields := validBookFields()
+	fields["authors"] = ""
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 re-render, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	after, _ := dm.GetAllBooks()
+	if len(after) != len(before) {
+		t.Errorf("book count changed on invalid submit")
+	}
+}
+
+// TestBookCreateRejectsZeroQuantity verifies quantity >= 1 is enforced
+// server-side. A zero quantity would mean "on the shelf but never
+// borrowable" which has no business meaning.
+func TestBookCreateRejectsZeroQuantity(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	fields := validBookFields()
+	fields["quantity"] = "0"
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 re-render, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestBookCreateRejectsYearOutOfRange pins the 1500-2100 bound. 1400 is
+// chosen because typography pre-Gutenberg printing is clearly invalid
+// for a physical book record.
+func TestBookCreateRejectsYearOutOfRange(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	fields := validBookFields()
+	fields["year"] = "1400"
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 re-render, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestBookCreateRejectsInvalidISBN pins IsValidISBN: 11-char numeric
+// strings are neither ISBN-10 nor ISBN-13, and must be rejected even
+// though they pass an "only digits" sanity check.
+func TestBookCreateRejectsInvalidISBN(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	fields := validBookFields()
+	fields["isbn"] = "12345678901"
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 re-render, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestBookCreateRejectsDuplicateISBN verifies the pre-insert ISBN
+// duplicate check surfaces as a form re-render (not a 500 from the
+// UNIQUE constraint). Also verifies the error message names the
+// existing title so the operator knows what they collided with.
+func TestBookCreateRejectsDuplicateISBN(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	existingISBN := "9781234567897"
+	if _, err := dm.CreateBook(
+		&Book{Title: "Existing", ISBN: &existingISBN, QuantityTotal: 1, QuantityAvailable: 1},
+		[]string{"Seed Author"},
+	); err != nil {
+		t.Fatalf("seed CreateBook: %v", err)
+	}
+
+	fields := validBookFields()
+	fields["title"] = "Collider"
+	fields["isbn"] = existingISBN
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 re-render on duplicate ISBN, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "Existing") {
+		t.Errorf("expected duplicate-ISBN error to name the existing title %q, body: %s", "Existing", rr.Body.String())
+	}
+
+	// Verify only the seeded "Existing" book carries that ISBN; no second row.
+	books, err := dm.GetAllBooks()
+	if err != nil {
+		t.Fatalf("GetAllBooks: %v", err)
+	}
+	matches := 0
+	for _, b := range books {
+		if b.ISBN != nil && *b.ISBN == existingISBN {
+			matches++
+		}
+	}
+	if matches != 1 {
+		t.Errorf("expected exactly 1 row with ISBN %s, got %d", existingISBN, matches)
+	}
+}
+
+// ---------- Cover upload ----------
+
+// TestBookCreateAcceptsValidJPEGCover verifies a valid JPEG (extension +
+// magic-byte match) is saved to disk under DATA_DIR/covers and the
+// resulting filename is persisted on the book row. Uses minimalJPEG
+// which satisfies http.DetectContentType's image/jpeg signature.
+func TestBookCreateAcceptsValidJPEGCover(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	fields := validBookFields()
+	fields["title"] = "Book With Cover"
+	fields["isbn"] = "9789999999990"
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "cover.jpg", minimalJPEG)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+
+	book, err := dm.GetBookByISBN("9789999999990")
+	if err != nil {
+		t.Fatalf("GetBookByISBN: %v", err)
+	}
+	full, err := dm.GetBookByID(book.ID)
+	if err != nil {
+		t.Fatalf("GetBookByID: %v", err)
+	}
+	if full.CoverFilename == nil {
+		t.Fatalf("expected cover_filename to be set on the book row")
+	}
+	if !strings.HasSuffix(*full.CoverFilename, ".jpg") {
+		t.Errorf("expected .jpg extension on saved cover, got %q", *full.CoverFilename)
+	}
+
+	path := filepath.Join(os.Getenv("DATA_DIR"), "covers", *full.CoverFilename)
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("expected cover file on disk at %s, got %v", path, err)
+	}
+	if info.Size() == 0 {
+		t.Errorf("cover file is empty")
+	}
+}
+
+// TestBookCreateRejectsMimeMismatch verifies the magic-byte check:
+// filename ends in .jpg but the bytes are PNG. SaveUploadedCover must
+// reject, the book must NOT be created, and the response is a re-render.
+func TestBookCreateRejectsMimeMismatch(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	before, _ := dm.GetAllBooks()
+
+	fields := validBookFields()
+	fields["title"] = "Bogus Cover"
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "cover.jpg", minimalPNG)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 re-render on MIME mismatch, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	after, _ := dm.GetAllBooks()
+	if len(after) != len(before) {
+		t.Errorf("book count changed despite bad cover: before=%d after=%d", len(before), len(after))
+	}
+}
+
+// ---------- Open Library proxy ----------
+
+// TestOpenLibraryLookupRejectsInvalidISBN verifies the proxy endpoint
+// short-circuits on a malformed ISBN with 400 and never makes an
+// outbound request. Using a 5-digit string so length validation fires
+// regardless of checksum logic.
+func TestOpenLibraryLookupRejectsInvalidISBN(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin", "admin")
+
+	req, _ := http.NewRequest("GET", "/api/openlibrary/isbn/12345", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid ISBN, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "invalid_isbn") {
+		t.Errorf("expected body to identify invalid_isbn, got %s", rr.Body.String())
+	}
+}
+
+// ---------- Flash detail cookie ----------
+
+// TestBookCreateFlashDetailRoundTripsSpecialChars verifies the new
+// flash_detail cookie plumbing: a title containing an apostrophe and
+// non-ASCII character is URL-escaped on set and correctly decoded on
+// read. The decoded title must appear in the subsequent /books/:id
+// page body. Without URL-escape, the raw apostrophe would either be
+// silently dropped by net/http cookie validation or break the cookie
+// header entirely.
+func TestBookCreateFlashDetailRoundTripsSpecialChars(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	const title = "O'Brien's Café"
+	fields := validBookFields()
+	fields["title"] = title
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+
+	// The flash_detail cookie value on the wire is URL-escaped.
+	cookieVal, ok := flashSet(rr, "flash_detail")
+	if !ok {
+		t.Fatalf("expected flash_detail cookie set on redirect, cookies: %v", rr.Result().Cookies())
+	}
+	unescaped, err := url.QueryUnescape(cookieVal)
+	if err != nil {
+		t.Fatalf("flash_detail cookie not url-escaped: %v (raw=%q)", err, cookieVal)
+	}
+	if unescaped != title {
+		t.Errorf("flash_detail round-trip: got %q, want %q", unescaped, title)
+	}
+
+	// Follow the redirect manually to verify HandleBookDetail reads and
+	// renders the detail into the success banner. Carry both the session
+	// cookie and the freshly-set flash cookies forward.
+	loc := rr.Header().Get("Location")
+	followReq, _ := http.NewRequest("GET", loc, nil)
+	followReq.AddCookie(sess)
+	for _, c := range rr.Result().Cookies() {
+		followReq.AddCookie(c)
+	}
+	followRR := httptest.NewRecorder()
+	router.ServeHTTP(followRR, followReq)
+
+	if followRR.Code != http.StatusOK {
+		t.Fatalf("expected 200 on detail page, got %d", followRR.Code)
+	}
+	// html/template escapes the apostrophe as &#39; and é as é (UTF-8 kept),
+	// so assert via the unambiguous UTF-8 suffix.
+	if !strings.Contains(followRR.Body.String(), "Café") {
+		t.Errorf("expected detail page to render flash_detail title, body missing 'Café'")
+	}
+}
+
+// TestFlashDetailCookieClearedOnRead verifies readAndClearFlashDetail
+// sets the cookie MaxAge to -1 on the response, so a subsequent request
+// would not re-display the banner. Uses HandleBookDetail as the reader;
+// the second request to the same URL must NOT see the detail rendered.
+func TestFlashDetailCookieClearedOnRead(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	fields := validBookFields()
+	fields["title"] = "Clear Me"
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302 on create, got %d", rr.Code)
+	}
+	loc := rr.Header().Get("Location")
+
+	// First GET consumes the flash cookies.
+	req1, _ := http.NewRequest("GET", loc, nil)
+	req1.AddCookie(sess)
+	for _, c := range rr.Result().Cookies() {
+		req1.AddCookie(c)
+	}
+	rr1 := httptest.NewRecorder()
+	router.ServeHTTP(rr1, req1)
+	if rr1.Code != http.StatusOK {
+		t.Fatalf("expected 200 on first detail view, got %d", rr1.Code)
+	}
+	if !strings.Contains(rr1.Body.String(), "Clear Me") {
+		t.Fatalf("first view should have rendered the detail banner")
+	}
+	// The response should set flash_detail with MaxAge <= 0 (cleared).
+	cleared := false
+	for _, c := range rr1.Result().Cookies() {
+		if c.Name == "flash_detail" && c.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Errorf("expected flash_detail cookie to be cleared (MaxAge=-1) on read, cookies: %v", rr1.Result().Cookies())
+	}
+
+	// Second GET, without forwarding the now-cleared cookies, should not
+	// render the banner text because GetBookByID's Book.Title is "Clear
+	// Me" -- so filter by the bolded <strong> wrapper the template uses
+	// to surface the detail specifically.
+	req2, _ := http.NewRequest("GET", loc, nil)
+	req2.AddCookie(sess)
+	rr2 := httptest.NewRecorder()
+	router.ServeHTTP(rr2, req2)
+	if rr2.Code != http.StatusOK {
+		t.Fatalf("expected 200 on second detail view, got %d", rr2.Code)
+	}
+	if strings.Contains(rr2.Body.String(), "<strong>Clear Me</strong>") {
+		t.Errorf("flash banner should not render on second view (cookie cleared)")
+	}
+}
+
+// ---------- Negative: unauthenticated create is already covered in
+// main_test.go by TestProtectedRoutesRedirectWithoutAuth /
+// TestPatronCannotAccessStaffRoutes. Not duplicated here to keep this
+// file focused on handler logic, not middleware wiring.
+
+// TestBookCreateUnknownSubmitActionFallsThrough verifies that an
+// unexpected submit_action value does not trigger the "add_another"
+// branch -- the handler treats anything other than exactly "add_another"
+// as the default /books/:id redirect.
+func TestBookCreateUnknownSubmitActionFallsThrough(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	fields := validBookFields()
+	fields["submit_action"] = "gibberish"
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	if loc := rr.Header().Get("Location"); loc == "/books/new" {
+		t.Errorf("unknown submit_action should not route to /books/new, got %q", loc)
+	}
+}
+
+// ---------- Edit handler (GET) ----------
+
+// mustCreateBookWithCover seeds a book plus an on-disk cover file so
+// cover-preservation / cover-replacement tests can observe the file
+// system side effects. Uses a random-ish fake filename (cover bytes are
+// not a real image; disk presence is all tests assert).
+func mustCreateBookWithCover(t *testing.T, dm *DatabaseManager, title, isbn string) (int, string) {
+	t.Helper()
+	filename := "test-" + title + ".jpg"
+	full := filepath.Join(coversDir(), filename)
+	if err := os.MkdirAll(coversDir(), 0o755); err != nil {
+		t.Fatalf("MkdirAll covers: %v", err)
+	}
+	if err := os.WriteFile(full, []byte("not-a-real-image"), 0o644); err != nil {
+		t.Fatalf("WriteFile cover: %v", err)
+	}
+	book := &Book{Title: title, CoverFilename: &filename, QuantityTotal: 1, QuantityAvailable: 1}
+	if isbn != "" {
+		book.ISBN = &isbn
+	}
+	id, err := dm.CreateBook(book, []string{"Seed Author"})
+	if err != nil {
+		t.Fatalf("CreateBook: %v", err)
+	}
+	return id, filename
+}
+
+// TestBookEditRendersFormPrefilled pins the GET edit page: the form must
+// render with the book's current title and authors so the admin sees
+// what they're editing. Without the prefill, edits would silently clear
+// unmodified fields.
+func TestBookEditRendersFormPrefilled(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin", "admin")
+
+	// Book id 1 is "Pride and Prejudice" by "Jane Austen" per SeedBooks.
+	req, _ := http.NewRequest("GET", "/books/1/edit", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Pride and Prejudice") {
+		t.Errorf("expected edit form to contain title 'Pride and Prejudice'")
+	}
+	if !strings.Contains(body, "Jane Austen") {
+		t.Errorf("expected edit form to contain author 'Jane Austen'")
+	}
+	if !strings.Contains(body, `action="/books/1/edit"`) {
+		t.Errorf("expected form action to point at /books/1/edit, body: %s", body)
+	}
+}
+
+// TestBookEditReturns404ForMissing pins the not-found handling: asking
+// to edit a book id that does not exist must 404, not 500 or empty
+// form.
+func TestBookEditReturns404ForMissing(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin", "admin")
+
+	req, _ := http.NewRequest("GET", "/books/99999/edit", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// ---------- Update handler (POST) ----------
+
+// TestBookUpdateHappyPath verifies a title change is persisted and the
+// response redirects to the detail page with a success flash.
+func TestBookUpdateHappyPath(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	id, _ := dm.CreateBook(&Book{Title: "Original", QuantityTotal: 1, QuantityAvailable: 1}, []string{"Seed Author"})
+
+	fields := map[string]string{
+		"title":    "Updated Title",
+		"authors":  "Seed Author",
+		"quantity": "1",
+	}
+	rr := postBookMultipart(t, router, fmt.Sprintf("/books/%d/edit", id), sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	if loc := rr.Header().Get("Location"); loc != fmt.Sprintf("/books/%d", id) {
+		t.Errorf("expected redirect to /books/%d, got %q", id, loc)
+	}
+	assertFlashSuccessSet(t, rr)
+
+	book, err := dm.GetBookByID(id)
+	if err != nil {
+		t.Fatalf("GetBookByID: %v", err)
+	}
+	if book.Title != "Updated Title" {
+		t.Errorf("title not updated: got %q", book.Title)
+	}
+}
+
+// TestBookUpdatePreservesExistingCover verifies that editing a book
+// without uploading a new cover or providing a cover_url leaves both
+// the DB row's cover_filename AND the on-disk file intact. Regression
+// pin for the "carry existing.CoverFilename through to the updated row"
+// branch in HandleBookUpdate.
+func TestBookUpdatePreservesExistingCover(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	id, filename := mustCreateBookWithCover(t, dm, "CoverBook", "")
+	fullPath := filepath.Join(coversDir(), filename)
+
+	fields := map[string]string{
+		"title":    "CoverBook Retitled",
+		"authors":  "Seed Author",
+		"quantity": "1",
+	}
+	rr := postBookMultipart(t, router, fmt.Sprintf("/books/%d/edit", id), sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	book, err := dm.GetBookByID(id)
+	if err != nil {
+		t.Fatalf("GetBookByID: %v", err)
+	}
+	if book.CoverFilename == nil || *book.CoverFilename != filename {
+		t.Errorf("expected cover_filename preserved as %q, got %+v", filename, book.CoverFilename)
+	}
+	if _, err := os.Stat(fullPath); err != nil {
+		t.Errorf("expected existing cover file to still be on disk at %s, got %v", fullPath, err)
+	}
+}
+
+// TestBookUpdateReplacesExistingCover verifies that uploading a new
+// cover both (a) updates the DB row to the new filename and (b) removes
+// the prior cover file from disk after the DB write succeeds. Without
+// the cleanup, every edit would accumulate orphaned files in
+// DATA_DIR/covers.
+func TestBookUpdateReplacesExistingCover(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	id, oldFilename := mustCreateBookWithCover(t, dm, "ReplaceCover", "")
+	oldPath := filepath.Join(coversDir(), oldFilename)
+
+	fields := map[string]string{
+		"title":    "ReplaceCover",
+		"authors":  "Seed Author",
+		"quantity": "1",
+	}
+	rr := postBookMultipart(t, router, fmt.Sprintf("/books/%d/edit", id), sess, csrf, fields, "new.jpg", minimalJPEG)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	book, err := dm.GetBookByID(id)
+	if err != nil {
+		t.Fatalf("GetBookByID: %v", err)
+	}
+	if book.CoverFilename == nil {
+		t.Fatalf("expected cover_filename to still be set")
+	}
+	if *book.CoverFilename == oldFilename {
+		t.Errorf("cover_filename was not replaced, still %q", oldFilename)
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Errorf("expected old cover file to be removed from disk, stat: %v", err)
+	}
+	newPath := filepath.Join(coversDir(), *book.CoverFilename)
+	if _, err := os.Stat(newPath); err != nil {
+		t.Errorf("expected new cover file on disk at %s, got %v", newPath, err)
+	}
+}
+
+// TestBookUpdateRejectsDuplicateISBN verifies the conflict check: if
+// another book already owns the ISBN being set, the edit is rejected
+// with a 400 re-render and the error names the conflicting title.
+func TestBookUpdateRejectsDuplicateISBN(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	takenISBN := "9781111111116"
+	takenTitle := "Taken"
+	if _, err := dm.CreateBook(
+		&Book{Title: takenTitle, ISBN: &takenISBN, QuantityTotal: 1, QuantityAvailable: 1},
+		[]string{"Seed Author"},
+	); err != nil {
+		t.Fatalf("seed taken book: %v", err)
+	}
+
+	targetID, err := dm.CreateBook(
+		&Book{Title: "Target", QuantityTotal: 1, QuantityAvailable: 1},
+		[]string{"Seed Author"},
+	)
+	if err != nil {
+		t.Fatalf("seed target book: %v", err)
+	}
+
+	fields := map[string]string{
+		"title":    "Target",
+		"authors":  "Seed Author",
+		"quantity": "1",
+		"isbn":     takenISBN,
+	}
+	rr := postBookMultipart(t, router, fmt.Sprintf("/books/%d/edit", targetID), sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 re-render on duplicate ISBN, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), takenTitle) {
+		t.Errorf("expected duplicate-ISBN error to name %q, body: %s", takenTitle, rr.Body.String())
+	}
+
+	after, err := dm.GetBookByID(targetID)
+	if err != nil {
+		t.Fatalf("GetBookByID: %v", err)
+	}
+	if after.ISBN != nil {
+		t.Errorf("target book's ISBN should still be nil (edit rejected), got %+v", after.ISBN)
+	}
+}
+
+// TestBookUpdateAllowsSameISBNOnSelfEdit pins the "exclude self from
+// conflict check" clause. A no-op edit that leaves a book's own ISBN
+// unchanged must succeed, not fire the duplicate guard against itself.
+func TestBookUpdateAllowsSameISBNOnSelfEdit(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	isbn := "9782222222229"
+	id, err := dm.CreateBook(
+		&Book{Title: "SelfEdit", ISBN: &isbn, QuantityTotal: 1, QuantityAvailable: 1},
+		[]string{"Seed Author"},
+	)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	fields := map[string]string{
+		"title":    "SelfEdit Retitled",
+		"authors":  "Seed Author",
+		"quantity": "1",
+		"isbn":     isbn,
+	}
+	rr := postBookMultipart(t, router, fmt.Sprintf("/books/%d/edit", id), sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302 success, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	after, err := dm.GetBookByID(id)
+	if err != nil {
+		t.Fatalf("GetBookByID: %v", err)
+	}
+	if after.Title != "SelfEdit Retitled" {
+		t.Errorf("title not updated on self-ISBN edit: got %q", after.Title)
+	}
+}
+
+// TestBookUpdateReturns404ForMissing: POST to an edit URL for a book id
+// that does not exist must 404, not silently create or 500.
+func TestBookUpdateReturns404ForMissing(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	rr := postBookMultipart(t, router, "/books/99999/edit", sess, csrf, validBookFields(), "", nil)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// ---------- Delete handler (POST) ----------
+
+// TestBookDeleteHappyPath verifies the row is removed AND the cover
+// file is deleted from disk. Tests both halves of the success path in
+// one pass since they always travel together.
+func TestBookDeleteHappyPath(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	id, filename := mustCreateBookWithCover(t, dm, "ToDelete", "")
+	fullPath := filepath.Join(coversDir(), filename)
+
+	rr := postStaffForm(t, router, fmt.Sprintf("/books/%d/delete", id), sess, csrf, nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	if loc := rr.Header().Get("Location"); loc != "/catalog" {
+		t.Errorf("expected redirect to /catalog, got %q", loc)
+	}
+	assertNoFlashError(t, rr)
+	assertFlashSuccessSet(t, rr)
+
+	if _, err := dm.GetBookByID(id); err == nil {
+		t.Errorf("expected book row deleted, GetBookByID returned success")
+	}
+	if _, err := os.Stat(fullPath); !os.IsNotExist(err) {
+		t.Errorf("expected cover file removed from disk, stat: %v", err)
+	}
+}
+
+// TestBookDeleteRejectsWhenHasLoans pins the ErrBookHasLoans guard: a
+// book with any row in loans (even returned loans) must refuse delete
+// with a 302 back to the detail page and a flash_error. Seeding the
+// loan directly via dm.db.Exec because the loan handlers are CP6 work
+// and cannot be invoked yet.
+func TestBookDeleteRejectsWhenHasLoans(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	id, err := dm.CreateBook(
+		&Book{Title: "BookWithLoan", QuantityTotal: 1, QuantityAvailable: 1},
+		[]string{"Seed Author"},
+	)
+	if err != nil {
+		t.Fatalf("CreateBook: %v", err)
+	}
+
+	res, err := dm.db.Exec("INSERT INTO patrons (name) VALUES (?)", "Loan Patron")
+	if err != nil {
+		t.Fatalf("seed patron: %v", err)
+	}
+	patronID, _ := res.LastInsertId()
+	if _, err := dm.db.Exec(
+		"INSERT INTO loans (book_id, patron_id, due_date) VALUES (?, ?, ?)",
+		id, patronID, "2026-05-01 00:00:00",
+	); err != nil {
+		t.Fatalf("seed loan: %v", err)
+	}
+
+	rr := postStaffForm(t, router, fmt.Sprintf("/books/%d/delete", id), sess, csrf, nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302 PRG redirect back to detail, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	if loc := rr.Header().Get("Location"); loc != fmt.Sprintf("/books/%d", id) {
+		t.Errorf("expected redirect to /books/%d, got %q", id, loc)
+	}
+	assertFlashErrorSet(t, rr)
+
+	if _, err := dm.GetBookByID(id); err != nil {
+		t.Errorf("book with loans should NOT be deleted, GetBookByID: %v", err)
+	}
+}
+
+// TestBookDeleteRejectsStaffRole pins the admin-only boundary on delete.
+// Staff-role users can reach Create and Edit but must be rejected here
+// with 403. Regression pin: if a future edit drops the admin.POST
+// registration and instead registers under staff.POST, this test fires.
+func TestBookDeleteRejectsStaffRole(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "staff1", "staff")
+
+	id, err := dm.CreateBook(
+		&Book{Title: "StaffShouldNotDelete", QuantityTotal: 1, QuantityAvailable: 1},
+		[]string{"Seed Author"},
+	)
+	if err != nil {
+		t.Fatalf("CreateBook: %v", err)
+	}
+
+	rr := postStaffForm(t, router, fmt.Sprintf("/books/%d/delete", id), sess, csrf, nil)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for staff role on admin-only delete, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	if _, err := dm.GetBookByID(id); err != nil {
+		t.Errorf("book must not be deleted by staff role, GetBookByID: %v", err)
+	}
+}
+
+// TestBookDeleteReturns404ForMissing: delete of a nonexistent book id
+// must 404, not silently succeed or 500.
+func TestBookDeleteReturns404ForMissing(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	rr := postStaffForm(t, router, "/books/99999/delete", sess, csrf, nil)
+
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+}
+

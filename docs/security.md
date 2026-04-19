@@ -240,6 +240,30 @@ if err != nil {
 `bcrypt.DefaultCost` (currently 10) makes hashing intentionally slow — it takes ~100ms.
 This is a feature: it makes brute-force attacks expensive.
 
+### Password Complexity Policy (CP5, DEC-021)
+
+Every password-setting path must run the candidate through `ValidatePassword` in
+`validators.go` before hashing. The rules:
+
+- 8 or more characters
+- at least one uppercase letter
+- at least one digit
+- at least one special character (`unicode.IsPunct` or `unicode.IsSymbol`)
+
+Enforcement points:
+
+- `SeedDefaultUsers` validates `ADMIN_PASSWORD` (env override) at startup and
+  `log.Fatalf`s on failure. Seed defaults (`Admin123!`, `Staff123!`, `Patron123!`)
+  all satisfy the rule.
+- Staff create/password-reset handlers (#39).
+- Patron create (#21).
+- Any future admin password-change handler.
+
+`ValidateUsername` lives in the same file and enforces 3-32 characters with the
+alphanumeric + underscore character class. Username rules are deliberately separate
+from password rules because the goals differ (collision avoidance and URL/log
+sanity vs. brute-force resistance).
+
 ### Session Flow
 
 1. User POSTs credentials to `/login`

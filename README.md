@@ -7,7 +7,7 @@ A self-hostable library management system built with Go.
 LibreShelf lets a small library (school, office, personal collection) manage books,
 patrons, and loans through a simple web UI. A public kiosk supports self-service
 browsing with optional patron login for favorites and holds. All checkout and return
-transactions are staff-only. Real-time availability updates via Server-Sent Events.
+transactions are staff-only. (SSE live availability is on the post-submission roadmap.)
 
 ## Tech Stack
 
@@ -34,20 +34,25 @@ These accounts are created automatically on first run:
 
 | Username | Password | Role |
 |----------|----------|------|
-| `admin` | `admin123` | Admin -- full access to all pages |
-| `staff1` | `staff123` | Staff -- day-to-day operations, no staff/system management |
-| `patron1` | `patron123` | Patron -- catalog and book detail only |
+| `admin` | `Admin123!` | Admin -- full access to all pages |
+| `staff1` | `Staff123!` | Staff -- day-to-day operations, no staff/system management |
+| `patron1` | `Patron123!` | Patron -- catalog and book detail only |
+
+Passwords must be 8+ characters with at least one uppercase letter, one digit, and one special character. See [DEC-021](./DECISIONS.md) for the policy.
 
 ## Pages
 
-| Route | Page |
-|-------|------|
-| `/` | Dashboard -- stats and recent activity |
-| `/catalog` | Book catalog -- searchable and filterable |
-| `/books/:id` | Book detail -- info, availability, loan history |
-| `/patrons` | Patron management |
-| `/admin` | Admin panel -- ZIP export/import |
-| `/kiosk` | Public browse -- optional login for favorites and holds |
+| Route | Page | Access |
+|-------|------|--------|
+| `/` | Dashboard -- stats and recent activity | Any logged-in user |
+| `/catalog` | Book catalog -- searchable and filterable, 4-wide grid | Any logged-in user |
+| `/books/:id` | Book detail -- info, availability, loan history | Any logged-in user |
+| `/books/new` | Add-book form with Open Library ISBN lookup | Staff + admin |
+| `/books/:id/edit` | Edit-book form | Staff + admin |
+| `/patrons` | Patron management -- list + add / edit / delete modals | Staff + admin |
+| `/staff` | Staff management -- list + add / edit / delete / reset-password modals | Admin only |
+| `/admin` | Admin panel -- stub today; CP7 adds ZIP export / import | Staff + admin (CP7 ZIP features will be admin-only) |
+| `/kiosk` | Public browse -- stub today; CP6 adds favorites and patron login (holds deferred post-submission) | Public |
 
 ## Documentation
 

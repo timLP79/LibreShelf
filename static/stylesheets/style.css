@@ -98,3 +98,29 @@
   background-color: #dc3545;
   color: #ffffff;
 }
+
+/* Book catalog cover slot: fixed 280px height for uniform card
+ * alignment. Images are scaled to fit inside the slot with their
+ * natural aspect ratio preserved (object-fit: contain), letterboxed
+ * against the card background rather than cropped to fill. A
+ * landscape cover shows gray bars top/bottom; a tall portrait shows
+ * bars left/right. Either way nothing on the cover gets clipped. */
+.book-cover-placeholder {
+  height: 280px;
+  background: #212529;
+}
+
+.book-cover-placeholder img,
+.book-cover-placeholder .no-cover {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/* Override Bootstrap's .text-muted on the no-cover placeholder:
+ * the default muted gray is too dark to read against the near-
+ * black slot background. Light gray (#adb5bd) keeps the "nothing
+ * here" feel without disappearing. */
+.book-cover-placeholder .no-cover {
+  color: #adb5bd;
+}

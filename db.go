@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
 	"database/sql"
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -39,6 +42,46 @@ type LoanRecord struct {
 	DueDate      string
 	ReturnedAt   *string
 	Status       string
+}
+
+type StaffMember struct {
+	ID        int
+	Username  string
+	Role      string
+	CreatedAt string
+}
+
+type Patron struct {
+	ID         int
+	Name       string
+	Email      *string
+	Phone      *string
+	JoinedDate string
+	Metadata   *string
+	Username   string
+}
+
+func (dm *DatabaseManager) GetAllStaff() ([]StaffMember, error) {
+	rows, err := dm.db.Query(`
+	SELECT id, username, role, created_at
+	FROM users
+	WHERE role != 'patron'
+	ORDER BY CASE role WHEN 'admin' THEN 0 ELSE 1 END, username`)
+
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var staff []StaffMember
+	for rows.Next() {
+		var s StaffMember
+		if err := rows.Scan(&s.ID, &s.Username, &s.Role, &s.CreatedAt); err != nil {
+			return nil, err
+		}
+		staff = append(staff, s)
+	}
+	return staff, rows.Err()
 }
 
 func (dm *DatabaseManager) GetAllBooks() ([]Book, error) {
@@ -86,10 +129,11 @@ func (dm *DatabaseManager) GetBookByID(id int) (*Book, error) {
 		return nil, err
 	}
 
-	rows, err := dm.db.Query(`                                                                                                                                                            
-                SELECT a.name FROM authors a         
-                JOIN book_authors ba ON a.id = ba.author_id                                                                                                                                   
-                WHERE ba.book_id = ?`, id)
+	rows, err := dm.db.Query(`
+                SELECT a.name FROM authors a
+                JOIN book_authors ba ON a.id = ba.author_id
+                WHERE ba.book_id = ?
+                ORDER BY ba.position`, id)
 	if err != nil {
 		return nil, err
 	}
@@ -110,6 +154,17 @@ func (dm *DatabaseManager) GetBookByID(id int) (*Book, error) {
 
 	return book, nil
 
+}
+
+func (dm *DatabaseManager) GetBookByISBN(isbn string) (*Book, error) {
+	book := &Book{}
+	err := dm.db.QueryRow(
+		"SELECT id, title FROM books WHERE isbn = ?", isbn,
+	).Scan(&book.ID, &book.Title)
+	if err != nil {
+		return nil, err
+	}
+	return book, nil
 }
 
 func (dm *DatabaseManager) GetLoanHistory(bookID int) ([]LoanRecord, error) {
@@ -187,12 +242,13 @@ func (dm *DatabaseManager) createSchema() {
 
 	CREATE TABLE IF NOT EXISTS authors (
 		id   INTEGER PRIMARY KEY AUTOINCREMENT,
-		name TEXT NOT NULL UNIQUE
+		name TEXT NOT NULL UNIQUE COLLATE NOCASE
 	);
 
 	CREATE TABLE IF NOT EXISTS book_authors (
-		book_id   INTEGER REFERENCES books(id),
-		author_id INTEGER REFERENCES authors(id),
+		book_id   INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+		author_id INTEGER NOT NULL REFERENCES authors(id) ON DELETE CASCADE,
+		position  INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (book_id, author_id)
 	);
 
@@ -262,12 +318,74 @@ func (dm *DatabaseManager) GetUserByUsername(username string) (*User, error) {
 	return user, nil
 }
 
+func (dm *DatabaseManager) GetUserByID(id int) (*User, error) {
+	user := &User{}
+	err := dm.db.QueryRow(
+		"SELECT id, username, password_hash, role, patron_id FROM users where id = ?", id,
+	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.PatronID)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
 func (dm *DatabaseManager) CreateUser(username, passwordHash, role string, patronID *int) error {
 	_, err := dm.db.Exec(
 		"INSERT INTO users (username, password_hash, role, patron_id) VALUES (?, ?, ?, ?)",
 		username, passwordHash, role, patronID,
 	)
 	return err
+}
+
+func (dm *DatabaseManager) UpdateStaffUser(id int, username, role string) error {
+	_, err := dm.db.Exec(
+		"UPDATE users SET username = ?, role = ? WHERE id = ?",
+		username, role, id,
+	)
+	return err
+}
+
+func (dm *DatabaseManager) UpdateUserPassword(id int, passwordHash string) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(
+		"UPDATE users SET password_hash = ? WHERE id = ?",
+		passwordHash, id,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(
+		"DELETE FROM sessions WHERE user_id = ?", id,
+	); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (dm *DatabaseManager) DeleteUser(id int) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM sessions WHERE user_id = ?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM users WHERE id = ?", id); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (dm *DatabaseManager) CountAdmins() (int, error) {
+	var count int
+	err := dm.db.QueryRow("SELECT COUNT(*) FROM users WHERE role = 'admin'").Scan(&count)
+	return count, err
 }
 
 func (dm *DatabaseManager) CreateSession(token string, userID int, csrfToken string, expiresAt time.Time) error {
@@ -301,7 +419,10 @@ func (dm *DatabaseManager) DeleteSession(token string) error {
 func (dm *DatabaseManager) SeedDefaultUsers() {
 	adminPassword := os.Getenv("ADMIN_PASSWORD")
 	if adminPassword == "" {
-		adminPassword = "admin123"
+		adminPassword = "Admin123!"
+	}
+	if err := ValidatePassword(adminPassword); err != nil {
+		log.Fatalf("ADMIN_PASSWORD does not meet requirements: %v", err)
 	}
 
 	var count int
@@ -324,7 +445,7 @@ func (dm *DatabaseManager) SeedDefaultUsers() {
 		log.Fatalf("Failed to check for patron1 user: %v", err)
 	}
 	if count == 0 {
-		hash, err := bcrypt.GenerateFromPassword([]byte("patron123"), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte("Patron123!"), bcrypt.DefaultCost)
 		if err != nil {
 			log.Fatalf("Failed to hash patron 1 password: %v", err)
 		}
@@ -338,7 +459,7 @@ func (dm *DatabaseManager) SeedDefaultUsers() {
 		log.Fatalf("Failed to check for staff1 user: %v", err)
 	}
 	if count == 0 {
-		hash, err := bcrypt.GenerateFromPassword([]byte("staff123"), bcrypt.DefaultCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte("Staff123!"), bcrypt.DefaultCost)
 		if err != nil {
 			log.Fatalf("Failed to hash staff1 password: %v", err)
 		}
@@ -349,6 +470,17 @@ func (dm *DatabaseManager) SeedDefaultUsers() {
 	}
 }
 
+type seedBook struct {
+	title       string
+	isbn        string
+	year        int
+	publisher   string
+	description string
+	genre       string
+	quantity    int
+	authors     []string
+}
+
 func (dm *DatabaseManager) SeedBooks() {
 	var count int
 	if err := dm.db.QueryRow("SELECT COUNT(*) FROM books").Scan(&count); err != nil {
@@ -356,17 +488,6 @@ func (dm *DatabaseManager) SeedBooks() {
 	}
 	if count > 0 {
 		return
-	}
-
-	type seedBook struct {
-		title       string
-		isbn        string
-		year        int
-		publisher   string
-		description string
-		genre       string
-		quantity    int
-		authors     []string
 	}
 
 	books := []seedBook{
@@ -433,42 +554,428 @@ func (dm *DatabaseManager) SeedBooks() {
 	}
 
 	for _, b := range books {
-		result, err := dm.db.Exec(`
-			INSERT INTO books (title, isbn, year, publisher, description, genre,
-			                   quantity_total, quantity_available)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-			b.title, b.isbn, b.year, b.publisher, b.description, b.genre,
-			b.quantity, b.quantity)
-		if err != nil {
+		if err := dm.seedOneBook(b); err != nil {
 			log.Fatalf("Failed to seed book %q: %v", b.title, err)
-		}
-		bookID, err := result.LastInsertId()
-		if err != nil {
-			log.Fatalf("Failed to get book ID for %q: %v", b.title, err)
-		}
-
-		for _, authorName := range b.authors {
-			var authorID int64
-			err := dm.db.QueryRow("SELECT id FROM authors WHERE name = ?", authorName).Scan(&authorID)
-			if err == sql.ErrNoRows {
-				res, err := dm.db.Exec("INSERT INTO authors (name) VALUES (?)", authorName)
-				if err != nil {
-					log.Fatalf("Failed to seed author %q: %v", authorName, err)
-				}
-				authorID, err = res.LastInsertId()
-				if err != nil {
-					log.Fatalf("Failed to get author ID for %q: %v", authorName, err)
-				}
-			} else if err != nil {
-				log.Fatalf("Failed to check author %q: %v", authorName, err)
-			}
-
-			if _, err := dm.db.Exec("INSERT INTO book_authors (book_id, author_id) VALUES (?, ?)",
-				bookID, authorID); err != nil {
-				log.Fatalf("Failed to link book-author: %v", err)
-			}
 		}
 	}
 
 	log.Printf("Seeded %d books", len(books))
+}
+
+func (dm *DatabaseManager) seedOneBook(b seedBook) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	result, err := tx.Exec(`
+		INSERT INTO books (title, isbn, year, publisher, description, genre,
+		                   quantity_total, quantity_available)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		b.title, b.isbn, b.year, b.publisher, b.description, b.genre,
+		b.quantity, b.quantity)
+	if err != nil {
+		return err
+	}
+	bookID, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
+
+	for _, authorName := range b.authors {
+		var authorID int64
+		err := tx.QueryRow("SELECT id FROM authors WHERE name = ?", authorName).Scan(&authorID)
+		if err == sql.ErrNoRows {
+			res, execErr := tx.Exec("INSERT INTO authors (name) VALUES (?)", authorName)
+			if execErr != nil {
+				return execErr
+			}
+			authorID, err = res.LastInsertId()
+			if err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+
+		if _, err := tx.Exec(
+			"INSERT INTO book_authors (book_id, author_id) VALUES (?, ?)",
+			bookID, authorID,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func findOrCreateAuthor(tx *sql.Tx, name string) (int, error) {
+	var id int
+	err := tx.QueryRow("SELECT id FROM authors WHERE name = ?", name).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if err != sql.ErrNoRows {
+		return 0, err
+	}
+	result, err := tx.Exec("INSERT INTO authors (name) VALUES (?)", name)
+	if err != nil {
+		return 0, err
+	}
+	id64, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	return int(id64), nil
+}
+
+func (dm *DatabaseManager) CreateBook(book *Book, authors []string) (int, error) {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+
+	result, err := tx.Exec(`
+			INSERT INTO books (title, isbn, cover_filename, year, publisher, description, genre, quantity_total, quantity_available)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		book.Title, book.ISBN, book.CoverFilename, book.Year,
+		book.Publisher, book.Description, book.Genre,
+		book.QuantityTotal, book.QuantityAvailable)
+	if err != nil {
+		return 0, err
+	}
+
+	bookID64, err := result.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	bookID := int(bookID64)
+
+	for i, name := range authors {
+		authorID, err := findOrCreateAuthor(tx, name)
+		if err != nil {
+			return 0, err
+		}
+		if _, err := tx.Exec(
+			"INSERT INTO book_authors (book_id, author_id, position) VALUES (?, ?, ?)",
+			bookID, authorID, i+1,
+		); err != nil {
+			return 0, err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return bookID, nil
+}
+
+func (dm *DatabaseManager) UpdateBook(id int, book *Book, authors []string) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`
+		UPDATE books
+		SET title = ?, isbn = ?, cover_filename = ?, year = ?, publisher = ?,
+		    description = ?, genre = ?, quantity_total = ?, quantity_available = ?
+		WHERE id = ?`,
+		book.Title, book.ISBN, book.CoverFilename, book.Year,
+		book.Publisher, book.Description, book.Genre,
+		book.QuantityTotal, book.QuantityAvailable, id); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec("DELETE FROM book_authors WHERE book_id = ?", id); err != nil {
+		return err
+	}
+
+	for i, name := range authors {
+		authorID, err := findOrCreateAuthor(tx, name)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(
+			"INSERT INTO book_authors (book_id, author_id, position) VALUES (?, ?, ?)",
+			id, authorID, i+1,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (dm *DatabaseManager) UpdateBookCover(id int, filename string) error {
+	_, err := dm.db.Exec("UPDATE books SET cover_filename = ? WHERE id = ?", filename, id)
+	return err
+}
+
+var ErrBookHasLoans = errors.New("db: book has loan history, cannot delete")
+
+func (dm *DatabaseManager) DeleteBook(id int) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var loanCount int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM loans WHERE book_id = ?", id).Scan(&loanCount); err != nil {
+		return err
+	}
+	if loanCount > 0 {
+		return ErrBookHasLoans
+	}
+
+	if _, err := tx.Exec("DELETE FROM books WHERE id = ?", id); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+var ErrPatronHasLoans = errors.New("db: patron has loan history, cannot delete")
+
+func (dm *DatabaseManager) GetAllPatrons() ([]Patron, error) {
+	rows, err := dm.db.Query(`
+		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata, u.username
+		FROM patrons p
+		JOIN users u ON u.patron_id = p.id
+		ORDER BY p.name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var patrons []Patron
+	for rows.Next() {
+		var p Patron
+		if err := rows.Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.JoinedDate, &p.Metadata, &p.Username); err != nil {
+			return nil, err
+		}
+		patrons = append(patrons, p)
+	}
+	return patrons, rows.Err()
+}
+
+func (dm *DatabaseManager) GetPatronByID(id int) (*Patron, error) {
+	p := &Patron{}
+	err := dm.db.QueryRow(`
+		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata, u.username
+		FROM patrons p
+		JOIN users u ON u.patron_id = p.id
+		WHERE p.id = ?`, id,
+	).Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.JoinedDate, &p.Metadata, &p.Username)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// CreatePatron inserts a patrons row and a linked users row in a single
+// transaction per DEC-022. The username is auto-generated inside the
+// transaction: generateBaseUsername produces a starting form, and we
+// retry with "base", "base2", "base3", ... until SELECT COUNT returns
+// zero. The COUNT uses COLLATE NOCASE so "jsmith" does not collide
+// with an existing "JSmith"; the users.username column itself is not
+// NOCASE today (pre-dates #21), so this check is the belt-and-
+// suspenders until that schema fix lands. Returns the final username
+// so the handler can flash it to the admin.
+//
+// Email and phone are passed as plain strings; empty string converts
+// to a nil pointer before INSERT so the column stores NULL rather
+// than a zero-length string. This keeps the DB shape honest about
+// "not provided" vs "provided as empty".
+func (dm *DatabaseManager) CreatePatron(name, email, phone, passwordHash string) (int, string, error) {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return 0, "", err
+	}
+	defer tx.Rollback()
+
+	var emailPtr, phonePtr *string
+	if email != "" {
+		emailPtr = &email
+	}
+	if phone != "" {
+		phonePtr = &phone
+	}
+
+	res, err := tx.Exec(
+		"INSERT INTO patrons (name, email, phone) VALUES (?, ?, ?)",
+		name, emailPtr, phonePtr,
+	)
+	if err != nil {
+		return 0, "", err
+	}
+	patronID64, err := res.LastInsertId()
+	if err != nil {
+		return 0, "", err
+	}
+	patronID := int(patronID64)
+
+	base := generateBaseUsername(name)
+	if base == "" {
+		return 0, "", errors.New("db: cannot derive a username from the provided name")
+	}
+
+	username := base
+	for suffix := 2; ; suffix++ {
+		var count int
+		if err := tx.QueryRow(
+			"SELECT COUNT(*) FROM users WHERE username = ? COLLATE NOCASE",
+			username,
+		).Scan(&count); err != nil {
+			return 0, "", err
+		}
+		if count == 0 {
+			break
+		}
+		username = fmt.Sprintf("%s%d", base, suffix)
+	}
+
+	if _, err := tx.Exec(
+		"INSERT INTO users (username, password_hash, role, patron_id) VALUES (?, ?, 'patron', ?)",
+		username, passwordHash, patronID,
+	); err != nil {
+		return 0, "", err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, "", err
+	}
+	return patronID, username, nil
+}
+
+func (dm *DatabaseManager) UpdatePatron(id int, name, email, phone string) error {
+	var emailPtr, phonePtr *string
+	if email != "" {
+		emailPtr = &email
+	}
+	if phone != "" {
+		phonePtr = &phone
+	}
+	_, err := dm.db.Exec(
+		"UPDATE patrons SET name = ?, email = ?, phone = ? WHERE id = ?",
+		name, emailPtr, phonePtr, id,
+	)
+	return err
+}
+
+// DeletePatron removes the patron + their linked users + sessions rows
+// in a single transaction per DEC-022. Guard fires if any loans row
+// references this patron (active or returned) so history survives;
+// admin's recovery path for a truly departed patron is to wait until
+// the loan rows are archived or -- post-submission -- use a soft-
+// delete flag. Order of deletes matters: sessions first (while users
+// still exists for the subquery), then users, then patrons.
+func (dm *DatabaseManager) DeletePatron(id int) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var loanCount int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM loans WHERE patron_id = ?", id).Scan(&loanCount); err != nil {
+		return err
+	}
+	if loanCount > 0 {
+		return ErrPatronHasLoans
+	}
+
+	if _, err := tx.Exec(
+		"DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE patron_id = ?)", id,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM users WHERE patron_id = ?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM patrons WHERE id = ?", id); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+// FetchAndStoreSeedCovers scans the books table for rows that have an
+// ISBN but no cover_filename and opportunistically backfills covers
+// from Open Library. Safe to call every startup: after a successful
+// first run the SELECT returns zero rows and the function exits fast.
+// Per-book failures (OL not-found, network, bad content, DB update)
+// log a warning and continue -- never panic, never block the server
+// from starting. Called from main.go after SeedBooks so a fresh DB
+// gets real cover art for the seed books instead of placeholder slots.
+//
+// The network budget comes from the ctx the caller passes, plus a
+// 10s per-request timeout inside FetchOpenLibraryBook and
+// SaveCoverFromURL. If ctx fires, remaining books get skipped and
+// their covers can be backfilled on the next startup.
+func (dm *DatabaseManager) FetchAndStoreSeedCovers(ctx context.Context) {
+	rows, err := dm.db.Query(`
+		SELECT id, isbn FROM books
+		WHERE cover_filename IS NULL AND isbn IS NOT NULL AND isbn != ''`)
+	if err != nil {
+		log.Printf("FetchAndStoreSeedCovers: SELECT: %v", err)
+		return
+	}
+
+	type missing struct {
+		id   int
+		isbn string
+	}
+	var pending []missing
+	for rows.Next() {
+		var m missing
+		if err := rows.Scan(&m.id, &m.isbn); err != nil {
+			log.Printf("FetchAndStoreSeedCovers: scan: %v", err)
+			rows.Close()
+			return
+		}
+		pending = append(pending, m)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		log.Printf("FetchAndStoreSeedCovers: rows.Err: %v", err)
+		return
+	}
+	if len(pending) == 0 {
+		return
+	}
+
+	log.Printf("FetchAndStoreSeedCovers: backfilling %d cover(s) from Open Library", len(pending))
+	start := time.Now()
+	saved := 0
+	for _, m := range pending {
+		if err := ctx.Err(); err != nil {
+			log.Printf("FetchAndStoreSeedCovers: context cancelled, skipping remaining %d book(s): %v", len(pending)-saved, err)
+			break
+		}
+		book, err := FetchOpenLibraryBook(ctx, m.isbn)
+		if err != nil {
+			log.Printf("FetchAndStoreSeedCovers: OL fetch for ISBN %s: %v", m.isbn, err)
+			continue
+		}
+		if book.CoverURL == "" {
+			log.Printf("FetchAndStoreSeedCovers: no cover URL from OL for ISBN %s", m.isbn)
+			continue
+		}
+		filename, err := SaveCoverFromURL(book.CoverURL)
+		if err != nil {
+			log.Printf("FetchAndStoreSeedCovers: SaveCoverFromURL for ISBN %s: %v", m.isbn, err)
+			continue
+		}
+		if err := dm.UpdateBookCover(m.id, filename); err != nil {
+			log.Printf("FetchAndStoreSeedCovers: UpdateBookCover for book %d: %v", m.id, err)
+			continue
+		}
+		saved++
+	}
+	log.Printf("FetchAndStoreSeedCovers: saved %d/%d cover(s) in %v", saved, len(pending), time.Since(start).Round(time.Millisecond))
 }

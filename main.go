@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"html/template"
+	"log"
 	"os"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,6 +32,16 @@ func main() {
 	dm.SeedDefaultUsers()
 	dm.SeedBooks()
 
+	// Opportunistically backfill covers from Open Library for any book
+	// that has an ISBN but no cover file yet. Safe to call every
+	// startup: the inner SELECT is a no-op after all seed books have
+	// their covers. 60s total budget so a slow OL (or network block)
+	// cannot wedge the server at boot -- the inner HTTP client also
+	// has its own 10s per-request timeout.
+	seedCoverCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	dm.FetchAndStoreSeedCovers(seedCoverCtx)
+	cancel()
+
 	// Template helpers
 	funcMap := template.FuncMap{
 		"deref": func(v interface{}) interface{} {
@@ -48,8 +61,8 @@ func main() {
 
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
-		"index", "catalog", "book_detail",
-		"patrons", "admin", "kiosk",
+		"index", "catalog", "book_detail", "book_form",
+		"patrons", "admin", "kiosk", "staff",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -74,6 +87,10 @@ func main() {
 	router.Static("/stylesheets", "static/stylesheets")
 	router.Static("/javascripts", "static/javascripts")
 	router.Static("/images", "static/images")
+	if err := os.MkdirAll(coversDir(), 0o755); err != nil {
+		log.Fatalf("failed to create covers dir: %v", err)
+	}
+	router.Static("/covers", coversDir())
 
 	// Database middleware - make dm available to all handlers
 	router.Use(DatabaseMiddleware(dm))
@@ -94,12 +111,26 @@ func main() {
 	// Staff routes -- admin + staff
 	staff := router.Group("/")
 	staff.Use(RequireAuth, RequireStaff, CSRFProtect)
-	staff.GET("/patrons", HandlePatrons)
+	staff.GET("/patrons", HandlePatronList)
+	staff.POST("/patrons", HandlePatronCreate)
+	staff.POST("/patrons/:id/edit", HandlePatronEdit)
+	staff.POST("/patrons/:id/delete", HandlePatronDelete)
 	staff.GET("/admin", HandleAdmin)
+	staff.GET("/api/openlibrary/isbn/:isbn", HandleOpenLibraryLookup)
+	staff.GET("/books/new", HandleBookNew)
+	staff.POST("/books", HandleBookCreate)
+	staff.GET("/books/:id/edit", HandleBookEdit)
+	staff.POST("/books/:id/edit", HandleBookUpdate)
 
 	// Admin-only routes
 	admin := router.Group("/")
 	admin.Use(RequireAuth, RequireAdmin, CSRFProtect)
+	admin.GET("/staff", HandleStaffList)
+	admin.POST("/staff", HandleStaffCreate)
+	admin.POST("/staff/:id/edit", HandleStaffEdit)
+	admin.POST("/staff/:id/delete", HandleStaffDelete)
+	admin.POST("/staff/:id/password", HandleStaffResetPassword)
+	admin.POST("/books/:id/delete", HandleBookDelete)
 
 	router.NoRoute(HandleNotFound)
 
