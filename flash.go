@@ -39,6 +39,12 @@ var flashMessages = map[string]string{
 	"book_updated":             "Updated:",
 	"book_deleted":             "Removed from the catalog:",
 	"book_has_loans":           "This book cannot be deleted while it has loan history.",
+	"patron_created":           "Patron added:",
+	"patron_updated":           "Patron updated:",
+	"patron_deleted":           "Patron removed:",
+	"patron_has_loans":         "This patron cannot be removed while they have loan history.",
+	"patron_name_required":     "Patron name is required.",
+	"patron_name_unusable":     "Could not derive a username from the provided name. Use letters or digits.",
 }
 
 func flashCookieName(kind string) string {

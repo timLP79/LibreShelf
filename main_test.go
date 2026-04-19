@@ -87,7 +87,10 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	// Staff routes -- admin + staff
 	staff := router.Group("/")
 	staff.Use(RequireAuth, RequireStaff, CSRFProtect)
-	staff.GET("/patrons", HandlePatrons)
+	staff.GET("/patrons", HandlePatronList)
+	staff.POST("/patrons", HandlePatronCreate)
+	staff.POST("/patrons/:id/edit", HandlePatronEdit)
+	staff.POST("/patrons/:id/delete", HandlePatronDelete)
 	staff.GET("/admin", HandleAdmin)
 	staff.GET("/api/openlibrary/isbn/:isbn", HandleOpenLibraryLookup)
 	staff.GET("/books/new", HandleBookNew)

@@ -28,13 +28,6 @@ func HandleIndex(c *gin.Context) {
 	})
 }
 
-// HandlePatrons renders the Patrons page
-func HandlePatrons(c *gin.Context) {
-	renderTemplate(c, "patrons", gin.H{
-		"Title": "Patrons",
-	})
-}
-
 // HandleAdmin renders the Admin page
 func HandleAdmin(c *gin.Context) {
 	renderTemplate(c, "admin", gin.H{
