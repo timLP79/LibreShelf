@@ -449,10 +449,10 @@ func (dm *DatabaseManager) SeedDefaultUsers() {
 		if err != nil {
 			log.Fatalf("Failed to hash patron 1 password: %v", err)
 		}
-		if err := dm.CreateUser("patron1", string(hash), "patron", nil); err != nil {
-			log.Fatalf("Failed to seed patron1 user: %v", err)
+		if err := dm.seedLinkedPatron("patron1", string(hash), "Seed Patron"); err != nil {
+			log.Fatalf("Failed to seed patron1: %v", err)
 		}
-		log.Println("Seeded patron1 user")
+		log.Println("Seeded patron1 user and linked patrons row")
 	}
 
 	if err := dm.db.QueryRow("SELECT COUNT(*) FROM users WHERE username = 'staff1'").Scan(&count); err != nil {
@@ -468,6 +468,42 @@ func (dm *DatabaseManager) SeedDefaultUsers() {
 		}
 		log.Println("Seeded staff1 user")
 	}
+}
+
+// seedLinkedPatron inserts a patrons row and a linked users row in a
+// single transaction, mirroring CreatePatron's two-row write (DEC-022)
+// but with an explicit username instead of auto-generation. Used by
+// SeedDefaultUsers for patron1 so the seed account appears in the
+// admin /patrons list and gives CP6 checkout / return something to
+// target. Separate from CreatePatron because that function derives
+// the username from a name via generateBaseUsername, and the seed
+// needs to keep the canonical "patron1" credential for pre-existing
+// auth tests.
+func (dm *DatabaseManager) seedLinkedPatron(username, passwordHash, patronName string) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	res, err := tx.Exec("INSERT INTO patrons (name) VALUES (?)", patronName)
+	if err != nil {
+		return err
+	}
+	patronID64, err := res.LastInsertId()
+	if err != nil {
+		return err
+	}
+	patronID := int(patronID64)
+
+	if _, err := tx.Exec(
+		"INSERT INTO users (username, password_hash, role, patron_id) VALUES (?, ?, 'patron', ?)",
+		username, passwordHash, patronID,
+	); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 type seedBook struct {
