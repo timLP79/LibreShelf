@@ -92,3 +92,38 @@ func TestValidatePassword(t *testing.T) {
 		})
 	}
 }
+
+// TestGenerateBaseUsername pins the auto-generated-username rules for
+// patron create: first-initial + last-word for multi-word names, whole
+// word for single-word names, lowercased, with non-alphanumerics
+// stripped so the output always satisfies the ValidateUsername regex
+// [a-zA-Z0-9_]+ (the _ can never appear here but the output is still
+// regex-compliant by construction). Each case pins a specific branch
+// so a future edit that breaks one row fires clearly.
+func TestGenerateBaseUsername(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"two-word common case", "Jane Smith", "jsmith"},
+		{"three-word picks first+last", "Jane Mary Smith", "jsmith"},
+		{"single-word keeps whole name", "Cher", "cher"},
+		{"hyphenated last name strips hyphen", "Ahmed Al-Farsi", "aalfarsi"},
+		{"apostrophe in last name stripped", "Mary O'Brien", "mobrien"},
+		{"leading and trailing whitespace ignored", "  Jane   Smith  ", "jsmith"},
+		{"mixed case normalized to lower", "JANE SMITH", "jsmith"},
+		{"digits in name retained", "R2D2 Droid", "rdroid"},
+		{"accented letter stripped", "Jean Café", "jcaf"},
+		{"empty input returns empty", "", ""},
+		{"whitespace-only returns empty", "   ", ""},
+		{"single word with punctuation", "O'Brien", "obrien"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := generateBaseUsername(tc.input); got != tc.want {
+				t.Errorf("generateBaseUsername(%q) = %q, want %q", tc.input, got, tc.want)
+			}
+		})
+	}
+}

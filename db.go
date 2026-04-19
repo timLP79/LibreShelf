@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -47,6 +48,16 @@ type StaffMember struct {
 	Username  string
 	Role      string
 	CreatedAt string
+}
+
+type Patron struct {
+	ID         int
+	Name       string
+	Email      *string
+	Phone      *string
+	JoinedDate string
+	Metadata   *string
+	Username   string
 }
 
 func (dm *DatabaseManager) GetAllStaff() ([]StaffMember, error) {
@@ -721,6 +732,171 @@ func (dm *DatabaseManager) DeleteBook(id int) error {
 	}
 
 	if _, err := tx.Exec("DELETE FROM books WHERE id = ?", id); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+var ErrPatronHasLoans = errors.New("db: patron has loan history, cannot delete")
+
+func (dm *DatabaseManager) GetAllPatrons() ([]Patron, error) {
+	rows, err := dm.db.Query(`
+		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata, u.username
+		FROM patrons p
+		JOIN users u ON u.patron_id = p.id
+		ORDER BY p.name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var patrons []Patron
+	for rows.Next() {
+		var p Patron
+		if err := rows.Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.JoinedDate, &p.Metadata, &p.Username); err != nil {
+			return nil, err
+		}
+		patrons = append(patrons, p)
+	}
+	return patrons, rows.Err()
+}
+
+func (dm *DatabaseManager) GetPatronByID(id int) (*Patron, error) {
+	p := &Patron{}
+	err := dm.db.QueryRow(`
+		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata, u.username
+		FROM patrons p
+		JOIN users u ON u.patron_id = p.id
+		WHERE p.id = ?`, id,
+	).Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.JoinedDate, &p.Metadata, &p.Username)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// CreatePatron inserts a patrons row and a linked users row in a single
+// transaction per DEC-022. The username is auto-generated inside the
+// transaction: generateBaseUsername produces a starting form, and we
+// retry with "base", "base2", "base3", ... until SELECT COUNT returns
+// zero. The COUNT uses COLLATE NOCASE so "jsmith" does not collide
+// with an existing "JSmith"; the users.username column itself is not
+// NOCASE today (pre-dates #21), so this check is the belt-and-
+// suspenders until that schema fix lands. Returns the final username
+// so the handler can flash it to the admin.
+//
+// Email and phone are passed as plain strings; empty string converts
+// to a nil pointer before INSERT so the column stores NULL rather
+// than a zero-length string. This keeps the DB shape honest about
+// "not provided" vs "provided as empty".
+func (dm *DatabaseManager) CreatePatron(name, email, phone, passwordHash string) (int, string, error) {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return 0, "", err
+	}
+	defer tx.Rollback()
+
+	var emailPtr, phonePtr *string
+	if email != "" {
+		emailPtr = &email
+	}
+	if phone != "" {
+		phonePtr = &phone
+	}
+
+	res, err := tx.Exec(
+		"INSERT INTO patrons (name, email, phone) VALUES (?, ?, ?)",
+		name, emailPtr, phonePtr,
+	)
+	if err != nil {
+		return 0, "", err
+	}
+	patronID64, err := res.LastInsertId()
+	if err != nil {
+		return 0, "", err
+	}
+	patronID := int(patronID64)
+
+	base := generateBaseUsername(name)
+	if base == "" {
+		return 0, "", errors.New("db: cannot derive a username from the provided name")
+	}
+
+	username := base
+	for suffix := 2; ; suffix++ {
+		var count int
+		if err := tx.QueryRow(
+			"SELECT COUNT(*) FROM users WHERE username = ? COLLATE NOCASE",
+			username,
+		).Scan(&count); err != nil {
+			return 0, "", err
+		}
+		if count == 0 {
+			break
+		}
+		username = fmt.Sprintf("%s%d", base, suffix)
+	}
+
+	if _, err := tx.Exec(
+		"INSERT INTO users (username, password_hash, role, patron_id) VALUES (?, ?, 'patron', ?)",
+		username, passwordHash, patronID,
+	); err != nil {
+		return 0, "", err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return 0, "", err
+	}
+	return patronID, username, nil
+}
+
+func (dm *DatabaseManager) UpdatePatron(id int, name, email, phone string) error {
+	var emailPtr, phonePtr *string
+	if email != "" {
+		emailPtr = &email
+	}
+	if phone != "" {
+		phonePtr = &phone
+	}
+	_, err := dm.db.Exec(
+		"UPDATE patrons SET name = ?, email = ?, phone = ? WHERE id = ?",
+		name, emailPtr, phonePtr, id,
+	)
+	return err
+}
+
+// DeletePatron removes the patron + their linked users + sessions rows
+// in a single transaction per DEC-022. Guard fires if any loans row
+// references this patron (active or returned) so history survives;
+// admin's recovery path for a truly departed patron is to wait until
+// the loan rows are archived or -- post-submission -- use a soft-
+// delete flag. Order of deletes matters: sessions first (while users
+// still exists for the subquery), then users, then patrons.
+func (dm *DatabaseManager) DeletePatron(id int) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var loanCount int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM loans WHERE patron_id = ?", id).Scan(&loanCount); err != nil {
+		return err
+	}
+	if loanCount > 0 {
+		return ErrPatronHasLoans
+	}
+
+	if _, err := tx.Exec(
+		"DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE patron_id = ?)", id,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM users WHERE patron_id = ?", id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec("DELETE FROM patrons WHERE id = ?", id); err != nil {
 		return err
 	}
 

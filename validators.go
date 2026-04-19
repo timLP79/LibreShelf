@@ -68,3 +68,36 @@ func IsValidISBN(cleaned string) bool {
 func normalizeFreeText(s string) string {
 	return strings.Join(strings.Fields(strings.TrimSpace(s)), " ")
 }
+
+// generateBaseUsername derives a starting username from a patron's full
+// name. Rules: split on whitespace, take the first rune of the first
+// word and concatenate the last word; lowercase; strip any character
+// outside [a-z0-9]. Single-word names fall through to the whole name
+// lowercased (e.g. "Cher" -> "cher"). Empty or all-whitespace input
+// returns "" so callers can reject via validation rather than creating
+// a row with an empty username. The returned value is a *base*: the
+// caller (CreatePatron) checks the users table for collisions inside
+// its transaction and appends "2", "3", ... until a free username is
+// found, keeping the check atomic with the insert.
+func generateBaseUsername(name string) string {
+	fields := strings.Fields(name)
+	if len(fields) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	if len(fields) == 1 {
+		b.WriteString(fields[0])
+	} else {
+		firstInitial := []rune(fields[0])[0]
+		b.WriteRune(firstInitial)
+		b.WriteString(fields[len(fields)-1])
+	}
+	raw := strings.ToLower(b.String())
+	var cleaned strings.Builder
+	for _, r := range raw {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			cleaned.WriteRune(r)
+		}
+	}
+	return cleaned.String()
+}
