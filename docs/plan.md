@@ -271,7 +271,7 @@ go-full-stack/
 - ✅ `handlers_books.go`: `HandleCatalog`, `HandleBookDetail` with three-way error handling
 - ✅ `templates/catalog.html`: 2-column card grid with search bar, genre dropdown, availability filter
 - ✅ `templates/book_detail.html`: metadata grid, availability, loan history table, admin-only checkout scaffold
-- ✅ `static/javascripts/app.js`: client-side catalog filtering (temporary, replaced by server-side in CP7)
+- ✅ `static/javascripts/app.js`: client-side catalog filtering (works instantly while all 100 seeded books are rendered in the DOM; server-side pagination + AJAX fragment-swap filter deferred post-submission, picked up when catalog exceeds what fits in a single render)
 - ✅ `static/stylesheets/style.css`: availability badges, sticky sidebar
 - ✅ `templates/layout.html`: role-aware sidebar labels, removed kiosk nav link
 - ✅ `main.go`: template FuncMap with `deref` for nullable pointer fields
@@ -351,6 +351,7 @@ Project due 2026-05-01. Remaining scope was rebalanced within CP5/CP6/CP7 to fit
 - Patron holds on checked-out books (from #22). Favorites are enough to demonstrate optional patron login.
 - Staff table responsive polish (from #39). Column overflow on narrow viewports.
 - Password-reset Variant 2, server-generated temp + force-change-on-next-login (from #39). The stronger long-term posture; Variant 1 is acceptable for a small trusted staff.
+- [#37](https://github.com/timLP79/cs408-go-stack/issues/37) Server-side catalog pagination and filtering, Path 2 approach (AJAX fragment swap). Current all-in-DOM render at 100 seeded books is fast and the client-side live filter feels right, so the foundation need is not urgent yet. Path 2 design: extract the catalog grid + pagination controls into a named `{{define "catalog_results"}}` template block; `HandleCatalog` branches on `X-Requested-With: XMLHttpRequest` (or a `?partial=1` query param) to render just that block for filter/pagination updates; client-side JS in `app.js` debounces the search input (~300ms), fires `fetch()` with the AJAX header, swaps `#catalog-results` innerHTML, updates the URL via `history.replaceState` (keystrokes) or `pushState` (genre/available/pagination changes); `AbortController` on each request to prevent a slow stale response clobbering a newer one; full-page form submission as a no-JS fallback. The fragment-swap infra reuses for `/loans` filtering once volume grows there too. Unblocked when the catalog routinely exceeds ~500 rows or when the CP7 close frees up a session for the work.
 - [#17](https://github.com/timLP79/cs408-go-stack/issues/17) GitHub Actions deploy. Already labeled backlog.
 
 Full details for each item live in `CLAUDE.md` "Deferred post-submission backlog"; this list is the planning-doc mirror.
@@ -390,8 +391,8 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 
 ---
 
-### CP6 -- Loans + Kiosk + Pagination
-**Goal:** Ship the loan foundation (checkout, return, overdue awareness) on the existing book-detail scaffold; kiosk provides public anonymous browse; catalog gets server-side pagination. Scope disciplined via the v2 reality-check on 2026-04-19 -- workflow polish (rapid-scan portal, sidebar restructure, dashboard redesign, printed overdue notices, patron-facing mini-lists) deferred post-submission. Full plan and deferred-design notes in [`cp6-planning.md`](./cp6-planning.md).
+### CP6 -- Loans + Kiosk + Dashboard
+**Goal:** Ship the loan foundation (checkout, return, overdue awareness) on the existing book-detail scaffold; kiosk provides public anonymous browse; dashboard wires a role-differentiated essential card set to real data. Scope disciplined via the v2 reality-check on 2026-04-19 and refined on 2026-04-20 -- workflow polish (rapid-scan portal, sidebar restructure, fuller dashboard redesign with mini-lists, printed overdue notices) remains deferred post-submission. Server-side catalog pagination also deferred post-submission as Path 2 (AJAX fragment swap) to preserve the live-filter UX patrons and kiosk users currently enjoy; picked up when the catalog outgrows a single DOM render. Full plan and deferred-design notes in [`cp6-planning.md`](./cp6-planning.md).
 
 - [#22](https://github.com/timLP79/cs408-go-stack/issues/22) -- Loan system (trimmed)
   - `db.go`: loan schema (`due_date DATE NOT NULL`, `returned_at DATETIME`, `fine_cents INTEGER NOT NULL DEFAULT 0` future hook), plus DB methods `CheckoutBook`, `ReturnBook`, `GetActiveLoans`, `GetOverdueLoans`, `GetLoanHistoryByBook`, `GetLoanHistoryByPatron`. Both writes transactional (loan row + `quantity_available` adjustment in one tx, per DEC-022).
@@ -401,13 +402,11 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
   - `handlers_books.go`: `HandleKiosk` -- public anonymous catalog browse (no auth required), reuses catalog grid minus staff controls. No patron login gate in CP6; no favorites by default (favorites only if time permits after items 1-5 ship).
   - Patrons cannot self-checkout; admin/staff select a patron and transact via the book-detail form.
   - Rapid-scan `/checkout` and `/checkin` portal deferred post-submission (earns its place at volume, not a CP6 foundation need).
-- [#37](https://github.com/timLP79/cs408-go-stack/issues/37) -- Server-side pagination and filtering for catalog (now urgent -- CP5 coda seeded 100 books)
-  - Server-side `LIMIT`/`OFFSET` on `/` catalog; query params `?page=N&q=<search>&genre=<genre>`; default page size 24.
-  - Page nav component at the bottom of the catalog (previous / current / next / last).
-  - Remove client-side filtering JS from `app.js` for the catalog; search and genre filter round-trip to the server.
-- Dashboard placeholder wire-up (no redesign)
-  - Replace the three "—" stubs in `templates/index.html` with real `SELECT COUNT(...)` queries: Books (all users), Patrons (staff + admin only, gate stays as-is), Active Loans (all users).
-  - No card restructuring, no Overdue/Today's Activity/Out-of-Stock cards, no role-differentiated patron view in CP6. All deferred.
+- Dashboard: role-differentiated essential card set (sequenced after the loan schema lands, since most cards depend on loan data)
+  - **Staff / admin view (three cards):** Overdue (count with danger styling when `> 0`; links to `/loans?filter=overdue`); Active Loans (count; links to `/loans?filter=active`); Out of Stock (count of titles where `quantity_available = 0`; links to filtered catalog).
+  - **Patron view (one card):** My Active Loans (count of the patron's non-returned loans + the next due date as secondary text; links to a filtered `/loans` scoped to the patron). No mini-list rendering in CP6 -- single-count-plus-next-date card shape matches the existing big-number visual language.
+  - Role gating via `{{if eq .User.Role "patron"}}...{{end}}` blocks in `templates/index.html`. No CSS restructuring; reuse current card component.
+  - Explicitly cut for CP6: Books count, Patrons count, Staff count (low-signal decoration per the deferred dashboard-redesign analysis); Today's Activity (needs loan activity log query, not essential); Favorites card (feature itself is "if time permits"); My Holds placeholder (holds feature is deferred, so no card).
 
 **DECs to write in session 2 (design):** DEC-024 (loan state model via columns, no status column), DEC-025 (single `/loans` page with filter, no per-patron grouping or print CSS), DEC-026 (`fine_cents` reservation, no fine feature in CP6).
 

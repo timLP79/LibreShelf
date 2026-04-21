@@ -5,7 +5,11 @@
 - Today: 2026-04-19
 - Starting point: `main` at tag v5 (CP5 complete, 93 tests passing)
 
-This plan uses the disciplined scope from the v2 reality-check: CP6 ships the foundation that makes the software function. Workflow polish (rapid-scan portal, sidebar restructure, dashboard redesign, printed overdue notices, patron-facing mini-lists) moves to the post-submission backlog. Those designs are preserved at the bottom of this doc so they can be picked up later without re-designing.
+This plan uses the disciplined scope from the v2 reality-check: CP6 ships the foundation that makes the software function. Workflow polish (rapid-scan portal, sidebar restructure, fuller dashboard redesign with mini-lists, printed overdue notices) moves to the post-submission backlog. Those designs are preserved at the bottom of this doc so they can be picked up later without re-designing.
+
+**2026-04-20 scope refinement.** Two changes to the v2 plan after a live-filter UX discussion:
+1. **Pagination (#37) deferred post-submission** as Path 2 (AJAX fragment swap). The current all-in-DOM render at 100 seeded books filters instantly via client-side JS and the UX is genuinely good; server-side pagination with enter-to-submit filters (the v2 plan's shape) was a downgrade. Full Path 2 design preserved in the deferred section below.
+2. **Dashboard scope partially un-deferred.** The "wire three placeholders to real counts" scope was breaking the patron experience (they'd see staff-oriented counts on their landing page). Pulled a trimmed role-differentiated essential card set into CP6 while keeping the richer four-card-per-role design deferred. Details in §5 below and in the existing "Dashboard Redesign" deferred section (which has been annotated, not deleted).
 
 ---
 
@@ -37,23 +41,31 @@ This plan uses the disciplined scope from the v2 reality-check: CP6 ships the fo
 - Each row has a "Return" button that POSTs to the return handler.
 - Sorted by due date ascending (oldest/most-overdue first).
 
-### 4. Pagination (#37)
+### 4. Pagination (#37) -- DEFERRED POST-SUBMISSION (2026-04-20)
 
-- Server-side `LIMIT` + `OFFSET` on `/` catalog.
-- Query params: `?page=N&q=<search>&genre=<genre>`.
-- Page nav component (previous / current / next / last) at the bottom of the catalog.
-- Default page size: 24 (fits 6-wide x 4-rows on desktop, 4-wide x 6-rows acceptable).
-- Remove client-side filtering JS from `app.js` for the catalog; search and genre filtering now round-trip to the server.
+Moved out of CP6 scope. The current all-in-DOM render at 100 seeded books works well; replacing the client-side live filter with server-side enter-to-submit would be a UX downgrade, and the right approach (AJAX fragment swap) is ~2-3h beyond the baseline pagination cost. See "Catalog Pagination (Path 2: AJAX fragment swap)" in the deferred section below for the full design.
 
-### 5. Dashboard: wire placeholder cards to real counts
+### 5. Dashboard: role-differentiated essential card set (sequenced after loans)
 
-- No redesign. Existing `templates/index.html` keeps its current three-card layout.
-- Replace the three "-" placeholders with real `SELECT COUNT(...)` queries:
-  - Books (all users)
-  - Patrons (staff + admin only)
-  - Active Loans (all users)
-- Patron/staff role gating on the Patrons card stays as-is.
-- No Overdue card, no Today's Activity card, no Out of Stock card in CP6. Those are deferred.
+Refined 2026-04-20 from the v2 "wire placeholders to real counts" scope because that scope gave patrons a staff-oriented dashboard (Books/Patrons/Active Loans counts), which is broken UX for the role that will use the kiosk and patron portal.
+
+**Staff / admin view (three cards):**
+
+| Card | Signal | Click target |
+|---|---|---|
+| Overdue | Count of `returned_at IS NULL AND due_date < DATE('now')`; red danger styling when `> 0`, muted when 0 | `/loans?filter=overdue` |
+| Active Loans | Count of non-returned loans | `/loans?filter=active` |
+| Out of Stock | Count of titles where `quantity_available = 0` | Filtered catalog (no-op target in CP6 until filtering deep-links) |
+
+**Patron view (one card):**
+
+| Card | Signal | Click target |
+|---|---|---|
+| My Active Loans | Count of the patron's non-returned loans + the next due date as secondary text | Filtered `/loans` scoped to the patron |
+
+- Role gating via `{{if eq .User.Role "patron"}}...{{end}}` blocks in `templates/index.html`. No CSS restructuring; reuse current card component.
+- **Sequencing:** dashboard work follows the loan schema landing (Session 3 or later). All cards except Out of Stock depend on the loans table existing.
+- **Cut from CP6** (kept in deferred design): Today's Activity (needs loan activity log query), Favorites card (feature is "if time permits"), My Holds placeholder (holds feature deferred), patron mini-list rendering (richer than a count card, defer until polish pass), Books/Patrons/Staff counts (low-signal per the deferred analysis).
 
 ### 6. Kiosk public browse
 
@@ -80,19 +92,19 @@ Three DEC entries to write in session 2 (design session). Do not write DECs for 
 
 ## Session Estimate
 
-**6-7 sessions. Fits inside the 8-day window to 4/27 with buffer.**
+**6-7 sessions. Fits inside the 8-day window to 4/27 with buffer. Updated 2026-04-20 after pagination deferred and dashboard rescoped.**
 
 | # | Session | Scope | Est. hrs |
 |---|---|---|---|
-| 1 | Pagination (#37) | Server-side LIMIT/OFFSET, search/genre filter, page nav, template + JS, tests | 2-3 |
-| 2 | Loan design | Schema confirmation, DEC-024/025/026, handler shapes, error sentinels. No code. | 1.5-2 |
-| 3 | Loans backend | DB methods (transactional), handlers (checkout, return), tests | 3-4 |
-| 4 | Loans UI + dashboard counts | Wire book-detail scaffold to handlers, build `/loans` page with filter, replace dashboard placeholders with real counts | 3-4 |
+| 1 | Loan design | Schema confirmation, DEC-024/025/026, handler shapes, error sentinels. No code. | 1.5-2 |
+| 2 | Loans backend | DB methods (transactional), handlers (checkout, return), tests | 3-4 |
+| 3 | Loans UI | Wire book-detail scaffold to handlers, build `/loans` page with active/overdue filter | 3-4 |
+| 4 | Dashboard (role-differentiated essentials) | Three staff/admin cards (Overdue, Active Loans, Out of Stock) + one patron card (My Active Loans + next due date); role-gated template blocks; new COUNT queries | 1.5-2 |
 | 5 | Kiosk public browse | `/kiosk` route, anonymous browse, reused catalog grid minus staff controls | 2-3 |
 | 6 | Favorites (if time) | `patron_favorites`, toggle handler, heart UI | 2-3 |
 | 7 | CP6 close | Integration smoke, role-boundary tests, EC2 redeploy with clean DB, PR + merge | 1-2 |
 
-**Total: ~14-21 hours. Compresses to 5 sessions if favorites defers.**
+**Total: ~14-20 hours.** Slight shrink vs. v2 (~2-3h freed by deferring pagination, partially reabsorbed by the expanded dashboard scope). Compresses to 5 sessions if favorites defers.
 
 ---
 
@@ -225,6 +237,8 @@ Four sections. "Circulation" earns a section because checkout/checkin/loans/repo
 
 ### Dashboard Redesign (role-differentiated, new card set)
 
+> **2026-04-20 status:** the trimmed essential version of this design is now in CP6 scope (§5 above). The richer four-cards-per-role design documented below -- including Today's Activity, patron mini-lists, My Holds placeholder, and the Out of Stock card for patrons -- remains deferred post-submission.
+
 **Design principle:** every card answers one of:
 1. "Is anything urgent?" (alert state)
 2. "What's happening right now?" (ambient pulse)
@@ -253,6 +267,47 @@ Cards that don't answer one of those are decoration.
 **Cards explicitly cut:** Books count (static, no signal), Patrons count (low signal, rarely changes), Staff count (admin reaches staff via nav).
 
 ---
+
+### Catalog Pagination (Path 2: AJAX fragment swap)
+
+**Why deferred (2026-04-20):** the current `templates/catalog.html` renders all 100 seeded books into the DOM with `data-title`, `data-authors`, `data-isbn`, `data-genre`, `data-available` attributes. `initCatalogFilter` in `app.js` reads the search input on every keystroke and toggles `card.style.display` based on filter match. Zero network traffic per keystroke, zero focus loss, instant feedback -- the UX is genuinely good. Server-side pagination fundamentally breaks this because the client can only filter the 24 cards in the current page, silently missing matches on other pages.
+
+Three paths considered:
+
+- **Path 1 (rejected).** Debounced full-page form submit. Focus loss on every 300ms tick, page flash, bad kiosk UX.
+- **Path 2 (chosen for eventual implementation).** AJAX fragment swap. Preserves the live-filter feel.
+- **Path 3 (also rejected).** Server-side pagination with enter-to-submit search and autosubmit on genre/available changes. Works, but loses the typing-feel UX that matters for the kiosk.
+
+**Path 2 design:**
+
+**Server side.**
+- Extract the catalog grid + pagination controls into a named template block, e.g. `{{define "catalog_results"}} ... {{end}}` in `catalog.html`. The full page includes it; AJAX requests render only that block.
+- `HandleCatalog` branches: if `c.GetHeader("X-Requested-With") == "XMLHttpRequest"` (or `c.Query("partial") == "1"`), call `ExecuteTemplate(c.Writer, "catalog_results", data)` instead of the full page render.
+- Add the baseline CP6-era `ListBooks(filter, page, pageSize) (BookPage, error)` and `GetAllGenres() ([]string, error)` DB methods. Filter struct covers query (title + authors via EXISTS subquery + ISBN + description), genre exact match, available-only boolean. Dynamic WHERE builder with parallel `[]string where, []any args` slices; author search via correlated EXISTS to avoid fighting the `GROUP_CONCAT` aggregate. Count query reuses the same WHERE clause to compute `TotalPages = ceil(Total / PageSize)`, minimum 1.
+- Trim/collapse whitespace on `filter.Query` at the handler boundary.
+
+**Client side.**
+- `app.js` gains a debounce helper (~300ms) for the search input.
+- Genre `<select>` and available `<input type="checkbox">` fire `change` events that immediately submit (no debounce).
+- Each filter/pagination interaction fetches `/books?...&partial=1`, swaps the inner HTML of `#catalog-results`, and updates the URL.
+- `history.replaceState` for search-typing keystrokes (don't pollute back history per letter); `history.pushState` for discrete state changes (genre/available/pagination click).
+- `AbortController` on each in-flight request so an old slow response can't clobber a newer one.
+- Pagination links get click-intercepted -- they're normal `<a>` tags with full hrefs as the no-JS fallback, but JS prevents default and routes through the same fetch+swap path.
+- Full-page form submission as the no-JS fallback. The form has `method="GET" action="/books"` so disabling JS still produces a working (but less responsive) catalog.
+
+**Race / correctness notes.**
+- `AbortController` per request prevents stale-wins. The test is: type "h", wait 200ms (request fires), type "harry" quickly (second request fires, aborts first). The first's response is discarded.
+- URL and grid state must stay in lockstep. Reload always works because the URL encodes the filter state and the server renders authoritatively.
+
+**Reuses for CP6+ features.**
+- `/loans?filter=active|overdue` benefits from the same fragment swap pattern if/when loan volume outgrows the all-in-DOM render for that page.
+- Any filtered list (future staff activity log, future reports) can adopt the same infra.
+
+**Unblock trigger.** Catalog routinely exceeds ~500 rows in a deployed library, OR CP7 close frees a session for polish work, whichever comes first.
+
+**Pagination widget shape (if/when built):** numbered pages with ellipsis (e.g., `« 1 2 3 ... 17 18 »`), not just prev/next, because deep-linkability is a real kiosk need. 24 books per page.
+
+**Empty-state copy:** "No books match your filters. [Clear Filters]" button that navigates to `/books`.
 
 ### Overdue Notice Print System
 
@@ -346,3 +401,9 @@ Considered in CP6 briefly, moved to CP7 because CP6 is already full and CP7's #2
 
 **Discipline lens that should have been applied throughout:**
 "Does CP6 need this to function?" Not "would this be nice at volume?" not "would a good product manager want this?" The foundation lens is the right lens for a checkpoint with a hard deadline. Polish comes after the foundation ships.
+
+**2026-04-20 pagination reversal.**
+Earlier (v2) recommendation: server-side pagination in CP6 with enter-to-submit filters. Reversed mid-session after recognizing the current all-in-DOM catalog has a live-filter UX that the v2 plan would have silently downgraded. The foundation lens actually says: "does CP6 need pagination to function?" At 100 seeded books rendered in 100KB of HTML, filtered instantly in the browser, the answer is no. Real pagination belongs to Path 2 (AJAX fragment swap) which preserves the UX but costs ~5-6h; out of CP6 budget, in the deferred section above. Lesson: when a feature looks like "we need this soon for scale," check that it isn't breaking existing working UX -- the right question is not "when do we need it" but "what does it cost to add without regressing current UX."
+
+**2026-04-20 dashboard partial un-defer.**
+Earlier (v2) recommendation: wire three placeholders to real counts, no redesign. Refined after recognizing the v2 scope would have left patrons on a staff-oriented dashboard (Books count / Patrons count / Active Loans count) which is broken UX for the role most likely to be using the kiosk and patron portal. Pulled a trimmed role-differentiated essential card set into CP6: three staff/admin cards (Overdue, Active Loans, Out of Stock) + one patron card (My Active Loans + next due date). The fuller four-cards-per-role design (mini-lists, Today's Activity, My Holds placeholder, patron Out of Stock tied to holds) stays deferred. Lesson: "no redesign" can quietly mean "keep the broken experience." Check each role's landing page experience under the proposed scope before calling it foundation-enough.
