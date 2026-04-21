@@ -73,12 +73,13 @@ This is a solo developer project.
 - ✅ Color scheme — slate blue sidebar, soft white-gray background, accent stat cards
 - ✅ Merged PR #27, tagged v2
 
-**Next up:** CP6 — loan system (#22) and server-side pagination (#37).
+**Next up:** CP6 — loan foundation + kiosk anonymous browse + catalog pagination. Scope disciplined on 2026-04-19 via the v2 reality-check; workflow polish (rapid-scan portal, sidebar restructure, dashboard redesign, printed overdue notices, patron-facing mini-lists) moved to post-submission. Full plan in `cp6-planning.md`.
 
 **Open milestones:**
-- [CP6 #22](https://github.com/timLP79/cs408-go-stack/issues/22) Loan system: checkout/return + kiosk browse + favorites (SSE and patron holds deferred post-submission)
-- [CP6 #37](https://github.com/timLP79/cs408-go-stack/issues/37) Server-side pagination and filtering for catalog
-- [CP7 #23](https://github.com/timLP79/cs408-go-stack/issues/23) Admin panel: ZIP export and import (Zip Slip protection)
+- [CP6 #22](https://github.com/timLP79/cs408-go-stack/issues/22) Loan system (trimmed): loan schema + transactional DB methods + checkout/return handlers on book-detail scaffold + `/loans` list view with `active|overdue` filter + kiosk anonymous browse. Favorites only if time permits. SSE and patron holds deferred.
+- [CP6 #37](https://github.com/timLP79/cs408-go-stack/issues/37) Server-side pagination and filtering for catalog (urgent after CP5 seed bumped the catalog to 100 books)
+- CP6 dashboard placeholder wire-up: the three `—` stubs in `templates/index.html` become real counts; no card restructure in CP6
+- [CP7 #23](https://github.com/timLP79/cs408-go-stack/issues/23) Admin panel: ZIP export and import (Zip Slip protection) + CSV book/patron import (absorbed from CP6 v2 trim)
 - [CP7 #24](https://github.com/timLP79/cs408-go-stack/issues/24) Testing, polish, final EC2 redeploy
 - Backlog: [#17](https://github.com/timLP79/cs408-go-stack/issues/17) Automate deployment via GitHub Actions (low priority)
 
@@ -175,8 +176,8 @@ See [`plan.md`](./plan.md) for the full LibreShelf architecture. Summary:
 | CP3 | ✅ | Book catalog and detail pages ([#19](https://github.com/timLP79/cs408-go-stack/issues/19)) |
 | CP4 | ✅ | Security hardening: three-role model, CSRF, constant-time login, ExecuteTemplate fix |
 | CP5 | ✅ | CRUD: book CRUD + Open Library, patron management, staff management, test router mirror fix ([#20](https://github.com/timLP79/cs408-go-stack/issues/20), [#21](https://github.com/timLP79/cs408-go-stack/issues/21), [#39](https://github.com/timLP79/cs408-go-stack/issues/39), [#35](https://github.com/timLP79/cs408-go-stack/issues/35)) |
-| CP6 | 🔄 | Loans (checkout / return / kiosk / favorites) + server-side pagination ([#22](https://github.com/timLP79/cs408-go-stack/issues/22), [#37](https://github.com/timLP79/cs408-go-stack/issues/37)) |
-| CP7 | | Admin panel (ZIP export / import), security headers, final polish and deploy ([#23](https://github.com/timLP79/cs408-go-stack/issues/23), [#24](https://github.com/timLP79/cs408-go-stack/issues/24)) |
+| CP6 | 🔄 | Loan foundation (schema, transactional checkout/return, `/loans` list view), server-side pagination (#37), kiosk anonymous browse, dashboard placeholder wire-up. Portal, sidebar restructure, dashboard redesign, overdue notice print system deferred post-submission per the 2026-04-19 v2 trim. ([#22](https://github.com/timLP79/cs408-go-stack/issues/22), [#37](https://github.com/timLP79/cs408-go-stack/issues/37)) |
+| CP7 | | Admin panel (ZIP export/import + CSV book/patron import absorbed from CP6), security headers, final polish and deploy ([#23](https://github.com/timLP79/cs408-go-stack/issues/23), [#24](https://github.com/timLP79/cs408-go-stack/issues/24)) |
 
 ---
 
@@ -191,7 +192,7 @@ go-full-stack/
 ├── handlers_auth.go                 # Login, logout, session middleware ✅
 ├── handlers_books.go                # Book handlers (CP3/CP4)
 ├── handlers_patrons.go              # Patron handlers (CP5)
-├── handlers_loans.go                # Loan/kiosk handlers + SSE (CP6)
+├── handlers_loans.go                # Checkout/return + /loans list view (CP6; SSE deferred post-submission)
 ├── handlers_admin.go                # Admin handlers: ZIP export/import, Open Library proxy (CP4/CP7)
 ├── templates/
 │   ├── layout.html                  # Base layout with sidebar nav ✅
@@ -209,7 +210,7 @@ go-full-stack/
 │   │   └── style.css                # Custom styles ✅
 │   ├── javascripts/
 │   │   ├── bootstrap.bundle.min.js  # Bootstrap JS (local) ✅
-│   │   └── app.js                   # SSE listener + client JS (CP5)
+│   │   └── app.js                   # Catalog filter, Bootstrap live validation, staff/patron/book management, OL Lookup wiring (CP3-CP5) ✅
 │   └── images/                      # Cover images, favicon
 ├── data/                            # SQLite database (gitignored) ✅
 ├── screenshots/                     # Project screenshots for documentation
@@ -372,8 +373,11 @@ CREATE TABLE sessions (
 | GET | `/books/:id` | Book Detail | RequireAuth | Book info, availability, loan history |
 | GET | `/patrons` | Patrons | RequireAdmin | Patron management |
 | GET | `/admin` | Admin | RequireAdmin | ZIP export/import, settings |
-| GET | `/kiosk` | Kiosk | Public | Public browse; optional login for favorites and holds |
-| GET | `/events` | SSE | RequireAuth | Availability updates stream (CP6) |
+| GET | `/kiosk` | Kiosk | Public | Anonymous public browse (CP6 scope); favorites-if-time-permits requires patron login |
+| GET | `/loans` | Loan list view | RequireStaff | Active/overdue loans with filter; each row has a Return action *(planned, CP6)* |
+| POST | `/loans/checkout` | — | RequireStaff | Checkout action from book-detail scaffold *(planned, CP6)* |
+| POST | `/loans/:id/return` | — | RequireStaff | Return action from /loans or book detail *(planned, CP6)* |
+| GET | `/events` | SSE | RequireAuth | Availability updates stream *(deferred post-submission)* |
 | GET | `/stylesheets/*` | — | Public | CSS static files |
 | GET | `/javascripts/*` | — | Public | JS static files |
 | GET | `/images/*` | — | Public | Image static files |

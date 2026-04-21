@@ -52,7 +52,8 @@ Passwords must be 8+ characters with at least one uppercase letter, one digit, a
 | `/patrons` | Patron management -- list + add / edit / delete modals | Staff + admin |
 | `/staff` | Staff management -- list + add / edit / delete / reset-password modals | Admin only |
 | `/admin` | Admin panel -- stub today; CP7 adds ZIP export / import | Staff + admin (CP7 ZIP features will be admin-only) |
-| `/kiosk` | Public browse -- stub today; CP6 adds favorites and patron login (holds deferred post-submission) | Public |
+| `/kiosk` | Public browse -- stub today; CP6 adds anonymous browse (patron login gate and favorites if time permits; holds deferred post-submission) | Public |
+| `/loans` | Active/overdue loan list view -- planned CP6 | Staff + admin |
 
 ## Documentation
 

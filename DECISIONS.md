@@ -81,12 +81,15 @@ defeats the purpose. Patron features (favorites, holds) are value-adds that just
 
 ## DEC-007: SSE for real-time availability (not WebSocket)
 
-**Date:** 2026-03-01 (planned for CP6)
+**Date:** 2026-03-01 (deferred post-submission as of the 2026-04-19 CP6 v2 trim)
 **Context:** Real-time availability updates need to push from server to browser.
-**Decision:** Use Server-Sent Events (`GET /events`) instead of WebSocket.
+**Decision:** Use Server-Sent Events (`GET /events`) instead of WebSocket when the feature is built.
 **Rationale:** SSE is one-way (server to browser), which is exactly what this use case needs.
 Simpler than WebSocket, works over HTTP/1.1, auto-reconnects, and requires no additional
 dependencies.
+**Status update 2026-04-19:** The SSE feature itself is deferred post-submission. CP6 ships
+loans without live availability broadcast; a page reload is the signal. The technology choice
+recorded here stands for whenever the feature is built.
 
 ---
 

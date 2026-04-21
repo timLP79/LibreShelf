@@ -38,8 +38,9 @@ are handled exclusively by staff on the book detail page.
 | `GET /` | Dashboard | Any logged-in user |
 | `GET /catalog` | Catalog | Any logged-in user |
 | `GET /books/:id` | Book Detail | Any logged-in user |
-| `GET /kiosk` | Kiosk (stub today; CP6 adds real browse) | **Public** (login optional) |
-| `POST /kiosk/favorites` | Save favorite *(planned, CP6)* | Login optional (silently no-op if not logged in) |
+| `GET /kiosk` | Kiosk (stub today; CP6 adds anonymous browse; no login gate in CP6 scope) | **Public** |
+| `GET /loans` | Active/overdue loan list view *(planned, CP6)* | Admin + staff |
+| `POST /kiosk/favorites` | Save favorite *(planned, CP6 only if time permits; patron login required when built)* | Requires login |
 | `POST /kiosk/holds` | Request hold *(deferred post-submission)* | Requires login |
 | `GET /patrons` | Patrons | Admin + staff |
 | `POST /patrons` | Create patron | Admin + staff |
@@ -157,7 +158,7 @@ go-full-stack/
 ├── handlers_patrons_test.go      # Patron handler tests (13 tests)
 ├── handlers_staff.go             # Staff list, create, edit, delete, reset-password
 ├── handlers_staff_test.go        # Staff handler tests
-├── handlers_loans.go             # (planned, CP6) Checkout / return / favorites
+├── handlers_loans.go             # (planned, CP6) Checkout / return (wired to book-detail scaffold) + /loans list view
 ├── handlers_admin.go             # (planned, CP7) ZIP export / import; the Open Library proxy landed in handlers_books.go instead
 ├── openlibrary.go                # Open Library API client (DEC-008)
 ├── covers.go                     # Cover upload + OL-URL download with MIME / size / extension validation
@@ -174,7 +175,8 @@ go-full-stack/
 │   ├── patrons.html              # Patron list + Add / Edit / Delete modals
 │   ├── staff.html                # Staff list + Add / Edit / Delete / Reset Password modals
 │   ├── admin.html                # Admin panel (stub; CP7 adds ZIP export / import)
-│   ├── kiosk.html                # Public kiosk (stub; CP6 adds real browse)
+│   ├── kiosk.html                # Public kiosk (stub; CP6 adds anonymous browse, no login gate)
+│   ├── loans.html                # (planned, CP6) Active/overdue loan list view with filter
 │   └── error.html                # 404 / 500 error page
 ├── static/
 │   ├── stylesheets/
@@ -239,10 +241,10 @@ go-full-stack/
 | Middleware | Routes |
 |-----------|--------|
 | `RequireAuth` | `/`, `/catalog`, `/books/:id`, `POST /logout` |
-| `RequireStaff` (admin + staff) | `/patrons` + patron CRUD, `/admin`, `/books/new`, `POST /books`, book edit, `/api/openlibrary/isbn/:isbn` |
+| `RequireStaff` (admin + staff) | `/patrons` + patron CRUD, `/admin`, `/books/new`, `POST /books`, book edit, `/api/openlibrary/isbn/:isbn`, `/loans` + `POST /loans/checkout` + `POST /loans/:id/return` *(planned, CP6)* |
 | `RequireAdmin` | `/staff` + staff CRUD + staff password reset, `POST /books/:id/delete` |
 | Public | `GET /login`, `POST /login`, `GET /kiosk`, static files |
-| `LoadUser` (optional, *planned CP6*) | `POST /kiosk/favorites` |
+| `RequireAuth` (kiosk, *planned CP6 only if time permits*) | `POST /kiosk/favorites` |
 | `RequireAuth` (kiosk, *deferred*) | `POST /kiosk/holds` |
 
 **Seed accounts (created on first run):**
@@ -389,15 +391,25 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 ---
 
 ### CP6 -- Loans + Kiosk + Pagination
-**Goal:** Kiosk provides public catalog browse with optional patron login for favorites. Admin and staff handle all checkout and return transactions on the book detail page. Catalog gets server-side pagination. SSE and patron holds deferred post-submission.
+**Goal:** Ship the loan foundation (checkout, return, overdue awareness) on the existing book-detail scaffold; kiosk provides public anonymous browse; catalog gets server-side pagination. Scope disciplined via the v2 reality-check on 2026-04-19 -- workflow polish (rapid-scan portal, sidebar restructure, dashboard redesign, printed overdue notices, patron-facing mini-lists) deferred post-submission. Full plan and deferred-design notes in [`cp6-planning.md`](./cp6-planning.md).
 
-- [#22](https://github.com/timLP79/cs408-go-stack/issues/22) -- Loan system: kiosk browse + favorites (SSE and holds deferred)
-  - `handlers_loans.go`: checkout/return on book detail page; transactional (`loans` + `books.quantity_available` per DEC-022)
-  - `handlers_books.go`: `HandleKiosk` -- public catalog browse (no auth required)
-  - `db.go`: `GetActiveLoans()`, checkout/return methods; favorites table and methods
-  - `templates/kiosk.html`: public browse; optional login surfaces favorites
-  - Patrons cannot self-checkout; admin/staff select a patron and transact
-- [#37](https://github.com/timLP79/cs408-go-stack/issues/37) -- Server-side pagination and filtering for catalog (needed because the Open Library import in CP5 will scale the catalog past what client-side filtering can handle)
+- [#22](https://github.com/timLP79/cs408-go-stack/issues/22) -- Loan system (trimmed)
+  - `db.go`: loan schema (`due_date DATE NOT NULL`, `returned_at DATETIME`, `fine_cents INTEGER NOT NULL DEFAULT 0` future hook), plus DB methods `CheckoutBook`, `ReturnBook`, `GetActiveLoans`, `GetOverdueLoans`, `GetLoanHistoryByBook`, `GetLoanHistoryByPatron`. Both writes transactional (loan row + `quantity_available` adjustment in one tx, per DEC-022).
+  - No `status` column -- the three states (active, returned, overdue) are expressible from `returned_at` and `due_date`. Overdue derived: `returned_at IS NULL AND due_date < DATE('now')`. See DEC-024.
+  - `handlers_loans.go`: `HandleCheckout` and `HandleReturn` wired to the existing (currently disabled) scaffold on the book detail page. Staff-only route group. Sentinel errors: `ErrNoCopiesAvailable`, `ErrLoanAlreadyReturned`, `ErrPatronNotFound`. Flash-cookie messaging on success/failure.
+  - `templates/loans.html` + route `/loans?filter=active|overdue` -- single-template list view, sortable by due date, each row has a Return button. See DEC-025.
+  - `handlers_books.go`: `HandleKiosk` -- public anonymous catalog browse (no auth required), reuses catalog grid minus staff controls. No patron login gate in CP6; no favorites by default (favorites only if time permits after items 1-5 ship).
+  - Patrons cannot self-checkout; admin/staff select a patron and transact via the book-detail form.
+  - Rapid-scan `/checkout` and `/checkin` portal deferred post-submission (earns its place at volume, not a CP6 foundation need).
+- [#37](https://github.com/timLP79/cs408-go-stack/issues/37) -- Server-side pagination and filtering for catalog (now urgent -- CP5 coda seeded 100 books)
+  - Server-side `LIMIT`/`OFFSET` on `/` catalog; query params `?page=N&q=<search>&genre=<genre>`; default page size 24.
+  - Page nav component at the bottom of the catalog (previous / current / next / last).
+  - Remove client-side filtering JS from `app.js` for the catalog; search and genre filter round-trip to the server.
+- Dashboard placeholder wire-up (no redesign)
+  - Replace the three "—" stubs in `templates/index.html` with real `SELECT COUNT(...)` queries: Books (all users), Patrons (staff + admin only, gate stays as-is), Active Loans (all users).
+  - No card restructuring, no Overdue/Today's Activity/Out-of-Stock cards, no role-differentiated patron view in CP6. All deferred.
+
+**DECs to write in session 2 (design):** DEC-024 (loan state model via columns, no status column), DEC-025 (single `/loans` page with filter, no per-patron grouping or print CSS), DEC-026 (`fine_cents` reservation, no fine feature in CP6).
 
 ---
 
@@ -444,8 +456,9 @@ For full details see [`docs/security.md`](./security.md).
 | CP5 ✅ | File upload (cover images) | `covers.go` validates size (2 MB cap), extension whitelist (jpg/png/webp), and magic-byte MIME via `http.DetectContentType`; sanitized filename is a random 32-hex generated server-side (#20) |
 | CP5 ✅ | Open Library proxy | `IsValidISBN` runs server-side before any outbound request; `HandleOpenLibraryLookup` rejects malformed ISBNs with 400 before opening a socket (#20) |
 | CP5 ✅ | PII exposure (patron emails) | `email` column stays optional; handlers never log patron data; the flash detail cookie is URL-escaped but still avoids serializing email / phone (#21) |
-| CP6 | Hold request abuse | Validate patron login before allowing holds; rate limit hold requests |
-| CP6 | SSE data exposure | Event stream must not include patron PII -- book ID and availability only |
+| CP6 | Loan IDOR on return | Return handler verifies the submitted `loan_id` belongs to an active (non-returned) loan; no caller-controlled patron_id on the return path |
+| Deferred | Hold request abuse | Validate patron login before allowing holds; rate limit hold requests |
+| Deferred | SSE data exposure | Event stream must not include patron PII -- book ID and availability only |
 | CP7 | Zip Slip (path traversal) | Validate every file path in uploaded ZIP before extracting; reject `../` paths |
 | CP7 | Malicious ZIP import | Validate DB schema after import before bringing app back online |
 | CP7 | HTTP security headers | Add middleware for `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy` |

@@ -99,7 +99,7 @@ When accepting image uploads for book covers:
 
 ---
 
-## ZIP Import Security (CP6 — Zip Slip)
+## ZIP Import Security (CP7 — Zip Slip)
 
 **Zip Slip** is a critical vulnerability where a malicious ZIP contains files with
 paths like `../../etc/passwd`. When extracted naively, these overwrite files outside
@@ -476,13 +476,15 @@ Keep `go.sum` committed to the repository — it ensures reproducible, tamper-ev
 - [ ] User input is validated server-side before use
 - [ ] Error responses don't leak internal paths, stack traces, or SQL
 
-### CP3
-- [ ] Cover image uploads: MIME type checked, extension restricted, size limited, filename sanitized
+### CP5 (done)
+- [x] Cover image uploads: MIME type checked, extension restricted, size limited, filename sanitized (originally scheduled CP3; actually landed in CP5 with #20)
 
 ### CP6
-- [ ] ZIP import: path traversal check on every extracted file, size limits enforced
+- [ ] Loan IDOR on return: return handler verifies the submitted `loan_id` belongs to an active (non-returned) loan before acting; no caller-controlled patron_id on the return path
 
-### CP8
+### CP7
+- [ ] ZIP import: path traversal check on every extracted file, size limits enforced
+- [ ] CSV import: reject malformed rows, cap row count per upload, validate every field server-side before insert
 - [ ] Security headers middleware added
 - [ ] Trusted proxies configured
 - [ ] HTTPS configured in nginx (if domain name becomes available)
