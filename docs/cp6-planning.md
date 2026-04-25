@@ -73,10 +73,14 @@ Refined 2026-04-20 from the v2 "wire placeholders to real counts" scope because 
 - Reuses catalog grid UI, minus staff controls (no Edit/Delete buttons).
 - No patron login gate in CP6; anonymous browse only.
 
-### 7. Favorites (if time permits)
+### 7. Favorites -- DEFERRED POST-SUBMISSION (2026-04-24)
+
+Formally deferred on 2026-04-24 after a scope/timeline re-check. The 2-3h
+estimate plus realistic bug-fix overrun risk meant "if time permits" was
+unlikely to land without eating into CP7 or the 5/1 buffer day. Design
+preserved in CLAUDE.md's deferred backlog section.
 
 - `patron_favorites` table, small handler to toggle, heart icon on kiosk book cards.
-- Only if sessions 1-6 ship ahead of 4/27. Otherwise defers to CP7 or post-submission.
 
 ---
 
@@ -101,7 +105,7 @@ Three DEC entries to write in session 2 (design session). Do not write DECs for 
 | 3 | Loans UI | Wire book-detail scaffold to handlers, build `/loans` page with active/overdue filter | 3-4 |
 | 4 | Dashboard (role-differentiated essentials) | Three staff/admin cards (Overdue, Active Loans, Out of Stock) + one patron card (My Active Loans + next due date); role-gated template blocks; new COUNT queries | 1.5-2 |
 | 5 | Kiosk public browse | `/kiosk` route, anonymous browse, reused catalog grid minus staff controls | 2-3 |
-| 6 | Favorites (if time) | `patron_favorites`, toggle handler, heart UI | 2-3 |
+| 6 | ~~Favorites~~ | Deferred post-submission 2026-04-24 | -- |
 | 7 | CP6 close | Integration smoke, role-boundary tests, EC2 redeploy with clean DB, PR + merge | 1-2 |
 
 **Total: ~14-20 hours.** Slight shrink vs. v2 (~2-3h freed by deferring pagination, partially reabsorbed by the expanded dashboard scope). Compresses to 5 sessions if favorites defers.
