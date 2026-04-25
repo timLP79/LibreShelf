@@ -77,10 +77,22 @@ func HandleBookDetail(c *gin.Context) {
 		log.Printf("Failed to fetch loan history for book %d: %v", id, err)
 	}
 
+	var patrons []Patron
+	if u, exists := c.Get("user"); exists {
+		user := u.(*User)
+		if user.Role == "admin" || user.Role == "staff" {
+			patrons, err = dm.GetAllPatrons()
+			if err != nil {
+				log.Printf("Failed to fetch patrons for book %d: %v", id, err)
+			}
+		}
+	}
+
 	renderTemplate(c, "book_detail", gin.H{
 		"Title":         book.Title,
 		"Book":          book,
 		"Loans":         loans,
+		"Patrons":       patrons,
 		"Success":       readAndClearFlash(c, flashKindSuccess),
 		"SuccessDetail": readAndClearFlashDetail(c),
 		"Error":         readAndClearFlash(c, flashKindError),

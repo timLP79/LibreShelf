@@ -1,0 +1,137 @@
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+	"net/http"
+	"strconv"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+func HandleCheckout(c *gin.Context) {
+	bookID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		renderTemplate(c, "error", gin.H{
+			"Title":   "Not Found",
+			"Status":  404,
+			"Message": "Page not found",
+		})
+		return
+	}
+
+	dm := getDB(c)
+	book, err := dm.GetBookByID(bookID)
+	if err == sql.ErrNoRows {
+		c.Status(http.StatusNotFound)
+		renderTemplate(c, "error", gin.H{
+			"Title":   "Not Found",
+			"Status":  404,
+			"Message": "Book not found",
+		})
+		return
+	}
+	if err != nil {
+		log.Printf("HandleCheckout: GetBookByID(%d): %v", bookID, err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	bookPath := fmt.Sprintf("/books/%d", bookID)
+
+	patronID, err := strconv.Atoi(c.PostForm("patron_id"))
+	if err != nil || patronID <= 0 {
+		setFlash(c, flashKindError, "loan_patron_required")
+		c.Redirect(http.StatusFound, bookPath)
+		return
+	}
+
+	dueDate := time.Now().AddDate(0, 0, DefaultLoanTermDays)
+	err = dm.CheckoutBook(bookID, patronID, dueDate)
+	switch err {
+	case nil:
+		setFlash(c, flashKindSuccess, "loan_checkout_success")
+		setFlashDetail(c, book.Title)
+	case ErrPatronHasOverdue:
+		setFlash(c, flashKindError, "loan_blocked_overdue")
+	case ErrPatronAtLoanLimit:
+		setFlash(c, flashKindError, "loan_blocked_limit")
+	case ErrNoCopiesAvailable:
+		setFlash(c, flashKindError, "loan_no_copies")
+	default:
+		log.Printf("HandleCheckout: CheckoutBook(book=%d, patron=%d): %v", bookID, patronID, err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	c.Redirect(http.StatusFound, bookPath)
+}
+
+func HandleReturn(c *gin.Context) {
+	loanID, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		renderTemplate(c, "error", gin.H{
+			"Title":   "Not Found",
+			"Status":  404,
+			"Message": "Page not found",
+		})
+		return
+	}
+
+	dm := getDB(c)
+	err = dm.ReturnBook(loanID)
+	switch err {
+	case nil:
+		setFlash(c, flashKindSuccess, "loan_return_success")
+	case sql.ErrNoRows:
+		c.Status(http.StatusNotFound)
+		renderTemplate(c, "error", gin.H{
+			"Title":   "Not Found",
+			"Status":  404,
+			"Message": "Loan not found",
+		})
+		return
+	case ErrLoanAlreadyReturned:
+		setFlash(c, flashKindError, "loan_already_returned")
+	default:
+		log.Printf("HandleReturn: ReturnBook(%d): %v", loanID, err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	c.Redirect(http.StatusFound, "/loans")
+}
+
+func HandleLoansList(c *gin.Context) {
+	filter := c.Query("filter")
+	if filter != "active" && filter != "overdue" {
+		filter = "active"
+	}
+
+	dm := getDB(c)
+	var loans []LoanListRow
+	var err error
+	if filter == "overdue" {
+		loans, err = dm.GetOverdueLoans()
+	} else {
+		loans, err = dm.GetActiveLoans()
+	}
+	if err != nil {
+		log.Printf("HandleLoansList: fetch loans (filter=%s): %v", filter, err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	renderTemplate(c, "loans", gin.H{
+		"Title":         "Loans",
+		"Loans":         loans,
+		"Filter":        filter,
+		"Success":       readAndClearFlash(c, flashKindSuccess),
+		"SuccessDetail": readAndClearFlashDetail(c),
+		"Error":         readAndClearFlash(c, flashKindError),
+	})
+}

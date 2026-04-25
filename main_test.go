@@ -57,7 +57,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
 		"index", "catalog", "book_detail", "book_form",
-		"patrons", "admin", "kiosk", "staff", "error",
+		"patrons", "admin", "kiosk", "staff", "loans", "error",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -97,6 +97,9 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	staff.POST("/books", HandleBookCreate)
 	staff.GET("/books/:id/edit", HandleBookEdit)
 	staff.POST("/books/:id/edit", HandleBookUpdate)
+	staff.POST("/books/:id/checkout", HandleCheckout)
+	staff.POST("/loans/:id/return", HandleReturn)
+	staff.GET("/loans", HandleLoansList)
 
 	// Admin-only routes
 	admin := router.Group("/")
