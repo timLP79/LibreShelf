@@ -69,6 +69,37 @@
   border-left-color: #d97706;
 }
 
+.stat-card-overdue {
+  border-left-color: #dc3545;
+}
+
+.stat-card-stock {
+  border-left-color: #64748b;
+}
+
+.stat-card-neutral {
+  border-left-color: #cbd5e1;
+}
+
+.stat-card .stat-value-danger {
+  color: #dc3545;
+}
+
+.stat-card .stat-secondary {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+a.text-decoration-none > .stat-card {
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+a.text-decoration-none:hover > .stat-card {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
 .stat-card .stat-label {
   font-size: 0.8rem;
   font-weight: 600;
@@ -123,4 +154,45 @@
  * here" feel without disappearing. */
 .book-cover-placeholder .no-cover {
   color: #adb5bd;
+}
+
+/* Kiosk shell: full-width, no sidebar, distinct header so the public
+ * terminal is visually clearly NOT the staff app. */
+.kiosk-body {
+  background-color: #f0f4f8;
+  min-height: 100vh;
+}
+
+.kiosk-header {
+  background-color: #1e3a5f;
+  color: #ffffff;
+  border-bottom: 4px solid #d97706;
+}
+
+.kiosk-brand,
+.kiosk-brand:hover {
+  color: #ffffff;
+}
+
+.kiosk-badge {
+  background-color: #ffffff;
+  color: #1e3a5f;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* Whole-card click target: makes a kiosk book card behave like a single
+ * tap zone on a touch terminal rather than forcing the user to hit the
+ * tiny "Details ->" link. */
+.kiosk-card-link {
+  display: block;
+}
+
+.kiosk-card-link .card {
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.kiosk-card-link:hover .card {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
 }

@@ -393,3 +393,92 @@ could not. The handler-side branch is one string comparison; the template-side
 addition is one extra `<button>` gated on `{{if .ShowAddAnother}}`. Surface area is
 small, the affordance is obvious to admins familiar with any other admin console,
 and it generalizes cleanly to the next CRUD surface.
+
+---
+
+## DEC-024: Loan state expressed via `due_date + returned_at`, no status column
+
+**Date:** 2026-04-20 (CP6 design session)
+**Context:** CP6 introduces the loan lifecycle. A loan has three observable states
+(active, returned, overdue). The naive approach is a `status` TEXT column updated
+on checkout and return, but that denormalizes data already expressible from two
+timestamp columns and creates drift risk: a row could read `status='active'` while
+`due_date` is in the past, or `status='returned'` while `returned_at IS NULL`.
+**Decision:** The `loans` table carries `due_date DATE NOT NULL` and
+`returned_at DATETIME` (nullable). No `status` column. The three states are derived
+at query time:
+- **Active:** `returned_at IS NULL AND due_date >= DATE('now')`
+- **Overdue:** `returned_at IS NULL AND due_date < DATE('now')`
+- **Returned:** `returned_at IS NOT NULL`
+
+`due_date` is a DATE (not DATETIME) because loan terms are whole-day granularity;
+a book due "April 30" is due at end-of-day April 30, and fractional hours never
+matter. `returned_at` stays DATETIME because the exact return moment is useful in
+audit history. The existing `loans` table schema from CP1 (DATETIME `due_date`
+nullable, no `fine_cents`) is rewritten in `createSchema`; local dev re-seeds via
+`rm data/database.sqlite*` and EC2 gets a clean DB at CP7 deploy.
+**Rationale:** One source of truth per state. No branch where a handler might
+forget to update `status` and leave the row inconsistent. The `DATE('now')`
+comparison is trivial in SQL and readable in both queries and tests. If a future
+CP adds a fourth state (lost, on-hold, etc.) that is genuinely not derivable from
+existing columns, adding a status column then costs one migration -- cheap.
+
+---
+
+## DEC-025: Loan management via `/loans` with filter query param, 14-day loan term
+
+**Date:** 2026-04-20 (CP6 design session)
+**Context:** CP6 needs a staff-facing way to see and act on loans. The v1 planning
+doc proposed a rapid-scan checkout/checkin portal, a separate `/reports/overdue`
+table, and per-patron printable notices. The v2 reality-check trimmed all of that
+to fit the calendar. The minimum shippable surface is: one list view that staff
+can filter between active and overdue loans, with a return action per row, plus
+checkout initiated from the book-detail page's existing scaffold. Loan term
+default needed a number.
+**Decision:** Single `/loans` route, staff + admin only, with
+`?filter=active|overdue` query param (default `active`). Table rows show book
+title, patron name, due date, and (when overdue) days overdue; each row has a
+Return button posting to `POST /loans/:id/return`. Default loan term is 14 days,
+defined as a single package-level constant (`const DefaultLoanTermDays = 14`)
+passed to `CheckoutBook` by the handler. Per-book or per-patron overrides deferred
+post-submission. The book-detail page keeps its existing checkout scaffold as the
+checkout UX; no separate `/checkout` portal in CP6. The rapid-scan portal design
+from the v1 planning doc is preserved in `docs/cp6-planning.md` for a future
+un-defer when transaction volume justifies it.
+**Rationale:** Two states expressible by one query param keeps the URL shareable,
+the template single, and the tests trivial. Fourteen days is the standard public
+library default (Boise Public, Ball State Bracken, most US library systems) and
+shorter terms produce more overdue rows for demo data. Keeping the book-detail
+form as the checkout UX means session 3 is "wire existing scaffold to handler"
+instead of "build new portal template" -- ~2h saved.
+
+---
+
+## DEC-026: Checkout guardrails: block on any overdue, cap active loans at 5
+
+**Date:** 2026-04-20 (CP6 design session)
+**Context:** Checkout can be unrestricted (trust staff) or guarded. Unrestricted
+is simpler but lets a patron with six overdue books walk out with a seventh.
+Guardrails are the stronger library posture. Two guardrails on the table: block
+checkout when the patron has overdue loans, and/or cap the number of concurrent
+active loans per patron.
+**Decision:** Both guardrails in CP6. Enforced inside `CheckoutBook` before the
+insert, as part of the same transaction that decrements `quantity_available`:
+
+1. **Block on overdue:** if the patron has one or more loans where
+   `returned_at IS NULL AND due_date < DATE('now')`, refuse the checkout and
+   return `ErrPatronHasOverdue`.
+2. **Max active loans:** if the patron has 5 or more loans where
+   `returned_at IS NULL`, refuse the checkout and return `ErrPatronAtLoanLimit`.
+
+The limit is a single package-level constant (`const MaxActiveLoansPerPatron = 5`).
+Handlers map both sentinels to flash codes (`loan_blocked_overdue`,
+`loan_blocked_limit`) surfaced as a banner on the book-detail page.
+**Rationale:** "Any overdue blocks" is the simplest rule to explain to both staff
+and patrons, and matches typical small-library practice (return what you have,
+then borrow more). Five active loans per patron is the sweet spot between too
+restrictive (3 feels stingy for families) and too liberal (10 makes the dashboard
+"Active Loans" counter less meaningful). Both numbers are single constants, so
+tuning them later is one-line change. Catching these inside `CheckoutBook` keeps
+the check and the insert atomic; validating in the handler would open a TOCTOU
+race between check and insert when multiple staff check out books concurrently.

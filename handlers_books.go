@@ -77,10 +77,22 @@ func HandleBookDetail(c *gin.Context) {
 		log.Printf("Failed to fetch loan history for book %d: %v", id, err)
 	}
 
+	var patrons []Patron
+	if u, exists := c.Get("user"); exists {
+		user := u.(*User)
+		if user.Role == "admin" || user.Role == "staff" {
+			patrons, err = dm.GetAllPatrons()
+			if err != nil {
+				log.Printf("Failed to fetch patrons for book %d: %v", id, err)
+			}
+		}
+	}
+
 	renderTemplate(c, "book_detail", gin.H{
 		"Title":         book.Title,
 		"Book":          book,
 		"Loans":         loans,
+		"Patrons":       patrons,
 		"Success":       readAndClearFlash(c, flashKindSuccess),
 		"SuccessDetail": readAndClearFlashDetail(c),
 		"Error":         readAndClearFlash(c, flashKindError),
@@ -552,4 +564,52 @@ func HandleBookDelete(c *gin.Context) {
 	setFlash(c, flashKindSuccess, "book_deleted")
 	setFlashDetail(c, book.Title)
 	c.Redirect(http.StatusFound, "/catalog")
+}
+
+// HandleKiosk renders the public kiosk catalog grid. Anonymous access:
+// no auth gate, no checkout / edit / delete controls. Reuses the same
+// data attributes the catalog grid uses so initCatalogFilter in app.js
+// binds without modification.
+func HandleKiosk(c *gin.Context) {
+	dm := getDB(c)
+	books, err := dm.GetAllBooks()
+	if err != nil {
+		log.Printf("HandleKiosk: GetAllBooks: %v", err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	renderKioskTemplate(c, "kiosk", gin.H{
+		"Title": "Catalog",
+		"Books": books,
+	})
+}
+
+// HandleKioskBookDetail renders a public read-only book detail page.
+// On bad id or missing row we redirect to /kiosk rather than render an
+// error template -- keeps the kiosk shell on screen with no separate
+// kiosk_error template needed for CP6.
+func HandleKioskBookDetail(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		c.Redirect(http.StatusFound, "/kiosk")
+		return
+	}
+
+	dm := getDB(c)
+	book, err := dm.GetBookByID(id)
+	if err == sql.ErrNoRows {
+		c.Redirect(http.StatusFound, "/kiosk")
+		return
+	}
+	if err != nil {
+		log.Printf("HandleKioskBookDetail: GetBookByID(%d): %v", id, err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	renderKioskTemplate(c, "kiosk_book_detail", gin.H{
+		"Title": book.Title,
+		"Book":  book,
+	})
 }

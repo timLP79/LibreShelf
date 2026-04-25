@@ -86,3 +86,8 @@ desktop.inidata/
 # ========================
 go-full-stack
 data/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

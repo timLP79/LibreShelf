@@ -57,11 +57,18 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
 		"index", "catalog", "book_detail", "book_form",
-		"patrons", "admin", "kiosk", "staff", "error",
+		"patrons", "admin", "staff", "loans", "my_loans", "error",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
 			"templates/layout.html",
+			"templates/"+name+".html",
+		))
+	}
+	kioskTemplateNames := []string{"kiosk", "kiosk_book_detail"}
+	for _, name := range kioskTemplateNames {
+		templates[name] = template.Must(template.New("kiosk_layout").Funcs(funcMap).ParseFiles(
+			"templates/kiosk_layout.html",
 			"templates/"+name+".html",
 		))
 	}
@@ -75,6 +82,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	router.GET("/login", HandleLogin)
 	router.POST("/login", LoginCSRFProtect, HandleLoginPost)
 	router.GET("/kiosk", HandleKiosk)
+	router.GET("/kiosk/books/:id", HandleKioskBookDetail)
 
 	// Authenticated routes -- any logged in user
 	auth := router.Group("/")
@@ -83,6 +91,11 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	auth.GET("/catalog", HandleCatalog)
 	auth.GET("/books/:id", HandleBookDetail)
 	auth.POST("/logout", HandleLogout)
+
+	// Patron-only routes
+	patron := router.Group("/")
+	patron.Use(RequireAuth, RequirePatron, CSRFProtect)
+	patron.GET("/my/loans", HandleMyLoans)
 
 	// Staff routes -- admin + staff
 	staff := router.Group("/")
@@ -97,6 +110,9 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	staff.POST("/books", HandleBookCreate)
 	staff.GET("/books/:id/edit", HandleBookEdit)
 	staff.POST("/books/:id/edit", HandleBookUpdate)
+	staff.POST("/books/:id/checkout", HandleCheckout)
+	staff.POST("/loans/:id/return", HandleReturn)
+	staff.GET("/loans", HandleLoansList)
 
 	// Admin-only routes
 	admin := router.Group("/")
@@ -172,6 +188,103 @@ func TestIndexRoute(t *testing.T) {
 	}
 	if !strings.Contains(rr.Body.String(), "Dashboard") {
 		t.Errorf("Expected body to contain 'Dashboard'")
+	}
+}
+
+// TestDashboardStaffShowsCounts pins the staff/admin card set: Overdue,
+// Active Loans, Out of Stock all render with the correct counts pulled
+// from the seeded fixture. Active count must exclude overdue (the cards
+// are disjoint by design -- see CountActiveLoans semantics).
+func TestDashboardStaffShowsCounts(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "dash_admin", "admin")
+
+	bookA := mustCreateBook(t, dm, "Active Book", 1)
+	bookB := mustCreateBook(t, dm, "Overdue Book", 1)
+	mustCreateBook(t, dm, "Sold Out Book", 0)
+	patronID := mustCreatePatron(t, dm, "Dash Patron")
+
+	nextWeek := time.Now().AddDate(0, 0, 7).UTC().Format("2006-01-02")
+	yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
+	mustInsertLoan(t, dm, bookA, patronID, nextWeek, "")  // active
+	mustInsertLoan(t, dm, bookB, patronID, yesterday, "") // overdue
+
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	for _, label := range []string{"Overdue", "Active Loans", "Out of Stock"} {
+		if !strings.Contains(body, label) {
+			t.Errorf("expected staff dashboard to contain card label %q", label)
+		}
+	}
+	// Patron-only card must not leak into staff view.
+	if strings.Contains(body, "My Active Loans") {
+		t.Errorf("staff dashboard must not render the patron-only card")
+	}
+}
+
+// TestDashboardPatronShowsMyLoansCard pins the patron card: count plus
+// "Next due:" secondary text taken from the soonest active loan.
+func TestDashboardPatronShowsMyLoansCard(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _, patronID := loginAsPatron(t, dm, "Dash Patron")
+
+	bookA := mustCreateBook(t, dm, "Soon Due Book", 1)
+	bookB := mustCreateBook(t, dm, "Later Due Book", 1)
+	soon := time.Now().AddDate(0, 0, 3).UTC().Format("2006-01-02")
+	later := time.Now().AddDate(0, 0, 10).UTC().Format("2006-01-02")
+	mustInsertLoan(t, dm, bookA, patronID, soon, "")
+	mustInsertLoan(t, dm, bookB, patronID, later, "")
+
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "My Active Loans") {
+		t.Errorf("expected patron dashboard to render My Active Loans card")
+	}
+	if !strings.Contains(body, "Next due: "+soon) {
+		t.Errorf("expected Next due to show soonest due_date %q in body", soon)
+	}
+	// Staff cards must not leak into patron view.
+	for _, label := range []string{"Overdue", "Out of Stock"} {
+		if strings.Contains(body, label) {
+			t.Errorf("patron dashboard must not render staff card %q", label)
+		}
+	}
+}
+
+// TestDashboardPatronZeroLoans pins the empty patron state: card renders
+// with "0", no "Next due:" line, no crash.
+func TestDashboardPatronZeroLoans(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _, _ := loginAsPatron(t, dm, "No Loans Patron")
+
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "My Active Loans") {
+		t.Errorf("expected patron card even with zero loans")
+	}
+	if strings.Contains(body, "Next due:") {
+		t.Errorf("must not render Next due line when patron has zero loans")
 	}
 }
 

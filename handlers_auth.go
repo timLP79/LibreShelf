@@ -53,6 +53,28 @@ func RequireAuth(c *gin.Context) {
 	c.Next()
 }
 
+func RequirePatron(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.Redirect(http.StatusFound, "/login")
+		c.Abort()
+		return
+	}
+
+	if user.(*User).Role != "patron" {
+		c.Status(http.StatusForbidden)
+		renderTemplate(c, "error", gin.H{
+			"Title":   "Forbidden",
+			"Status":  403,
+			"Message": "You don't have permission to access this page.",
+		})
+		c.Abort()
+		return
+	}
+
+	c.Next()
+}
+
 func RequireAdmin(c *gin.Context) {
 	user, exists := c.Get("user")
 	if !exists {

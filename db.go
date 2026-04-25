@@ -16,6 +16,11 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+const (
+	DefaultLoanTermDays     = 14
+	MaxActiveLoansPerPatron = 5
+)
+
 type Book struct {
 	ID                int
 	Title             string
@@ -42,6 +47,16 @@ type LoanRecord struct {
 	DueDate      string
 	ReturnedAt   *string
 	Status       string
+}
+
+type LoanListRow struct {
+	LoanID      int
+	BookID      int
+	BookTitle   string
+	PatronID    int
+	PatronName  string
+	DueDate     string
+	DaysOverdue int
 }
 
 type StaffMember struct {
@@ -167,6 +182,96 @@ func (dm *DatabaseManager) GetBookByISBN(isbn string) (*Book, error) {
 	return book, nil
 }
 
+func (dm *DatabaseManager) CheckoutBook(bookID, patronID int, dueDate time.Time) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var overdueCount int
+	if err := tx.QueryRow(`
+			SELECT COUNT(*) FROM loans
+			WHERE patron_id = ?
+				AND returned_at IS NULL
+				AND due_date < DATE('now')`,
+		patronID).Scan(&overdueCount); err != nil {
+		return err
+	}
+	if overdueCount > 0 {
+		return ErrPatronHasOverdue
+	}
+
+	var activeCount int
+	if err := tx.QueryRow(`
+			SELECT COUNT(*) FROM loans
+			WHERE patron_id = ?
+				AND returned_at IS NULL`,
+		patronID).Scan(&activeCount); err != nil {
+		return err
+	}
+	if activeCount >= MaxActiveLoansPerPatron {
+		return ErrPatronAtLoanLimit
+	}
+
+	var available int
+	if err := tx.QueryRow(
+		`SELECT quantity_available FROM books WHERE id = ?`,
+		bookID).Scan(&available); err != nil {
+		return err
+	}
+	if available <= 0 {
+		return ErrNoCopiesAvailable
+	}
+
+	if _, err := tx.Exec(
+		`INSERT INTO loans (book_id, patron_id, due_date) VALUES (?, ?, ?)`,
+		bookID, patronID, dueDate.UTC().Format("2006-01-02")); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(
+		`UPDATE books SET quantity_available = quantity_available - 1 WHERE id = ?`,
+		bookID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func (dm *DatabaseManager) ReturnBook(loanID int) error {
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var bookID int
+	var returnedAt sql.NullString
+	if err := tx.QueryRow(
+		`SELECT book_id, returned_at FROM loans WHERE id = ?`,
+		loanID).Scan(&bookID, &returnedAt); err != nil {
+		return err
+	}
+	if returnedAt.Valid {
+		return ErrLoanAlreadyReturned
+	}
+
+	if _, err := tx.Exec(
+		`UPDATE loans SET returned_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		loanID); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(
+		`UPDATE books SET quantity_available = quantity_available + 1 WHERE id = ?`,
+		bookID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
 func (dm *DatabaseManager) GetLoanHistory(bookID int) ([]LoanRecord, error) {
 	rows, err := dm.db.Query(`                         
                 SELECT l.id, p.name, l.checked_out_at, l.due_date, l.returned_at                                                                                                              
@@ -195,6 +300,113 @@ func (dm *DatabaseManager) GetLoanHistory(bookID int) ([]LoanRecord, error) {
 		records = append(records, r)
 	}
 	return records, rows.Err()
+}
+
+func (dm *DatabaseManager) GetActiveLoans() ([]LoanListRow, error) {
+	rows, err := dm.db.Query(`
+			SELECT l.id, b.id, b.title, p.id, p.name, l.due_date,
+				CAST(julianday('now') - julianday(l.due_date) AS INTEGER) AS days_overdue
+			FROM loans l
+			JOIN books b ON l.book_id = b.id
+			JOIN patrons p ON l.patron_id = p.id
+			WHERE l.returned_at IS NULL
+				AND l.due_date >= DATE('now')
+			ORDER BY l.due_date ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var loans []LoanListRow
+	for rows.Next() {
+		var r LoanListRow
+		if err := rows.Scan(&r.LoanID, &r.BookID, &r.BookTitle,
+			&r.PatronID, &r.PatronName, &r.DueDate, &r.DaysOverdue); err != nil {
+			return nil, err
+		}
+		loans = append(loans, r)
+	}
+	return loans, rows.Err()
+}
+
+func (dm *DatabaseManager) GetOverdueLoans() ([]LoanListRow, error) {
+	rows, err := dm.db.Query(`
+			SELECT l.id, b.id, b.title, p.id, p.name, l.due_date,
+				CAST(julianday('now') - julianday(l.due_date) AS INTEGER) AS days_overdue
+			FROM loans l
+			JOIN books b ON l.book_id = b.id
+			JOIN patrons p ON l.patron_id = p.id
+			WHERE l.returned_at IS NULL
+				AND l.due_date < DATE('now')
+			ORDER BY l.due_date ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var loans []LoanListRow
+	for rows.Next() {
+		var r LoanListRow
+		if err := rows.Scan(&r.LoanID, &r.BookID, &r.BookTitle,
+			&r.PatronID, &r.PatronName, &r.DueDate, &r.DaysOverdue); err != nil {
+			return nil, err
+		}
+		loans = append(loans, r)
+	}
+	return loans, rows.Err()
+}
+
+func (dm *DatabaseManager) GetPatronActiveLoans(patronID int) ([]LoanListRow, error) {
+	rows, err := dm.db.Query(`
+			SELECT l.id, b.id, b.title, p.id, p.name, l.due_date,
+				CAST(julianday('now') - julianday(l.due_date) AS INTEGER) AS days_overdue
+			FROM loans l
+			JOIN books b ON l.book_id = b.id
+			JOIN patrons p ON l.patron_id = p.id
+			WHERE l.returned_at IS NULL
+				AND l.patron_id = ?
+			ORDER BY l.due_date ASC`, patronID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var loans []LoanListRow
+	for rows.Next() {
+		var r LoanListRow
+		if err := rows.Scan(&r.LoanID, &r.BookID, &r.BookTitle,
+			&r.PatronID, &r.PatronName, &r.DueDate, &r.DaysOverdue); err != nil {
+			return nil, err
+		}
+		loans = append(loans, r)
+	}
+	return loans, rows.Err()
+}
+
+func (dm *DatabaseManager) CountActiveLoans() (int, error) {
+	var count int
+	err := dm.db.QueryRow(`
+			SELECT COUNT(*) FROM loans
+			WHERE returned_at IS NULL
+				AND due_date >= DATE('now')`).Scan(&count)
+	return count, err
+}
+
+func (dm *DatabaseManager) CountOverdueLoans() (int, error) {
+	var count int
+	err := dm.db.QueryRow(`
+			SELECT COUNT(*) FROM loans
+			WHERE returned_at IS NULL
+				AND due_date < DATE('now')`).Scan(&count)
+	return count, err
+}
+
+func (dm *DatabaseManager) CountOutOfStock() (int, error) {
+	var count int
+	err := dm.db.QueryRow(`
+			SELECT COUNT(*) FROM books
+			WHERE quantity_available = 0`).Scan(&count)
+	return count, err
 }
 
 type DatabaseManager struct {
@@ -263,10 +475,10 @@ func (dm *DatabaseManager) createSchema() {
 
 	CREATE TABLE IF NOT EXISTS loans (
 		id             INTEGER PRIMARY KEY AUTOINCREMENT,
-		book_id        INTEGER REFERENCES books(id),
-		patron_id      INTEGER REFERENCES patrons(id),
-		checked_out_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		due_date       DATETIME,
+		book_id        INTEGER NOT NULL REFERENCES books(id),
+		patron_id      INTEGER NOT NULL REFERENCES patrons(id),
+		checked_out_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		due_date       TEXT NOT NULL,
 		returned_at    DATETIME
 	);
 
@@ -1716,6 +1928,13 @@ func (dm *DatabaseManager) DeleteBook(id int) error {
 }
 
 var ErrPatronHasLoans = errors.New("db: patron has loan history, cannot delete")
+
+var (
+	ErrNoCopiesAvailable   = errors.New("db: no copies available for check out")
+	ErrLoanAlreadyReturned = errors.New("db: loan already returned")
+	ErrPatronHasOverdue    = errors.New("db: patron has overdue loans, cannot check out")
+	ErrPatronAtLoanLimit   = errors.New("db: patron at max active loans")
+)
 
 func (dm *DatabaseManager) GetAllPatrons() ([]Patron, error) {
 	rows, err := dm.db.Query(`

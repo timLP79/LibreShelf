@@ -1,0 +1,33 @@
+{{define "kiosk_layout"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{.Title}} - LibreShelf</title>
+    <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
+    <link href="/stylesheets/bootstrap.min.css" rel="stylesheet">
+    <link href="/stylesheets/style.css" rel="stylesheet">
+</head>
+<body class="kiosk-body">
+
+<header class="kiosk-header">
+    <div class="container-xxl d-flex align-items-center justify-content-between py-3">
+        <a href="/kiosk" class="kiosk-brand d-flex align-items-center gap-2 text-decoration-none">
+            <img src="/images/favicon.svg" alt="" width="32" height="32">
+            <span class="fw-bold fs-4">LibreShelf</span>
+            <span class="fs-6 ms-2 d-none d-md-inline opacity-75">Library Catalog</span>
+        </a>
+        <span class="badge kiosk-badge">Public Terminal</span>
+    </div>
+</header>
+
+<main class="container-xxl py-4">
+    {{block "content" .}}{{end}}
+</main>
+
+<script src="/javascripts/bootstrap.bundle.min.js"></script>
+<script src="/javascripts/app.js"></script>
+</body>
+</html>
+{{end}}

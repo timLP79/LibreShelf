@@ -1,4 +1,75 @@
 {{define "content"}}
-<h1>Kiosk</h1>
-<p>Check-in / check-out coming soon</p>
+<div class="mb-4">
+    <h1 class="mb-1">Library Catalog</h1>
+    <p class="text-muted mb-0">Browse the collection. Visit the front desk to check out a book.</p>
+</div>
+
+<!-- Search and Filter Bar (same control IDs as /catalog so initCatalogFilter binds) -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-6 mb-2 mb-md-0">
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><span class="search-icon">&#128269;</span></span>
+                    <input type="text" id="catalog-search" class="form-control form-control-lg" placeholder="Search by title, author, or ISBN..." autofocus>
+                </div>
+            </div>
+            <div class="col-md-3 mb-2 mb-md-0">
+                <select id="genre-filter" class="form-select form-select-lg">
+                    <option value="">All Genres</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="available-filter">
+                    <label class="form-check-label" for="available-filter">Show only available books</label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<p class="text-muted mb-3" id="book-count">Showing {{len .Books}} books</p>
+
+<div class="row" id="book-grid">
+    {{range .Books}}
+    <div class="col-md-6 col-lg-3 mb-4 book-card"
+         data-title="{{.Title}}"
+         data-authors="{{.Authors}}"
+         data-isbn="{{if .ISBN}}{{deref .ISBN}}{{end}}"
+         data-genre="{{if .Genre}}{{deref .Genre}}{{end}}"
+         data-available="{{.QuantityAvailable}}">
+        <a href="/kiosk/books/{{.ID}}" class="text-decoration-none text-dark kiosk-card-link">
+            <div class="card h-100">
+                <div class="position-relative">
+                    <div class="book-cover-placeholder">
+                        {{if .CoverFilename}}
+                        <img src="/covers/{{deref .CoverFilename}}" class="card-img-top" alt="{{.Title}} cover">
+                        {{else}}
+                        <div class="no-cover d-flex align-items-center justify-content-center text-muted">
+                            [Book Cover]
+                        </div>
+                        {{end}}
+                    </div>
+                    {{if gt .QuantityAvailable 0}}
+                    <span class="badge availability-badge badge-available">Available</span>
+                    {{else}}
+                    <span class="badge availability-badge badge-checked-out">Checked Out</span>
+                    {{end}}
+                </div>
+                <div class="card-body">
+                    <h5 class="card-title mb-1">{{.Title}}</h5>
+                    <p class="card-text text-muted mb-1">{{.Authors}}</p>
+                    {{if .Genre}}<p class="card-text small text-muted">{{deref .Genre}}</p>{{end}}
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">{{.QuantityAvailable}} of {{.QuantityTotal}} available</small>
+                        <span class="kiosk-card-arrow" style="color: #1e3a5f;">Details &rarr;</span>
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    {{end}}
+</div>
 {{end}}
