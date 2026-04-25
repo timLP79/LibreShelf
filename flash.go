@@ -45,6 +45,12 @@ var flashMessages = map[string]string{
 	"patron_has_loans":         "This patron cannot be removed while they have loan history.",
 	"patron_name_required":     "Patron name is required.",
 	"patron_name_unusable":     "Could not derive a username from the provided name. Use letters or digits.",
+	"loan_checkout_success":    "Checked out:",
+	"loan_return_success":      "Returned:",
+	"loan_blocked_overdue":     "Cannot check out. This patron has overdue loans that must be returned first.",
+	"loan_blocked_limit":       "Cannot check out. This patron has reached the maximum of 5 active loans.",
+	"loan_no_copies":           "No copies available to check out.",
+	"loan_already_returned":    "This loan has already been returned.",
 }
 
 func flashCookieName(kind string) string {

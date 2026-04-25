@@ -1,0 +1,73 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="mb-1">Loans</h1>
+        <p class="text-muted mb-0">
+            {{if eq .Filter "overdue"}}Past-due loans awaiting return{{else}}Loans currently checked out{{end}}
+        </p>
+    </div>
+    <div class="btn-group" role="group" aria-label="Loan filter">
+        <a href="/loans?filter=active"
+           class="btn {{if eq .Filter "active"}}btn-primary{{else}}btn-outline-primary{{end}}"
+           style="{{if eq .Filter "active"}}background-color: #1e3a5f; border-color: #1e3a5f;{{end}}">
+            Active
+        </a>
+        <a href="/loans?filter=overdue"
+           class="btn {{if eq .Filter "overdue"}}btn-danger{{else}}btn-outline-danger{{end}}">
+            Overdue
+        </a>
+    </div>
+</div>
+
+{{if .Error}}<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    {{.Error}}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>{{end}}
+
+{{if .Success}}<div class="alert alert-success alert-dismissible fade show" role="alert">
+    {{.Success}}{{with .SuccessDetail}} <strong>{{.}}</strong>{{end}}
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+</div>{{end}}
+
+<div class="card">
+    <div class="card-body">
+        {{if .Loans}}
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Book</th>
+                        <th>Patron</th>
+                        <th>Due Date</th>
+                        {{if eq .Filter "overdue"}}<th>Days Overdue</th>{{end}}
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Loans}}
+                    <tr>
+                        <td><a href="/books/{{.BookID}}" class="text-decoration-none" style="color: #1e3a5f;">{{.BookTitle}}</a></td>
+                        <td>{{.PatronName}}</td>
+                        <td>{{.DueDate}}</td>
+                        {{if gt .DaysOverdue 0}}
+                        <td><span class="badge badge-checked-out">{{.DaysOverdue}} {{if eq .DaysOverdue 1}}day{{else}}days{{end}}</span></td>
+                        {{end}}
+                        <td class="text-end">
+                            <form method="POST" action="/loans/{{.LoanID}}/return" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                <button type="submit" class="btn btn-sm btn-outline-secondary">Return</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{else}}
+        <p class="text-muted mb-0">
+            {{if eq .Filter "overdue"}}No overdue loans. All active loans are on time.{{else}}No active loans.{{end}}
+        </p>
+        {{end}}
+    </div>
+</div>
+{{end}}

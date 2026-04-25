@@ -93,23 +93,31 @@
         {{end}}
 
         {{if and .User (or (eq .User.Role "admin") (eq .User.Role "staff"))}}
-        <!-- Checkout Form (scaffolded, disabled until CP6). Staff-only: patrons cannot self-checkout. -->
+        <!-- Checkout Form. Staff-only: patrons cannot self-checkout (DEC-014).
+             Due date is the 14-day default per DEC-025 and is computed server-side;
+             no date field here so staff can't accidentally pick something inconsistent. -->
         <div class="card mt-4 mb-4">
             <div class="card-body">
                 <h5 class="card-title">Check Out Book</h5>
-                <fieldset disabled>
+                {{if le .Book.QuantityAvailable 0}}
+                <p class="text-muted mb-0">No copies available to check out.</p>
+                {{else}}
+                <form method="POST" action="/books/{{.Book.ID}}/checkout" autocomplete="off">
+                    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
                     <div class="mb-3">
-                        <label class="form-label">Patron</label>
-                        <select class="form-select">
-                            <option>Select a patron</option>
+                        <label for="checkout-patron" class="form-label">Patron</label>
+                        <select id="checkout-patron" name="patron_id" class="form-select" required>
+                            <option value="">Select a patron</option>
+                            {{range .Patrons}}
+                            <option value="{{.ID}}">{{.Name}}</option>
+                            {{end}}
                         </select>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Due Date</label>
-                        <input type="date" class="form-control">
-                    </div>
-                    <button class="btn w-100" style="border-color: #1e3a5f; color: #1e3a5f;">Check Out</button>
-                </fieldset>
+                    <button type="submit" class="btn w-100" style="border-color: #1e3a5f; color: #1e3a5f;">
+                        Check Out for 14 Days
+                    </button>
+                </form>
+                {{end}}
             </div>
         </div>
         {{end}}
