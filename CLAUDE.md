@@ -7,7 +7,7 @@ working agreements for this project.
 
 ## About This Project
 
-LibreShelf is a self-hostable library management system built for CS408 Spring 2026 at Ball State.
+LibreShelf is a self-hostable library management system built for CS408 Spring 2026 at Boise State.
 It lets a small library manage books, patrons, and loans through a simple web UI. A public kiosk
 supports self-service browsing with optional patron login for favorites and holds. All checkout and
 return transactions are staff-only.
@@ -32,6 +32,26 @@ return transactions are staff-only.
 - Use feature branches for substantial changes that could break functionality. Small fixes
   (typos, one-liner bug fixes) can go straight to main. Otherwise, create a feature branch,
   test, and merge via PR.
+
+---
+
+## Persistence and Memory (HARD RULE)
+
+**`bd remember` is the ONLY memory system for this project.** Memory lives in `.beads/issues.jsonl`
+which is tracked by git, so memories sync across Tim's laptop and desktop distrobox via the normal
+pull/commit workflow.
+
+- **DO NOT** write to the auto-memory system at `/home/tim/.claude/projects/.../memory/`. That
+  directory must remain empty on this project. If you see memory files appearing there, delete them.
+- **DO NOT** create `MEMORY.md` index files, per-memory `.md` files, or any other markdown-based
+  memory store.
+- **DO** use `bd remember "<insight>" --key=<slug>` to persist cross-session knowledge.
+- **DO** use `bd memories` to list and `bd memories <keyword>` to search.
+- **DO NOT** use `TodoWrite`, `TaskCreate`, or markdown TODO lists for task tracking. Use `bd`
+  issues (`bd create`, `bd ready`, `bd close`).
+
+The reason this is a hard rule: the auto-memory is per-device and does not sync. `bd remember`
+travels with the repo.
 
 ---
 

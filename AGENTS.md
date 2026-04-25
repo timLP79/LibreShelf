@@ -1,15 +1,23 @@
 # Agent Instructions
 
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
+LibreShelf project agent guide. See `CLAUDE.md` for full project context, collaboration rules,
+and checkpoint scope. This file exists for cross-tool consumption (Cursor, Aider, Windsurf, etc.)
+and for bd-injected workflow blocks.
 
-## Quick Reference
+This project uses **bd** (beads) for issue tracking and memory. Run `bd prime` for full workflow
+context.
+
+## Common Commands
 
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
+bd ready                 # Find available work
+bd show <id>             # View issue details
+bd update <id> --claim   # Claim work
+bd close <id>            # Complete work
+bd remember "<insight>"  # Persist cross-session knowledge
+bd memories              # List remembered insights
+bd dolt pull             # Pull beads data from remote (session start)
+bd dolt push             # Push beads data to remote
 ```
 
 ## Non-Interactive Shell Commands
@@ -82,3 +90,57 @@ bd close <id>         # Complete work
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
+
+---
+
+## Project-Specific Overrides
+
+This project uses feature branches with no upstream remote (e.g. `cp6-loans`). The generic
+"MUST git push" mandate inside the beads integration block above does NOT apply here. The
+correct close-out on this project is:
+
+1. `go build ./...` and `go test ./...` must pass
+2. `bd close <id>` for finished work
+3. `bd dolt pull` to pull any beads updates from main
+4. `git add <files>` and `git commit` on the feature branch
+5. Merge to main locally when the branch is ready. No `git push` required.
+
+Full project workflow, checkpoint scope, and collaboration rules live in `CLAUDE.md`.
+
+## Testing Requirements
+
+A beads issue that modifies Go code is NOT done until test coverage exists. When creating an
+issue that will touch handlers, DB methods, middleware, or business logic, include tests in
+acceptance criteria:
+
+```bash
+bd create --title="..." --description="..." --type=feature \
+  --acceptance="- Feature behavior implemented
+- Unit tests cover happy path and documented error cases
+- go test ./... passes"
+```
+
+**Test-exempt changes** (closeable without new tests):
+
+- Pure documentation (DECISIONS.md, CLAUDE.md, docs/, README.md)
+- Template / CSS / JS (frontend-only, visually verified)
+- Schema edits in `createSchema()` -- exercised by handler tests
+- Seed data or flash map entries
+
+If Go code lands without tests and isn't exempt, reopen the issue or create a follow-up for
+the missing coverage.
+
+## Memory and Task Tracking (HARD RULE)
+
+- **Memory:** `bd remember` only. Do NOT write to the per-device auto-memory system at
+  `/home/tim/.claude/projects/.../memory/`. That directory must remain empty.
+- **Tasks:** `bd` issues only. Do NOT use `TodoWrite`, `TaskCreate`, or markdown TODO lists.
+
+See the Persistence and Memory section of `CLAUDE.md` for the full reasoning.
+
+## Go Tutor Mode
+
+Per `CLAUDE.md`: Tim writes all Go source. Agents do NOT use Write/Edit on `.go` files except
+for the documented exceptions -- SQL schema in `createSchema()`, repetitive data entry (seed
+data, struct literals, flash map entries), and test files. For HTML templates, CSS, and JS,
+agents edit directly.
