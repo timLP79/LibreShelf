@@ -23,9 +23,53 @@ func getDB(c *gin.Context) *DatabaseManager {
 
 // HandleIndex renders Dashboard
 func HandleIndex(c *gin.Context) {
-	renderTemplate(c, "index", gin.H{
-		"Title": "Dashboard",
-	})
+	dm := getDB(c)
+	user, _ := c.Get("user")
+	u := user.(*User)
+
+	data := gin.H{"Title": "Dashboard"}
+
+	if u.Role == "patron" {
+		if u.PatronID == nil {
+			log.Printf("HandleIndex: patron user %d has nil patron_id", u.ID)
+			c.String(http.StatusInternalServerError, "Internal Server Error")
+			return
+		}
+		loans, err := dm.GetPatronActiveLoans(*u.PatronID)
+		if err != nil {
+			log.Printf("HandleIndex: GetPatronActiveLoans(%d): %v", *u.PatronID, err)
+			c.String(http.StatusInternalServerError, "Internal Server Error")
+			return
+		}
+		data["MyLoanCount"] = len(loans)
+		if len(loans) > 0 {
+			data["NextDueDate"] = loans[0].DueDate
+		}
+	} else {
+		active, err := dm.CountActiveLoans()
+		if err != nil {
+			log.Printf("HandleIndex: CountActiveLoans: %v", err)
+			c.String(http.StatusInternalServerError, "Internal Server Error")
+			return
+		}
+		overdue, err := dm.CountOverdueLoans()
+		if err != nil {
+			log.Printf("HandleIndex: CountOverdueLoans: %v", err)
+			c.String(http.StatusInternalServerError, "Internal Server Error")
+			return
+		}
+		oos, err := dm.CountOutOfStock()
+		if err != nil {
+			log.Printf("HandleIndex: CountOutOfStock: %v", err)
+			c.String(http.StatusInternalServerError, "Internal Server Error")
+			return
+		}
+		data["ActiveLoans"] = active
+		data["OverdueLoans"] = overdue
+		data["OutOfStock"] = oos
+	}
+
+	renderTemplate(c, "index", data)
 }
 
 // HandleAdmin renders the Admin page

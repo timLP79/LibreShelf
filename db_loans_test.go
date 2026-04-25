@@ -330,8 +330,8 @@ func TestGetPatronActiveLoansScopedToPatron(t *testing.T) {
 }
 
 // TestCountActiveAndOverdueLoans pins the two dashboard count queries
-// with the same fixture: they must count the right subsets of the same
-// data without double-counting or missing rows.
+// with the same fixture: their subsets are disjoint (active excludes overdue)
+// so the two cards on the dashboard never double-count the same loan.
 func TestCountActiveAndOverdueLoans(t *testing.T) {
 	dm := setupTestDB(t)
 	bookA := mustCreateBook(t, dm, "Book A", 1)
@@ -343,17 +343,17 @@ func TestCountActiveAndOverdueLoans(t *testing.T) {
 	nextWeek := time.Now().AddDate(0, 0, 7).UTC().Format("2006-01-02")
 	yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
 
-	mustInsertLoan(t, dm, bookA, patronID, nextWeek, "")                          // active
-	mustInsertLoan(t, dm, bookB, patronID, yesterday, "")                         // overdue (counts active AND overdue)
-	mustInsertLoan(t, dm, bookC, patronID, nextWeek, "2026-04-01 12:00:00")       // returned
-	mustInsertLoan(t, dm, bookD, patronID, yesterday, "2026-04-01 12:00:00")      // returned past due date
+	mustInsertLoan(t, dm, bookA, patronID, nextWeek, "")                    // active (not overdue)
+	mustInsertLoan(t, dm, bookB, patronID, yesterday, "")                   // overdue (excluded from active)
+	mustInsertLoan(t, dm, bookC, patronID, nextWeek, "2026-04-01 12:00:00") // returned
+	mustInsertLoan(t, dm, bookD, patronID, yesterday, "2026-04-01 12:00:00") // returned past due date
 
 	active, err := dm.CountActiveLoans()
 	if err != nil {
 		t.Fatalf("CountActiveLoans: %v", err)
 	}
-	if active != 2 {
-		t.Errorf("expected 2 active (non-returned), got %d", active)
+	if active != 1 {
+		t.Errorf("expected 1 active (unreturned, not overdue), got %d", active)
 	}
 
 	overdue, err := dm.CountOverdueLoans()

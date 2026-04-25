@@ -1,0 +1,41 @@
+{{define "content"}}
+<div class="mb-3">
+    <h1 class="mb-1">My Loans</h1>
+    <p class="text-muted mb-0">Books you currently have checked out</p>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {{if .Loans}}
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Book</th>
+                        <th>Due Date</th>
+                        <th class="text-end">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Loans}}
+                    <tr>
+                        <td><a href="/books/{{.BookID}}" class="text-decoration-none" style="color: #1e3a5f;">{{.BookTitle}}</a></td>
+                        <td>{{.DueDate}}</td>
+                        <td class="text-end">
+                            {{if gt .DaysOverdue 0}}
+                            <span class="badge badge-checked-out">Overdue {{.DaysOverdue}} {{if eq .DaysOverdue 1}}day{{else}}days{{end}}</span>
+                            {{else}}
+                            <span class="text-muted">On time</span>
+                            {{end}}
+                        </td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{else}}
+        <p class="text-muted mb-0">You don't have any books checked out right now.</p>
+        {{end}}
+    </div>
+</div>
+{{end}}

@@ -69,6 +69,37 @@
   border-left-color: #d97706;
 }
 
+.stat-card-overdue {
+  border-left-color: #dc3545;
+}
+
+.stat-card-stock {
+  border-left-color: #64748b;
+}
+
+.stat-card-neutral {
+  border-left-color: #cbd5e1;
+}
+
+.stat-card .stat-value-danger {
+  color: #dc3545;
+}
+
+.stat-card .stat-secondary {
+  font-size: 0.85rem;
+  color: #6b7280;
+  margin-top: 0.25rem;
+}
+
+a.text-decoration-none > .stat-card {
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+a.text-decoration-none:hover > .stat-card {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
 .stat-card .stat-label {
   font-size: 0.8rem;
   font-weight: 600;

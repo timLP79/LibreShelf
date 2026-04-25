@@ -135,3 +135,25 @@ func HandleLoansList(c *gin.Context) {
 		"Error":         readAndClearFlash(c, flashKindError),
 	})
 }
+
+func HandleMyLoans(c *gin.Context) {
+	user := c.MustGet("user").(*User)
+	if user.PatronID == nil {
+		log.Printf("HandleMyLoans: patron user %d has nil patron_id", user.ID)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	dm := getDB(c)
+	loans, err := dm.GetPatronActiveLoans(*user.PatronID)
+	if err != nil {
+		log.Printf("HandleMyLoans: GetPatronActiveLoans(%d): %v", *user.PatronID, err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	renderTemplate(c, "my_loans", gin.H{
+		"Title": "My Loans",
+		"Loans": loans,
+	})
+}

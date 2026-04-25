@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // seedLoanFixtureBook inserts a book by title with the given quantity
@@ -29,6 +31,34 @@ func seedLoanFixturePatron(t *testing.T, dm *DatabaseManager, name string) int {
 func flashCode(rr *httptest.ResponseRecorder, name string) string {
 	v, _ := flashSet(rr, name)
 	return v
+}
+
+// loginAsPatron seeds a patron + linked patron-role user via CreatePatron
+// and opens a session for that user. Returns (sess cookie, csrf, patronID).
+// Use this instead of loginAs(role="patron") when the test needs a real
+// patron_id linkage (e.g. /my/loans, dashboard patron card).
+func loginAsPatron(t *testing.T, dm *DatabaseManager, name string) (*http.Cookie, string, int) {
+	t.Helper()
+
+	hash, err := bcrypt.GenerateFromPassword([]byte("TestPass1!"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("bcrypt: %v", err)
+	}
+	patronID, username, err := dm.CreatePatron(name, "", "", string(hash))
+	if err != nil {
+		t.Fatalf("CreatePatron(%q): %v", name, err)
+	}
+	user, err := dm.GetUserByUsername(username)
+	if err != nil {
+		t.Fatalf("GetUserByUsername(%q): %v", username, err)
+	}
+
+	sessionToken := "test-session-" + username
+	csrfToken := "test-csrf-" + username
+	if err := dm.CreateSession(sessionToken, user.ID, csrfToken, time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	return &http.Cookie{Name: "session", Value: sessionToken}, csrfToken, patronID
 }
 
 // ---------- HandleCheckout ----------
@@ -381,5 +411,96 @@ func TestLoansListInvalidFilterFallsThroughToActive(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected 200 fallthrough, got %d", rr.Code)
+	}
+}
+
+// ---------- HandleMyLoans ----------
+
+// TestMyLoansShowsOnlyOwnLoans pins the privacy boundary: a patron who
+// hits /my/loans sees only loans where patron_id matches their own user
+// row. Another patron's loans must not appear in the body. This is the
+// primary reason /my/loans lives in its own route group with RequirePatron
+// rather than handler-branched on /loans.
+func TestMyLoansShowsOnlyOwnLoans(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _, ownPatronID := loginAsPatron(t, dm, "Owner Patron")
+	otherPatronID := seedLoanFixturePatron(t, dm, "Other Patron")
+
+	mineBook := seedLoanFixtureBook(t, dm, "My Borrowed Book", 1)
+	otherBook := seedLoanFixtureBook(t, dm, "Other Borrowed Book", 1)
+	nextWeek := time.Now().AddDate(0, 0, 7).UTC().Format("2006-01-02")
+	mustInsertLoan(t, dm, mineBook, ownPatronID, nextWeek, "")
+	mustInsertLoan(t, dm, otherBook, otherPatronID, nextWeek, "")
+
+	req, _ := http.NewRequest("GET", "/my/loans", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "My Borrowed Book") {
+		t.Errorf("expected own loan in body")
+	}
+	if strings.Contains(body, "Other Borrowed Book") {
+		t.Errorf("must not leak other patron's loan into /my/loans")
+	}
+}
+
+// TestMyLoansEmptyState pins that a patron with no active loans sees
+// the friendly empty-state copy, not a stack trace or empty table.
+func TestMyLoansEmptyState(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _, _ := loginAsPatron(t, dm, "Quiet Patron")
+
+	req, _ := http.NewRequest("GET", "/my/loans", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "don't have any books checked out") {
+		t.Errorf("expected empty-state copy in body")
+	}
+}
+
+// TestMyLoansForbiddenForStaff pins the route-group boundary: staff and
+// admin users get 403 from /my/loans because RequirePatron rejects any
+// role other than "patron". This is the test that would catch a future
+// regression where someone moves the route into the auth group.
+func TestMyLoansForbiddenForStaff(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	for _, role := range []string{"admin", "staff"} {
+		sess, _ := loginAs(t, dm, role+"_user", role)
+
+		req, _ := http.NewRequest("GET", "/my/loans", nil)
+		req.AddCookie(sess)
+		rr := httptest.NewRecorder()
+		router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusForbidden {
+			t.Errorf("role=%s: expected 403, got %d", role, rr.Code)
+		}
+	}
+}
+
+// TestMyLoansRedirectsUnauthenticated pins that /my/loans is not public.
+// No session cookie -> 302 to /login (RequireAuth, before RequirePatron).
+func TestMyLoansRedirectsUnauthenticated(t *testing.T) {
+	router, _ := setupTestRouter(t)
+
+	req, _ := http.NewRequest("GET", "/my/loans", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Errorf("expected 302, got %d", rr.Code)
+	}
+	if loc := rr.Header().Get("Location"); loc != "/login" {
+		t.Errorf("expected redirect to /login, got %q", loc)
 	}
 }

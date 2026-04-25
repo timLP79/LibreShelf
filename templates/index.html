@@ -1,36 +1,52 @@
 {{define "content"}}
 <h1 class="mb-4">Dashboard</h1>
 
+{{if and .User (eq .User.Role "patron")}}
 <div class="row">
   <div class="col-md-4">
-    <div class="card stat-card stat-card-books mb-3">
-      <div class="card-body">
-        <div class="stat-label">Books</div>
-        <div class="stat-value">—</div>
+    <a href="/my/loans" class="text-decoration-none">
+      <div class="card stat-card stat-card-loans mb-3">
+        <div class="card-body">
+          <div class="stat-label">My Active Loans</div>
+          <div class="stat-value">{{.MyLoanCount}}</div>
+          {{if .NextDueDate}}<div class="stat-secondary">Next due: {{.NextDueDate}}</div>{{end}}
+        </div>
       </div>
-    </div>
+    </a>
+  </div>
+</div>
+{{else}}
+<div class="row">
+  <div class="col-md-4">
+    <a href="/loans?filter=overdue" class="text-decoration-none">
+      <div class="card stat-card {{if gt .OverdueLoans 0}}stat-card-overdue{{else}}stat-card-neutral{{end}} mb-3">
+        <div class="card-body">
+          <div class="stat-label">Overdue</div>
+          <div class="stat-value {{if gt .OverdueLoans 0}}stat-value-danger{{end}}">{{.OverdueLoans}}</div>
+        </div>
+      </div>
+    </a>
   </div>
 
-  {{if and .User (or (eq .User.Role "admin") (eq .User.Role "staff"))}}
   <div class="col-md-4">
-    <div class="card stat-card stat-card-patrons mb-3">
-      <div class="card-body">
-        <div class="stat-label">Patrons</div>
-        <div class="stat-value">—</div>
+    <a href="/loans?filter=active" class="text-decoration-none">
+      <div class="card stat-card stat-card-loans mb-3">
+        <div class="card-body">
+          <div class="stat-label">Active Loans</div>
+          <div class="stat-value">{{.ActiveLoans}}</div>
+        </div>
       </div>
-    </div>
+    </a>
   </div>
-  {{end}}
 
   <div class="col-md-4">
-    <div class="card stat-card stat-card-loans mb-3">
+    <div class="card stat-card stat-card-stock mb-3">
       <div class="card-body">
-        <div class="stat-label">Active Loans</div>
-        <div class="stat-value">—</div>
+        <div class="stat-label">Out of Stock</div>
+        <div class="stat-value">{{.OutOfStock}}</div>
       </div>
     </div>
   </div>
 </div>
-
-<p class="text-muted">Stats and recent activity coming soon.</p>
+{{end}}
 {{end}}

@@ -62,7 +62,7 @@ func main() {
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
 		"index", "catalog", "book_detail", "book_form",
-		"patrons", "admin", "kiosk", "staff", "loans",
+		"patrons", "admin", "kiosk", "staff", "loans", "my_loans",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -107,6 +107,11 @@ func main() {
 	auth.GET("/catalog", HandleCatalog)
 	auth.GET("/books/:id", HandleBookDetail)
 	auth.POST("/logout", HandleLogout)
+
+	// Patron-only routes
+	patron := router.Group("/")
+	patron.Use(RequireAuth, RequirePatron, CSRFProtect)
+	patron.GET("/my/loans", HandleMyLoans)
 
 	// Staff routes -- admin + staff
 	staff := router.Group("/")

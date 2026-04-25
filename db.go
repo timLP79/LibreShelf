@@ -304,7 +304,7 @@ func (dm *DatabaseManager) GetLoanHistory(bookID int) ([]LoanRecord, error) {
 
 func (dm *DatabaseManager) GetActiveLoans() ([]LoanListRow, error) {
 	rows, err := dm.db.Query(`
-			SELECT l.id, b.id, b.title, p.id, p.name, l.due_date, 
+			SELECT l.id, b.id, b.title, p.id, p.name, l.due_date,
 				CAST(julianday('now') - julianday(l.due_date) AS INTEGER) AS days_overdue
 			FROM loans l
 			JOIN books b ON l.book_id = b.id
@@ -331,7 +331,7 @@ func (dm *DatabaseManager) GetActiveLoans() ([]LoanListRow, error) {
 
 func (dm *DatabaseManager) GetOverdueLoans() ([]LoanListRow, error) {
 	rows, err := dm.db.Query(`
-			SELECT l.id, b.id, b.title, p.id, p.name, l.due_date, 
+			SELECT l.id, b.id, b.title, p.id, p.name, l.due_date,
 				CAST(julianday('now') - julianday(l.due_date) AS INTEGER) AS days_overdue
 			FROM loans l
 			JOIN books b ON l.book_id = b.id
@@ -358,7 +358,7 @@ func (dm *DatabaseManager) GetOverdueLoans() ([]LoanListRow, error) {
 
 func (dm *DatabaseManager) GetPatronActiveLoans(patronID int) ([]LoanListRow, error) {
 	rows, err := dm.db.Query(`
-			SELECT l.id, b.id, b.title, p.id, p.name, l.due_date, 
+			SELECT l.id, b.id, b.title, p.id, p.name, l.due_date,
 				CAST(julianday('now') - julianday(l.due_date) AS INTEGER) AS days_overdue
 			FROM loans l
 			JOIN books b ON l.book_id = b.id
@@ -387,7 +387,8 @@ func (dm *DatabaseManager) CountActiveLoans() (int, error) {
 	var count int
 	err := dm.db.QueryRow(`
 			SELECT COUNT(*) FROM loans
-			WHERE returned_at IS NULL`).Scan(&count)
+			WHERE returned_at IS NULL
+				AND due_date >= DATE('now')`).Scan(&count)
 	return count, err
 }
 
@@ -477,7 +478,7 @@ func (dm *DatabaseManager) createSchema() {
 		book_id        INTEGER NOT NULL REFERENCES books(id),
 		patron_id      INTEGER NOT NULL REFERENCES patrons(id),
 		checked_out_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-		due_date       DATE NOT NULL,
+		due_date       TEXT NOT NULL,
 		returned_at    DATETIME
 	);
 
