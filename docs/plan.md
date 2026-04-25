@@ -38,9 +38,13 @@ are handled exclusively by staff on the book detail page.
 | `GET /` | Dashboard | Any logged-in user |
 | `GET /catalog` | Catalog | Any logged-in user |
 | `GET /books/:id` | Book Detail | Any logged-in user |
-| `GET /kiosk` | Kiosk (stub today; CP6 adds anonymous browse; no login gate in CP6 scope) | **Public** |
-| `GET /loans` | Active/overdue loan list view *(planned, CP6)* | Admin + staff |
-| `POST /kiosk/favorites` | Save favorite *(planned, CP6 only if time permits; patron login required when built)* | Requires login |
+| `GET /kiosk` | Public kiosk catalog (anonymous; CP6) | **Public** |
+| `GET /kiosk/books/:id` | Public read-only book detail (CP6) | **Public** |
+| `GET /loans` | Active/overdue loan list view (CP6) | Admin + staff |
+| `POST /books/:id/checkout` | Check out a copy to a patron (CP6) | Admin + staff |
+| `POST /loans/:id/return` | Return a checked-out copy (CP6) | Admin + staff |
+| `GET /my/loans` | Patron's own active loans (CP6) | Patron only |
+| `POST /kiosk/favorites` | Save favorite *(deferred post-submission)* | Requires login |
 | `POST /kiosk/holds` | Request hold *(deferred post-submission)* | Requires login |
 | `GET /patrons` | Patrons | Admin + staff |
 | `POST /patrons` | Create patron | Admin + staff |
@@ -158,7 +162,10 @@ go-full-stack/
 ├── handlers_patrons_test.go      # Patron handler tests (13 tests)
 ├── handlers_staff.go             # Staff list, create, edit, delete, reset-password
 ├── handlers_staff_test.go        # Staff handler tests
-├── handlers_loans.go             # (planned, CP6) Checkout / return (wired to book-detail scaffold) + /loans list view
+├── handlers_loans.go             # Checkout / return (wired to book-detail scaffold) + /loans list view + /my/loans (CP6)
+├── handlers_loans_test.go        # Loan handler tests + /my/loans privacy boundary tests
+├── handlers_kiosk_test.go        # Kiosk public-access tests + auth-gated /books/:id regression guard
+├── db_loans_test.go              # Loan DB method tests (CheckoutBook, ReturnBook, filters, counts)
 ├── handlers_admin.go             # (planned, CP7) ZIP export / import; the Open Library proxy landed in handlers_books.go instead
 ├── openlibrary.go                # Open Library API client (DEC-008)
 ├── covers.go                     # Cover upload + OL-URL download with MIME / size / extension validation
@@ -175,8 +182,11 @@ go-full-stack/
 │   ├── patrons.html              # Patron list + Add / Edit / Delete modals
 │   ├── staff.html                # Staff list + Add / Edit / Delete / Reset Password modals
 │   ├── admin.html                # Admin panel (stub; CP7 adds ZIP export / import)
-│   ├── kiosk.html                # Public kiosk (stub; CP6 adds anonymous browse, no login gate)
-│   ├── loans.html                # (planned, CP6) Active/overdue loan list view with filter
+│   ├── kiosk.html                # Public kiosk catalog grid (CP6, no login gate)
+│   ├── kiosk_layout.html         # Public kiosk shell: no sidebar, no nav, "Public Terminal" header (CP6)
+│   ├── kiosk_book_detail.html    # Public read-only book detail (CP6)
+│   ├── loans.html                # Active/overdue loan list view with filter (CP6, staff/admin)
+│   ├── my_loans.html             # Patron's own active loans (CP6, patron-only via RequirePatron)
 │   └── error.html                # 404 / 500 error page
 ├── static/
 │   ├── stylesheets/
@@ -237,15 +247,15 @@ go-full-stack/
 - ✅ `main.go`: `RequireAuth()` and `RequireAdmin()` middleware applied to all routes
 - ✅ Dependency: `golang.org/x/crypto/bcrypt` for password hashing
 
-**Access control applied (as of end of CP5; CP6/CP7 will add loan and admin-panel routes):**
+**Access control applied (as of end of CP6; CP7 will add admin-panel ZIP routes):**
 | Middleware | Routes |
 |-----------|--------|
 | `RequireAuth` | `/`, `/catalog`, `/books/:id`, `POST /logout` |
-| `RequireStaff` (admin + staff) | `/patrons` + patron CRUD, `/admin`, `/books/new`, `POST /books`, book edit, `/api/openlibrary/isbn/:isbn`, `/loans` + `POST /loans/checkout` + `POST /loans/:id/return` *(planned, CP6)* |
+| `RequirePatron` (CP6) | `/my/loans` |
+| `RequireStaff` (admin + staff) | `/patrons` + patron CRUD, `/admin`, `/books/new`, `POST /books`, book edit, `/api/openlibrary/isbn/:isbn`, `/loans`, `POST /books/:id/checkout`, `POST /loans/:id/return` |
 | `RequireAdmin` | `/staff` + staff CRUD + staff password reset, `POST /books/:id/delete` |
-| Public | `GET /login`, `POST /login`, `GET /kiosk`, static files |
-| `RequireAuth` (kiosk, *planned CP6 only if time permits*) | `POST /kiosk/favorites` |
-| `RequireAuth` (kiosk, *deferred*) | `POST /kiosk/holds` |
+| Public | `GET /login`, `POST /login`, `GET /kiosk`, `GET /kiosk/books/:id`, static files |
+| `RequireAuth` (kiosk, *deferred post-submission*) | `POST /kiosk/favorites`, `POST /kiosk/holds` |
 
 **Seed accounts (created on first run):**
 - `admin` / `Admin123!` (role: admin) -- password overridable via `ADMIN_PASSWORD` env var (validated on startup; see DEC-021)
