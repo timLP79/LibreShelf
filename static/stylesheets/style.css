@@ -155,3 +155,44 @@ a.text-decoration-none:hover > .stat-card {
 .book-cover-placeholder .no-cover {
   color: #adb5bd;
 }
+
+/* Kiosk shell: full-width, no sidebar, distinct header so the public
+ * terminal is visually clearly NOT the staff app. */
+.kiosk-body {
+  background-color: #f0f4f8;
+  min-height: 100vh;
+}
+
+.kiosk-header {
+  background-color: #1e3a5f;
+  color: #ffffff;
+  border-bottom: 4px solid #d97706;
+}
+
+.kiosk-brand,
+.kiosk-brand:hover {
+  color: #ffffff;
+}
+
+.kiosk-badge {
+  background-color: #ffffff;
+  color: #1e3a5f;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* Whole-card click target: makes a kiosk book card behave like a single
+ * tap zone on a touch terminal rather than forcing the user to hit the
+ * tiny "Details ->" link. */
+.kiosk-card-link {
+  display: block;
+}
+
+.kiosk-card-link .card {
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.kiosk-card-link:hover .card {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.10), 0 2px 4px rgba(0, 0, 0, 0.06);
+}

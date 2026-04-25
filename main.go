@@ -62,11 +62,19 @@ func main() {
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
 		"index", "catalog", "book_detail", "book_form",
-		"patrons", "admin", "kiosk", "staff", "loans", "my_loans",
+		"patrons", "admin", "staff", "loans", "my_loans",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
 			"templates/layout.html",
+			"templates/"+name+".html",
+		))
+	}
+
+	kioskTemplateNames := []string{"kiosk", "kiosk_book_detail"}
+	for _, name := range kioskTemplateNames {
+		templates[name] = template.Must(template.New("kiosk_layout").Funcs(funcMap).ParseFiles(
+			"templates/kiosk_layout.html",
 			"templates/"+name+".html",
 		))
 	}
@@ -99,6 +107,7 @@ func main() {
 	router.GET("/login", HandleLogin)
 	router.POST("/login", LoginCSRFProtect, HandleLoginPost)
 	router.GET("/kiosk", HandleKiosk)
+	router.GET("/kiosk/books/:id", HandleKioskBookDetail)
 
 	// Authenticated routes -- any logged in user
 	auth := router.Group("/")

@@ -79,13 +79,6 @@ func HandleAdmin(c *gin.Context) {
 	})
 }
 
-// HandleKiosk renders the Kiosk page
-func HandleKiosk(c *gin.Context) {
-	renderTemplate(c, "kiosk", gin.H{
-		"Title": "Kiosk",
-	})
-}
-
 // HandleNotFound renders the 404 error page
 func HandleNotFound(c *gin.Context) {
 	c.Status(http.StatusNotFound)
@@ -112,6 +105,27 @@ func renderTemplate(c *gin.Context, name string, data gin.H) {
 
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "layout", data); err != nil {
+		log.Printf("template execution failed for %q: %v", name, err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	c.Writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if _, err := c.Writer.Write(buf.Bytes()); err != nil {
+		log.Printf("response write failed for %q: %v", name, err)
+	}
+}
+
+func renderKioskTemplate(c *gin.Context, name string, data gin.H) {
+	tmpl, ok := templates[name]
+	if !ok {
+		log.Printf("template not found: %q", name)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.ExecuteTemplate(&buf, "kiosk_layout", data); err != nil {
 		log.Printf("template execution failed for %q: %v", name, err)
 		c.String(http.StatusInternalServerError, "Internal Server Error")
 		return
