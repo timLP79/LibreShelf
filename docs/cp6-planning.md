@@ -96,19 +96,20 @@ Three DEC entries to write in session 2 (design session). Do not write DECs for 
 
 ## Session Estimate
 
-**6-7 sessions. Fits inside the 8-day window to 4/27 with buffer. Updated 2026-04-20 after pagination deferred and dashboard rescoped.**
+**6-7 sessions. Fits inside the 8-day window to 4/27 with buffer. Updated 2026-04-20 after pagination deferred and dashboard rescoped. Sessions 1, 2, and 3 (3a + 3b) complete on `cp6-loans` as of 2026-04-25.**
 
-| # | Session | Scope | Est. hrs |
-|---|---|---|---|
-| 1 | Loan design | Schema confirmation, DEC-024/025/026, handler shapes, error sentinels. No code. | 1.5-2 |
-| 2 | Loans backend | DB methods (transactional), handlers (checkout, return), tests | 3-4 |
-| 3 | Loans UI | Wire book-detail scaffold to handlers, build `/loans` page with active/overdue filter | 3-4 |
-| 4 | Dashboard (role-differentiated essentials) | Three staff/admin cards (Overdue, Active Loans, Out of Stock) + one patron card (My Active Loans + next due date); role-gated template blocks; new COUNT queries | 1.5-2 |
-| 5 | Kiosk public browse | `/kiosk` route, anonymous browse, reused catalog grid minus staff controls | 2-3 |
-| 6 | ~~Favorites~~ | Deferred post-submission 2026-04-24 | -- |
-| 7 | CP6 close | Integration smoke, role-boundary tests, EC2 redeploy with clean DB, PR + merge | 1-2 |
+| # | Session | Scope | Est. hrs | Status |
+|---|---|---|---|---|
+| 1 | Loan design | DEC-024/025/026 written, handler shapes, error sentinels. No code. | 1.5-2 | done 2026-04-23 |
+| 2 | Loans backend | Schema rewrite + 8 DB methods (transactional) + 13 unit tests. cs408-go-stack-wsx + x25 | 3-4 | done 2026-04-24 |
+| 3a | Loans UI scaffolding | 6 flash codes + `templates/loans.html` + book-detail checkout form wire-up. cs408-go-stack-ho3 | 1-1.5 | done 2026-04-24 |
+| 3b | Loan handlers + tests | `handlers_loans.go` (3 handlers) + `HandleBookDetail` patron fetch + routes + 13 handler tests. cs408-go-stack-8k5 | 2-2.5 | done 2026-04-25 |
+| 4 | Dashboard (role-differentiated essentials) | Three staff/admin cards (Overdue, Active Loans, Out of Stock) + one patron card (My Active Loans + next due date); role-gated template blocks; `Count*` queries already exist | 1.5-2 | not started |
+| 5 | Kiosk public browse | `/kiosk` route, anonymous browse, reused catalog grid minus staff controls | 2-3 | not started |
+| 6 | ~~Favorites~~ | Deferred post-submission 2026-04-24 | -- | deferred |
+| 7 | CP6 close | Integration smoke, role-boundary tests, EC2 redeploy with clean DB, PR + merge | 1-2 | not started |
 
-**Total: ~14-20 hours.** Slight shrink vs. v2 (~2-3h freed by deferring pagination, partially reabsorbed by the expanded dashboard scope). Compresses to 5 sessions if favorites defers.
+**Done so far: ~7-9 hours.** **Remaining: ~5-7 hours.** On track for 4/27 close.
 
 ---
 
