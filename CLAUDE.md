@@ -202,3 +202,51 @@ Scope disciplined via the v2 reality-check on 2026-04-19 and refined on 2026-04-
 - **Overdue notice print system (from CP6 v2 trim):** `/reports/overdue` table with per-loan row granularity, click-through to per-patron printable notice, browser `@media print` + `@page` CSS (no server-side PDF). CP6 ships the "know what's overdue" half via the `/loans?filter=overdue` filter; the formatted mailable notice is the deferred polish. Full design including SQL queries in `docs/cp6-planning.md`.
 - **Patron-facing dashboard richer view (remaining deferred after 2026-04-20 partial un-defer):** CP6 now ships a single-card patron view (My Active Loans, count + next due date). The richer view -- mini-list of titles with due-date badges, Favorites card, My Holds placeholder, Out of Stock tied to holds -- stays deferred with the fuller dashboard redesign.
 - **Patron address field (from CP6 v2 trim):** `patrons.address TEXT` nullable column to support printed overdue notices. Three design options (always on / skip mail flow / optional-with-graceful-fallback) documented in `docs/cp6-planning.md`. Only relevant when the notice print system is built.
+
+
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:ca08a54f -->
+## Beads Issue Tracker
+
+This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
+
+### Quick Reference
+
+```bash
+bd ready              # Find available work
+bd show <id>          # View issue details
+bd update <id> --claim  # Claim work
+bd close <id>         # Complete work
+```
+
+### Rules
+
+- Use `bd` for ALL task tracking — do NOT use TodoWrite, TaskCreate, or markdown TODO lists
+- Run `bd prime` for detailed command reference and session close protocol
+- Use `bd remember` for persistent knowledge — do NOT use MEMORY.md files
+
+## Session Completion
+
+**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
+
+**MANDATORY WORKFLOW:**
+
+1. **File issues for remaining work** - Create issues for anything that needs follow-up
+2. **Run quality gates** (if code changed) - Tests, linters, builds
+3. **Update issue status** - Close finished work, update in-progress items
+4. **PUSH TO REMOTE** - This is MANDATORY:
+   ```bash
+   git pull --rebase
+   bd dolt push
+   git push
+   git status  # MUST show "up to date with origin"
+   ```
+5. **Clean up** - Clear stashes, prune remote branches
+6. **Verify** - All changes committed AND pushed
+7. **Hand off** - Provide context for next session
+
+**CRITICAL RULES:**
+- Work is NOT complete until `git push` succeeds
+- NEVER stop before pushing - that leaves work stranded locally
+- NEVER say "ready to push when you are" - YOU must push
+- If push fails, resolve and retry until it succeeds
+<!-- END BEADS INTEGRATION -->

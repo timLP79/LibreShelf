@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "cs408_go_stack",
+  "project_id": "d9ef79fe-545c-4372-b247-3090230dc53f"
+}
