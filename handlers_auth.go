@@ -119,25 +119,6 @@ func RequireStaff(c *gin.Context) {
 	c.Next()
 }
 
-func LoadUser(c *gin.Context) {
-	token, err := c.Cookie("session")
-	if err != nil {
-		c.Next()
-		return
-	}
-
-	dm := getDB(c)
-	session, err := dm.GetSession(token)
-	if err != nil {
-		c.Next()
-		return
-	}
-
-	c.Set("user", session.User)
-	c.Set("csrfToken", session.CSRFToken)
-	c.Next()
-}
-
 func renderLoginForm(c *gin.Context, errorMsg string) {
 	csrfToken, err := generateSessionToken()
 	if err != nil {
