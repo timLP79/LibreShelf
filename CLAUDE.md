@@ -205,6 +205,11 @@ Restricted-network deployments:
 - Patron self-registration toggle, admin-controlled (cs408-go-stack-o1x, #61)
 - Offline cover sync via flash drive, 3-machine workflow (cs408-go-stack-0eh, #63)
 
+Cover-fallback workflow (layered, recommended ship order o03 -> 2g0 -> 0px):
+- Placeholder cover generator, last-resort SVG fallback (cs408-go-stack-o03, #65)
+- Google Books fallback cover provider, tier-2 after OL (cs408-go-stack-2g0, #66)
+- Bulk cover upload + needs-cover report (cs408-go-stack-0px, #67)
+
 Other:
 - Automate deployment via GitHub Actions (#17)
 
