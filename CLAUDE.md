@@ -100,7 +100,7 @@ Deploy guide: `docs/week6/deployment.md` (build, scp, systemctl).
 ## Dev Environments
 
 - **Laptop:** Ubuntu 24.04
-- **Desktop:** Fedora Kinoite host, distrobox Ubuntu 24.04 container
+- **Desktop:** Ubuntu 24.04
 
 ---
 
