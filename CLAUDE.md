@@ -170,7 +170,7 @@ CP1-CP6 closed. See `bd memories cp5-architecture` / `cp6-architecture` and `git
 
 ### CP7 -- Admin Panel + Security Hardening + Deploy
 
-- [ ] #23 (cs408-go-stack-tmx) -- Admin panel: ZIP export and import. Design: DEC-027 (ZIP scope, VACUUM INTO consistency, in-process swap with RWMutex, .bak rollback, `internal/safezip/` helper, no CLI in CP7, medium-friction confirmation interlock). Branch: `cp7-admin-backup`.
+- [ ] #23 -- Admin panel: ZIP export and import (with Zip Slip protection).
 - [ ] #24 -- Testing, polish, and deploy: `SecurityHeaders` middleware, `SetTrustedProxies`, `go mod verify`, `govulncheck`, final EC2 redeploy with a clean DB to pick up new seed passwords.
 - [ ] #62 (cs408-go-stack-al3) -- Test coverage push, scheduled LAST after #23 and #24 ship. Baseline 61.8% post-`LoadUser` cleanup. Target 75%+ overall, 90%+ on auth/middleware/validators/transactional DB, 80%+ on handlers. Zip Slip rejection test for admin import path; `httptest.NewServer` for OL and cover-URL paths.
 
@@ -204,11 +204,6 @@ Cut from CP6 v2 trim or raised post-CP6:
 Restricted-network deployments:
 - Patron self-registration toggle, admin-controlled (cs408-go-stack-o1x, #61)
 - Offline cover sync via flash drive, 3-machine workflow (cs408-go-stack-0eh, #63)
-
-Cover-fallback workflow (layered, recommended ship order o03 -> 2g0 -> 0px):
-- Placeholder cover generator, last-resort SVG fallback (cs408-go-stack-o03, #65)
-- Google Books fallback cover provider, tier-2 after OL (cs408-go-stack-2g0, #66)
-- Bulk cover upload + needs-cover report (cs408-go-stack-0px, #67)
 
 Other:
 - Automate deployment via GitHub Actions (#17)
