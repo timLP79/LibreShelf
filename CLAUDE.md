@@ -170,7 +170,7 @@ CP1-CP6 closed. See `bd memories cp5-architecture` / `cp6-architecture` and `git
 
 ### CP7 -- Admin Panel + Security Hardening + Deploy
 
-- [ ] #23 -- Admin panel: ZIP export and import (with Zip Slip protection).
+- [ ] #23 (cs408-go-stack-tmx) -- Admin panel: ZIP export and import. Design: DEC-027 (ZIP scope, VACUUM INTO consistency, in-process swap with RWMutex, .bak rollback, `internal/safezip/` helper, no CLI in CP7, medium-friction confirmation interlock). Branch: `cp7-admin-backup`.
 - [ ] #24 -- Testing, polish, and deploy: `SecurityHeaders` middleware, `SetTrustedProxies`, `go mod verify`, `govulncheck`, final EC2 redeploy with a clean DB to pick up new seed passwords.
 - [ ] #62 (cs408-go-stack-al3) -- Test coverage push, scheduled LAST after #23 and #24 ship. Baseline 61.8% post-`LoadUser` cleanup. Target 75%+ overall, 90%+ on auth/middleware/validators/transactional DB, 80%+ on handlers. Zip Slip rejection test for admin import path; `httptest.NewServer` for OL and cover-URL paths.
 
