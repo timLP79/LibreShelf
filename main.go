@@ -30,17 +30,24 @@ func main() {
 	// Initialize the database
 	dm := NewDatabaseManager(dataDir + "/" + dbName)
 	dm.SeedDefaultUsers()
-	dm.SeedBooks()
 
-	// Opportunistically backfill covers from Open Library for any book
-	// that has an ISBN but no cover file yet. Safe to call every
-	// startup: the inner SELECT is a no-op after all seed books have
-	// their covers. 60s total budget so a slow OL (or network block)
-	// cannot wedge the server at boot -- the inner HTTP client also
-	// has its own 10s per-request timeout.
-	seedCoverCtx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
-	dm.FetchAndStoreSeedCovers(seedCoverCtx)
-	cancel()
+	// LIBRESHELF_SKIP_SEED skips the book + cover seed steps so the
+	// server starts with login working but otherwise empty -- useful
+	// for testing the backup import flow against a clean state and
+	// for staging deployments that should not carry test data.
+	if os.Getenv("LIBRESHELF_SKIP_SEED") == "" {
+		dm.SeedBooks()
+
+		// Opportunistically backfill covers from Open Library for any book
+		// that has an ISBN but no cover file yet. Safe to call every
+		// startup: the inner SELECT is a no-op after all seed books have
+		// their covers. 60s total budget so a slow OL (or network block)
+		// cannot wedge the server at boot -- the inner HTTP client also
+		// has its own 10s per-request timeout.
+		seedCoverCtx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+		dm.FetchAndStoreSeedCovers(seedCoverCtx)
+		cancel()
+	}
 
 	// Template helpers
 	funcMap := template.FuncMap{
