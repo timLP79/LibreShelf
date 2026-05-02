@@ -14,6 +14,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// dummyPasswordHash is compared against in HandleLoginPost when the
+// supplied username does not exist, so the response time for an unknown
+// username matches the response time for a known one. Skipping bcrypt
+// on the unknown-username path leaks user existence via timing.
 var dummyPasswordHash []byte
 
 func init() {

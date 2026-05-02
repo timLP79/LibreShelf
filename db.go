@@ -446,7 +446,6 @@ type DatabaseManager struct {
 }
 
 func NewDatabaseManager(dbPath string) *DatabaseManager {
-	// Create the data directory if it doesn't exist
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
 		log.Fatalf("Failed to create data directory: %v", err)
 	}

@@ -13,7 +13,6 @@ import (
 var templates map[string]*template.Template
 
 func main() {
-	// Configuration
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
@@ -27,7 +26,6 @@ func main() {
 		dbName = "database.sqlite"
 	}
 
-	// Initialize the database
 	dm := NewDatabaseManager(dataDir + "/" + dbName)
 	dm.SeedDefaultUsers()
 
@@ -49,7 +47,6 @@ func main() {
 		cancel()
 	}
 
-	// Template helpers
 	funcMap := template.FuncMap{
 		"deref": func(v interface{}) interface{} {
 			switch p := v.(type) {
@@ -96,7 +93,6 @@ func main() {
 		"templates/error.html",
 	))
 
-	// Setup router
 	router := gin.Default()
 
 	// Trust only the local nginx reverse proxy for X-Forwarded-* headers.
@@ -111,7 +107,6 @@ func main() {
 	// Defensive headers on every response, including 404/500.
 	router.Use(SecurityHeaders)
 
-	// Static files
 	router.Static("/stylesheets", "static/stylesheets")
 	router.Static("/javascripts", "static/javascripts")
 	router.Static("/images", "static/images")
@@ -120,7 +115,6 @@ func main() {
 	}
 	router.Static("/covers", coversDir())
 
-	// Database middleware - make dm available to all handlers
 	router.Use(DatabaseMiddleware(dm))
 
 	// Public routes
@@ -180,6 +174,5 @@ func main() {
 
 	router.NoRoute(HandleNotFound)
 
-	// Start server
 	router.Run(":" + port)
 }

@@ -40,7 +40,6 @@ func SecurityHeaders(c *gin.Context) {
 	c.Next()
 }
 
-// DatabaseMiddleware store the DatabaseManager in the Gin context
 func DatabaseMiddleware(dm *DatabaseManager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set("db", dm)
@@ -48,7 +47,6 @@ func DatabaseMiddleware(dm *DatabaseManager) gin.HandlerFunc {
 	}
 }
 
-// getDB retrieves the DatabaseManager from the Gin context
 func getDB(c *gin.Context) *DatabaseManager {
 	return c.MustGet("db").(*DatabaseManager)
 }
@@ -66,7 +64,6 @@ func DBReadLock(c *gin.Context) {
 	c.Next()
 }
 
-// HandleIndex renders Dashboard
 func HandleIndex(c *gin.Context) {
 	dm := getDB(c)
 	user, _ := c.Get("user")
@@ -117,14 +114,12 @@ func HandleIndex(c *gin.Context) {
 	renderTemplate(c, "index", data)
 }
 
-// HandleAdmin renders the Admin page
 func HandleAdmin(c *gin.Context) {
 	renderTemplate(c, "admin", gin.H{
 		"Title": "Admin",
 	})
 }
 
-// HandleNotFound renders the 404 error page
 func HandleNotFound(c *gin.Context) {
 	c.Status(http.StatusNotFound)
 	renderTemplate(c, "error", gin.H{

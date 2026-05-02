@@ -15,7 +15,6 @@ function initCatalogFilter() {
 
     if (!searchInput || !cards.length) return;
 
-    // Populate genre dropdown from book data
     var genres = [];
     cards.forEach(function (card) {
         var genre = card.getAttribute("data-genre");
@@ -90,7 +89,6 @@ function initStaffManagement() {
                 editUsername.value = username;
                 editRole.value = role;
 
-                // Reset options
                 Array.from(editRole.options).forEach(function (opt) {
                     opt.disabled = false;
                 });
@@ -98,11 +96,9 @@ function initStaffManagement() {
                 editNote.textContent = "";
 
                 if (isSelf) {
-                    // Cannot change own role
                     editRole.disabled = true;
                     editNote.textContent = "You cannot change your own role.";
                 } else if (isLastAdmin) {
-                    // Cannot demote the last admin
                     Array.from(editRole.options).forEach(function (opt) {
                         if (opt.value === "staff") opt.disabled = true;
                     });
@@ -139,7 +135,6 @@ function initStaffManagement() {
             deleteBtn.disabled = deleteInput.value !== expectedUsername;
         });
 
-        // Reset on close
         deleteModal.addEventListener("hidden.bs.modal", function () {
             deleteInput.value = "";
             deleteBtn.disabled = true;
