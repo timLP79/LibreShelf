@@ -146,7 +146,7 @@ Created automatically on first startup if they don't exist:
 
 ## Directory Structure
 
-Actual tree as of end of CP5 on the `cp5-crud` branch. Files marked *(planned)* are still to come; everything else exists.
+Actual tree as of end of CP7 on `main`.
 
 ```
 go-full-stack/
@@ -166,7 +166,17 @@ go-full-stack/
 ├── handlers_loans_test.go        # Loan handler tests + /my/loans privacy boundary tests
 ├── handlers_kiosk_test.go        # Kiosk public-access tests + auth-gated /books/:id regression guard
 ├── db_loans_test.go              # Loan DB method tests (CheckoutBook, ReturnBook, filters, counts)
-├── handlers_admin.go             # (planned, CP7) ZIP export / import; the Open Library proxy landed in handlers_books.go instead
+├── handlers_admin.go             # Admin tools index + backup export / import (DEC-027, DEC-029)
+├── handlers_admin_test.go        # Backup export / import tests incl. Zip Slip rejection
+├── handlers_security_test.go     # SecurityHeaders + HSTS gating tests (DEC-028)
+├── handlers_auth_test.go         # Auth middleware redirect-on-no-user + login success path
+├── openlibrary_test.go           # OL fetch via httptest.Server (success / 404 / 500 / bad JSON)
+├── covers_test.go                # Cover URL download via httptest.Server (success / 404 / oversize / bad-mime)
+├── validators_isbn_test.go       # IsValidISBN boundaries incl. ISBN-10 X check digit
+├── internal/safezip/             # ZIP extraction with Zip Slip / symlink / size protections (DEC-027)
+│   ├── doc.go
+│   ├── extract.go
+│   └── extract_test.go           # 13 cases at 87.5% coverage including hand-rolled zip-bomb fixture
 ├── openlibrary.go                # Open Library API client (DEC-008)
 ├── covers.go                     # Cover upload + OL-URL download with MIME / size / extension validation
 ├── flash.go                      # HttpOnly flash cookies (success + error + detail companion)
@@ -181,7 +191,8 @@ go-full-stack/
 │   ├── book_form.html            # Shared new / edit form: ISBN + OL Lookup, cover preview, Variant B submit
 │   ├── patrons.html              # Patron list + Add / Edit / Delete modals
 │   ├── staff.html                # Staff list + Add / Edit / Delete / Reset Password modals
-│   ├── admin.html                # Admin panel (stub; CP7 adds ZIP export / import)
+│   ├── admin.html                # Admin tools index page with cards drilling into individual tools (DEC-029)
+│   ├── backup_admin.html         # Backup admin page: stats panel + export button + restore-from-backup modal (DEC-027)
 │   ├── kiosk.html                # Public kiosk catalog grid (CP6, no login gate)
 │   ├── kiosk_layout.html         # Public kiosk shell: no sidebar, no nav, "Public Terminal" header (CP6)
 │   ├── kiosk_book_detail.html    # Public read-only book detail (CP6)
@@ -194,7 +205,8 @@ go-full-stack/
 │   │   └── style.css             # Custom styles: sidebar, availability badges, letterboxed covers
 │   ├── javascripts/
 │   │   ├── bootstrap.bundle.min.js
-│   │   └── app.js                # Catalog filter, staff / patron / book modal init, OL Lookup, cover preview, live validation
+│   │   ├── app.js                # Catalog filter, staff / patron / book modal init, OL Lookup, cover preview, live validation
+│   │   └── admin_backup.js       # Backup-restore modal interlock (extracted from inline script for CSP)
 │   └── images/
 │       └── favicon.svg
 ├── data/                         # gitignored; holds database.sqlite, covers/, WAL files
@@ -247,13 +259,14 @@ go-full-stack/
 - ✅ `main.go`: `RequireAuth()` and `RequireAdmin()` middleware applied to all routes
 - ✅ Dependency: `golang.org/x/crypto/bcrypt` for password hashing
 
-**Access control applied (as of end of CP6; CP7 will add admin-panel ZIP routes):**
+**Access control applied (final, end of CP7):**
 | Middleware | Routes |
 |-----------|--------|
-| `RequireAuth` | `/`, `/catalog`, `/books/:id`, `POST /logout` |
-| `RequirePatron` (CP6) | `/my/loans` |
-| `RequireStaff` (admin + staff) | `/patrons` + patron CRUD, `/admin`, `/books/new`, `POST /books`, book edit, `/api/openlibrary/isbn/:isbn`, `/loans`, `POST /books/:id/checkout`, `POST /loans/:id/return` |
-| `RequireAdmin` | `/staff` + staff CRUD + staff password reset, `POST /books/:id/delete` |
+| `RequireAuth` + `DBReadLock` | `/`, `/catalog`, `/books/:id`, `POST /logout` |
+| `RequirePatron` + `DBReadLock` | `/my/loans` |
+| `RequireStaff` (admin + staff) + `DBReadLock` | `/patrons` + patron CRUD, `/books/new`, `POST /books`, book edit, `/api/openlibrary/isbn/:isbn`, `/loans`, `POST /books/:id/checkout`, `POST /loans/:id/return` |
+| `RequireAdmin` + `DBReadLock` | `/staff` + staff CRUD + staff password reset, `POST /books/:id/delete`, `/admin`, `/admin/backup`, `GET /admin/backup/export` |
+| `RequireAdmin` (no `DBReadLock`) | `POST /admin/backup/import` -- takes write lock directly to swap the DB file (DEC-027) |
 | Public | `GET /login`, `POST /login`, `GET /kiosk`, `GET /kiosk/books/:id`, static files |
 | `RequireAuth` (kiosk, *deferred post-submission*) | `POST /kiosk/favorites`, `POST /kiosk/holds` |
 
@@ -334,8 +347,8 @@ go-full-stack/
 | View patron list | Yes | Yes | No |
 | Patron CRUD (name / email / phone) | Yes | Yes | No |
 | Staff management (list / add / edit / delete / reset password) | Yes | No | No |
-| Admin panel page (stub today) | Yes | Yes | No |
-| ZIP export / import *(CP7)* | Yes | No | No |
+| Admin tools index `/admin` | Yes | No | No |
+| ZIP export / import (`/admin/backup`) | Yes | No | No |
 
 *CSV patron import and patron reset-password are deferred post-submission; patron holds and SSE availability are deferred post-submission; see "Deferred to post-submission backlog" in the rescope section below.*
 
@@ -401,8 +414,8 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 
 ---
 
-### CP6 -- Loans + Kiosk + Dashboard
-**Goal:** Ship the loan foundation (checkout, return, overdue awareness) on the existing book-detail scaffold; kiosk provides public anonymous browse; dashboard wires a role-differentiated essential card set to real data. Scope disciplined via the v2 reality-check on 2026-04-19 and refined on 2026-04-20 -- workflow polish (rapid-scan portal, sidebar restructure, fuller dashboard redesign with mini-lists, printed overdue notices) remains deferred post-submission. Server-side catalog pagination also deferred post-submission as Path 2 (AJAX fragment swap) to preserve the live-filter UX patrons and kiosk users currently enjoy; picked up when the catalog outgrows a single DOM render. Full plan and deferred-design notes in [`cp6-planning.md`](./cp6-planning.md).
+### CP6 -- Loans + Kiosk + Dashboard ✅
+**Closed 2026-04-25 via PR #42, 169 tests passing.** Scope disciplined via the v2 reality-check on 2026-04-19 and refined on 2026-04-20 -- workflow polish (rapid-scan portal, sidebar restructure, fuller dashboard redesign with mini-lists, printed overdue notices) remains deferred post-submission. Server-side catalog pagination also deferred post-submission as Path 2 (AJAX fragment swap). Full plan and deferred-design notes in [`cp6-planning.md`](./cp6-planning.md). The original-scope notes below describe what landed.
 
 - [#22](https://github.com/timLP79/cs408-go-stack/issues/22) -- Loan system (trimmed)
   - `db.go`: loan schema (`due_date DATE NOT NULL`, `returned_at DATETIME`, `fine_cents INTEGER NOT NULL DEFAULT 0` future hook), plus DB methods `CheckoutBook`, `ReturnBook`, `GetActiveLoans`, `GetOverdueLoans`, `GetLoanHistoryByBook`, `GetLoanHistoryByPatron`. Both writes transactional (loan row + `quantity_available` adjustment in one tx, per DEC-022).
@@ -422,22 +435,29 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 
 ---
 
-### CP7 -- Admin Panel + Security Hardening + Deploy
-**Goal:** ZIP export/import, security headers, dependency audit, final EC2 redeploy.
+### CP7 -- Admin Panel + Security Hardening + Deploy ✅
+**Closed 2026-05-01 across PRs #74 / #75 / #76, deployed to EC2 same day.**
 
-- [#23](https://github.com/timLP79/cs408-go-stack/issues/23) -- Admin panel: ZIP export and import
-  - `handlers_admin.go`: `GET /admin/export`, `POST /admin/import`
-  - `templates/admin.html`: export button, import file picker, system stats
-  - Uses Go standard library `archive/zip` -- no extra dependencies
-  - ZIP contains: SQLite database file + cover images from `data/covers/` (DATA_DIR-relative path since #20 moved cover storage out of `static/`)
-  - Zip Slip protection on extract per security.md
-- [#24](https://github.com/timLP79/cs408-go-stack/issues/24) -- Testing, polish, and deploy
-  - `SecurityHeaders()` middleware (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy) per security.md
-  - `router.SetTrustedProxies([]string{"127.0.0.1"})` so Gin only trusts nginx for X-Forwarded-For
-  - `go mod verify` + `govulncheck ./...` on a clean checkout
-  - Expand `db_test.go` and `handlers_test.go` for any untested surface from earlier CPs
-  - Final EC2 redeploy with clean DB (gets the new seed passwords from CP5)
-  - ~~[#36](https://github.com/timLP79/cs408-go-stack/issues/36) -- Empty `app.js` loaded on every page~~ (resolved in CP3)
+- ✅ [#23](https://github.com/timLP79/cs408-go-stack/issues/23) -- Admin panel: ZIP export and import (PR #74, DEC-027)
+  - `handlers_admin.go`: `GET /admin/backup` (stats panel), `GET /admin/backup/export` (VACUUM INTO snapshot + ZIP), `POST /admin/backup/import` (validated extract + atomic file swap with `.bak` rollback)
+  - `internal/safezip/`: new package handling Zip Slip / symlink / absolute-path / size limits with two-pass validation. 13 tests at 87.5% coverage.
+  - `templates/backup_admin.html`: stats card, download button, restore-from-backup modal with checkbox interlock
+  - Live sessions preserved across the swap so the admin clicking restore stays logged in (`DumpSessions` -> swap -> `RestoreSessions` filtered to live users)
+- ✅ Admin tools-index pattern (PR #74 follow-up redesign, DEC-029)
+  - `/admin` is now a tools-index page with cards drilling into dedicated `/admin/<tool>` routes; lightweight settings will live inline as future toggles land
+  - `/admin` moved from staff-accessible to admin-only
+- ✅ [#24](https://github.com/timLP79/cs408-go-stack/issues/24) -- Testing, polish, and deploy (PR #75 + follow-up `af31e3d`, DEC-028)
+  - `SecurityHeaders` middleware applied router-wide: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, locked-down CSP, `Strict-Transport-Security` gated on `APP_ENV=production`
+  - `router.SetTrustedProxies([]string{"127.0.0.1"})` so Gin only honors `X-Forwarded-For` from the local nginx proxy
+  - Go 1.25.0 -> 1.25.9 toolchain bump cleared 19 stdlib CVEs flagged by `govulncheck`. Pinned in `.tool-versions` and `go.mod`.
+  - `go mod verify` + `govulncheck ./...` documented as pre-deploy gates in `docs/week6/deployment.md`
+  - nginx `client_max_body_size 100M` added to deployment guide after a live 413 on backup import (`af31e3d`)
+  - Final EC2 redeploy verified end-to-end (security headers visible in DevTools, no CSP violations, backup admin works on prod)
+- ✅ [#62](https://github.com/timLP79/cs408-go-stack/issues/62) (cs408-go-stack-al3) -- Test coverage push (PR #76, partial)
+  - 61.2% baseline -> 67.6% (+6.4%); `internal/safezip` held at 87.5%
+  - **75% headline target NOT reached.** Reaching it would require fault-injection scaffolding for handler error paths (`HandleBookEdit/Update`, `HandleStaffDelete`, `HandleBackupImport` rollback) which did not fit the CP7 deadline.
+  - Mandatory acceptance items shipped: Zip Slip rejection test for admin import (`TestBackupImport_RejectsZipSlip`), `httptest.NewServer` for OL paths (`TestFetchOpenLibraryBook_*`), `httptest.NewServer` for cover-URL paths (`TestSaveCoverFromURL_*`)
+- ~~[#36](https://github.com/timLP79/cs408-go-stack/issues/36) -- Empty `app.js` loaded on every page~~ (resolved in CP3)
 
 ---
 

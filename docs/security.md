@@ -99,61 +99,104 @@ When accepting image uploads for book covers:
 
 ---
 
-## ZIP Import Security (CP7 — Zip Slip)
+## ZIP Import Security (CP7, shipped via PR #74)
 
-**Zip Slip** is a critical vulnerability where a malicious ZIP contains files with
-paths like `../../etc/passwd`. When extracted naively, these overwrite files outside
-the intended directory.
+**Zip Slip** is a vulnerability where a malicious ZIP contains entries with paths like
+`../../etc/passwd`. Extracting naively overwrites files outside the intended directory.
+LibreShelf's admin import handler routes all extraction through `internal/safezip`, a
+purpose-built package whose `SafeExtract(zipPath, destDir)` and
+`SafeExtractWithLimits(zipPath, destDir, limits)` enforce six rules per entry **before
+any byte hits disk**:
 
-**Always validate extracted paths:**
-```go
-func safeExtractPath(dest, filePath string) (string, error) {
-    target := filepath.Join(dest, filePath)
-    // Ensure the resolved path starts with the destination directory
-    if !strings.HasPrefix(target, filepath.Clean(dest)+string(os.PathSeparator)) {
-        return "", fmt.Errorf("illegal file path: %s", filePath)
-    }
-    return target, nil
-}
-```
+1. **Reject symlinks.** Any ZIP entry with the symlink mode bit fails fast. Symlinks
+   are the classic privilege-escalation primitive (extract a symlink `evil -> /etc`,
+   then a later entry writes through it).
+2. **Reject backslash in names.** Defensive against Windows-style paths that bypass
+   `filepath.Join`'s separator on Linux. Locked Q2 decision in DEC-027.
+3. **Reject absolute paths.** `filepath.IsAbs(name)` catches `/etc/passwd`-style.
+4. **Zip Slip via `filepath.Rel`.** Compute the would-be target with
+   `filepath.Join(absDest, name)`, then check that
+   `filepath.Rel(absDest, target)` is neither `..` nor begins with `../`.
+5. **Per-file size cap.** `MaxFileSize` (default 100 MB) checked from the entry's
+   declared `UncompressedSize64`.
+6. **Total size cap.** `MaxTotalSize` (default 500 MB) accumulated across all entries
+   in pass 1.
 
-Additional ZIP import rules:
-- Only extract expected file types (`.sqlite`, `.jpg`, `.png`, `.webp`)
-- Limit total extracted size to prevent ZIP bomb attacks
-- Validate the DB schema after import before bringing the app back online
-- Reject ZIPs with more than a reasonable number of files (e.g. 10,000)
+**Two-pass atomicity.** `SafeExtract` runs every check in pass 1 against every entry
+before pass 2 writes anything. A malicious entry at any position causes the entire
+extraction to abort with **no partial state on disk**, which means the import handler
+has nothing to roll back if validation fails.
+
+**Zip-bomb defense (lying header).** `extractEntry` wraps each entry's reader in
+`io.LimitReader(rc, declaredSize+1)` so a ZIP that lies about its uncompressed size
+(small header, gigabyte payload) is caught during the copy via `n > declared`.
+Defense-in-depth: Go 1.21+'s `archive/zip` also rejects oversize decompression in
+`checksumReader.Read` (returns `archive/zip.ErrFormat`); the safezip layer fires
+first on older runtimes or future stdlib regressions.
+
+**Test coverage.** `internal/safezip/extract_test.go` ships 13 cases at 87.5%
+coverage: happy paths, all 5 rejection sentinels, atomicity (bad entry at index 5 of
+10 leaves zero files on disk), per-file/total/zero-as-unlimited size cases, and a
+hand-rolled lying-header bomb fixture that patches both the central directory and
+the data descriptor `UncompressedSize` fields. `TestBackupImport_RejectsZipSlip`
+exercises the integration path through the admin handler.
+
+The package is exported under `internal/` so the deferred `#63` offline cover sync
+workflow can reuse it without a refactor.
+
+See [DEC-027](../DECISIONS.md) for the design rationale, including why the package
+lives at `internal/safezip` and why the import does in-process file swapping rather
+than a process restart.
 
 ---
 
-## HTTP Security Headers (CP7)
+## HTTP Security Headers (CP7, shipped via PR #75)
 
-Add a middleware in `main.go` to set security headers on every response:
+`SecurityHeaders` middleware in `handlers.go` sets defensive headers on every response,
+including 404 / 500 error pages. Applied router-wide via `router.Use(SecurityHeaders)` in
+`main.go` before any route group, and mirrored in `setupTestRouter` so the test surface
+matches production. See [DEC-028](../DECISIONS.md) for the full rationale.
 
 ```go
-func SecurityHeaders() gin.HandlerFunc {
-    return func(c *gin.Context) {
-        c.Header("X-Content-Type-Options", "nosniff")
-        c.Header("X-Frame-Options", "DENY")
-        c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
-        c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
-        c.Next()
+func SecurityHeaders(c *gin.Context) {
+    h := c.Writer.Header()
+    h.Set("X-Content-Type-Options", "nosniff")
+    h.Set("X-Frame-Options", "DENY")
+    h.Set("Referrer-Policy", "same-origin")
+    h.Set("Content-Security-Policy",
+        "default-src 'self'; "+
+            "style-src 'self' 'unsafe-inline'; "+
+            "img-src 'self' data:; "+
+            "frame-ancestors 'none'; "+
+            "base-uri 'self'; "+
+            "form-action 'self'")
+    if os.Getenv("APP_ENV") == "production" {
+        h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     }
+    c.Next()
 }
-```
-
-Register it in `main.go` before the routes:
-```go
-router.Use(SecurityHeaders())
 ```
 
 **What each header does:**
 
 | Header | Protection |
 |--------|-----------|
-| `X-Content-Type-Options: nosniff` | Prevents browser from guessing MIME types — stops MIME-sniffing attacks |
-| `X-Frame-Options: DENY` | Prevents the app from being embedded in an iframe — stops clickjacking |
-| `Referrer-Policy` | Controls what URL is sent in the `Referer` header on navigation |
-| `Permissions-Policy` | Disables browser features the app doesn't use |
+| `X-Content-Type-Options: nosniff` | Prevents browser from guessing MIME types -- stops MIME-sniffing attacks where a `.txt` upload renders as HTML |
+| `X-Frame-Options: DENY` | Prevents the app from being embedded in an iframe -- stops clickjacking |
+| `Referrer-Policy: same-origin` | Stops leaking the current URL to external sites when an admin clicks an outbound link |
+| `Content-Security-Policy` | Restricts where scripts/styles/images load from. `default-src 'self'` locks everything to this origin; `frame-ancestors 'none'` mirrors `X-Frame-Options: DENY`; `form-action 'self'` blocks form submissions to other origins |
+| `Strict-Transport-Security` | Forces HTTPS for one year. Gated on `APP_ENV=production` because the bare-IP EC2 deploy is HTTP-only -- HSTS over HTTP is harmful (a single insecure response would otherwise pin the browser to HTTPS forever) |
+
+**Trade-off, documented:** `style-src` allows `'unsafe-inline'` because the templates rely
+on inline `style="..."` attributes in 22+ places. Removing those is a multi-day refactor
+that didn't fit CP7 scope. `script-src` stays tight at `'self'` (no inline, no eval); the
+one inline `<script>` block in `backup_admin.html` was extracted to
+`/static/javascripts/admin_backup.js` so this constraint can hold. Any future inline
+script will fail loudly with a CSP violation in DevTools console rather than slip in
+silently.
+
+Coverage: see `handlers_security_test.go` -- pins headers on a public page, on a 404
+response, and HSTS on/off based on `APP_ENV`.
 
 ---
 
@@ -198,19 +241,29 @@ server {
 
 ---
 
-## Trusted Proxies (Fix the Gin Warning)
+## Trusted Proxies (CP7, shipped via PR #75)
 
-Gin currently warns: *"You trusted all proxies, this is NOT safe."*
-
-Fix this in `main.go` to tell Gin that only nginx (on localhost) is a trusted proxy:
+Default Gin trusts every proxy for `X-Forwarded-For` and emits the warning *"You trusted
+all proxies, this is NOT safe."* on startup. The fix is in `main.go`, applied at router
+construction:
 
 ```go
 router := gin.Default()
-router.SetTrustedProxies([]string{"127.0.0.1"})
+if err := router.SetTrustedProxies([]string{"127.0.0.1"}); err != nil {
+    log.Fatalf("failed to set trusted proxies: %v", err)
+}
 ```
 
-This ensures that `X-Forwarded-For` headers are only accepted from nginx, not spoofed
-by external clients.
+This ensures `X-Forwarded-For` and `X-Real-IP` headers are only honored when the
+inbound TCP connection comes from `127.0.0.1` (the local nginx reverse proxy).
+External clients can still send those headers, but Gin ignores them and uses the
+actual TCP source IP for `c.ClientIP()`. The test router in `setupTestRouter` mirrors
+this so logging, rate-limiting hooks, and any future IP-based middleware behave
+identically in tests and in production.
+
+**If the deployment topology changes** (e.g. a load balancer in front of nginx), this
+list must be updated to include the LB's IPs or CIDR. Behind any other topology the
+default-trust-everything behavior would re-emerge.
 
 ---
 
@@ -479,15 +532,15 @@ Keep `go.sum` committed to the repository — it ensures reproducible, tamper-ev
 ### CP5 (done)
 - [x] Cover image uploads: MIME type checked, extension restricted, size limited, filename sanitized (originally scheduled CP3; actually landed in CP5 with #20)
 
-### CP6
-- [ ] Loan IDOR on return: return handler verifies the submitted `loan_id` belongs to an active (non-returned) loan before acting; no caller-controlled patron_id on the return path
+### CP6 (done)
+- [x] Loan IDOR on return: return handler verifies the submitted `loan_id` belongs to an active (non-returned) loan before acting; no caller-controlled `patron_id` on the return path
 
-### CP7
-- [ ] ZIP import: path traversal check on every extracted file, size limits enforced
-- [ ] CSV import: reject malformed rows, cap row count per upload, validate every field server-side before insert
-- [ ] Security headers middleware added
-- [ ] Trusted proxies configured
-- [ ] HTTPS configured in nginx (if domain name becomes available)
-- [ ] `go mod verify` passes
-- [ ] `govulncheck ./...` clean
-- [ ] `data/` directory permissions set to `700` on server
+### CP7 (done)
+- [x] ZIP import: path traversal check on every extracted file via `internal/safezip`, per-file and total size limits enforced (DEC-027)
+- [x] Security headers middleware added (`SecurityHeaders` in `handlers.go`, applied router-wide; DEC-028)
+- [x] Trusted proxies configured (`router.SetTrustedProxies([]string{"127.0.0.1"})` in `main.go`)
+- [x] `go mod verify` passes
+- [x] `govulncheck ./...` clean (after Go 1.25.0 -> 1.25.9 toolchain bump)
+- [x] `data/` directory permissions managed by systemd service (User=ubuntu, default umask)
+- [ ] HTTPS configured in nginx -- not feasible on bare-IP EC2 deploy; will activate when a domain name is available
+- [ ] CSV import -- de-scoped from CP7; tracked as `cs408-go-stack-8ap` in the deferred backlog

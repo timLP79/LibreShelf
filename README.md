@@ -5,17 +5,20 @@ A self-hostable library management system built with Go.
 **CS408 Spring 2026 Project** | [GitHub Issues](https://github.com/timLP79/cs408-go-stack/issues) | [Project Board](https://github.com/timLP79/cs408-go-stack/projects)
 
 LibreShelf lets a small library (school, office, personal collection) manage books,
-patrons, and loans through a simple web UI. A public kiosk supports self-service
-browsing with optional patron login for favorites and holds. All checkout and return
-transactions are staff-only. (SSE live availability is on the post-submission roadmap.)
+patrons, and loans through a simple web UI. A public kiosk supports anonymous self-service
+browsing. All checkout and return transactions are staff-only. Admins can export a full
+ZIP backup of the database and covers and restore from a prior backup with a Bootstrap
+modal interlock and `.bak` rollback. (SSE live availability, favorites, and patron holds
+are on the post-submission roadmap.)
 
 ## Tech Stack
 
-- **Go 1.24+** with [Gin](https://github.com/gin-gonic/gin) web framework
+- **Go 1.25.9** with [Gin](https://github.com/gin-gonic/gin) web framework (pinned in `.tool-versions`; bumped from 1.25.0 to clear stdlib CVEs flagged by `govulncheck`)
 - **SQLite** via [modernc.org/sqlite](https://gitlab.com/cznic/sqlite) (pure Go, no CGo)
 - **Go `html/template`** with layout pattern
 - **Bootstrap 5.3** (served locally -- no CDN dependency)
 - **EC2 + systemd + nginx** (deployment)
+- **Defensive HTTP headers** (X-Frame-Options DENY, CSP locked to local assets, X-Content-Type-Options nosniff, Referrer-Policy same-origin) applied router-wide via `SecurityHeaders` middleware
 
 ## Quick Start
 
@@ -51,9 +54,12 @@ Passwords must be 8+ characters with at least one uppercase letter, one digit, a
 | `/books/:id/edit` | Edit-book form | Staff + admin |
 | `/patrons` | Patron management -- list + add / edit / delete modals | Staff + admin |
 | `/staff` | Staff management -- list + add / edit / delete / reset-password modals | Admin only |
-| `/admin` | Admin panel -- stub today; CP7 adds ZIP export / import | Staff + admin (CP7 ZIP features will be admin-only) |
-| `/kiosk` | Public browse -- stub today; CP6 adds anonymous browse (patron login gate and favorites if time permits; holds deferred post-submission) | Public |
-| `/loans` | Active/overdue loan list view -- planned CP6 | Staff + admin |
+| `/admin` | Admin tools index -- card grid, currently one entry (Backup) drilling into `/admin/backup` | Admin only |
+| `/admin/backup` | Library statistics + ZIP export download + restore-from-backup modal | Admin only |
+| `/kiosk` | Public browse -- anonymous catalog grid, no auth gate | Public |
+| `/kiosk/books/:id` | Public read-only book detail | Public |
+| `/loans` | Active / overdue loan list view, with role filter | Staff + admin |
+| `/my/loans` | Patron's own active loans | Patron only |
 
 ## Documentation
 

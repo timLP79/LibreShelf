@@ -558,3 +558,123 @@ package extraction is the one place where we paid future-tax now (against
 the "don't design for hypothetical future requirements" rule) because
 `#63`'s design explicitly depends on it and the alternative is a refactor
 on the day we need it.
+
+---
+
+## DEC-028: Defensive HTTP headers + trusted-proxy pin + Go 1.25.9 stdlib bump
+
+**Date:** 2026-05-01 (CP7 #24 implementation)
+**Context:** Default Gin trusts every proxy for `X-Forwarded-For`, the bare
+binary sends no defensive HTTP headers, and `govulncheck` on the Go
+1.25.0 toolchain reported 19 stdlib CVEs (net/url, encoding/pem,
+crypto/tls, crypto/x509, etc.). All three are zero-cost to fix together
+before the final EC2 deploy.
+
+**Decision:**
+
+1. **`SecurityHeaders` middleware applied router-wide before everything
+   else.** Sets `X-Content-Type-Options: nosniff`, `X-Frame-Options:
+   DENY`, `Referrer-Policy: same-origin`, and a Content-Security-Policy
+   of `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src
+   'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action
+   'self'`. Applied via `router.Use(SecurityHeaders)` so even 404 / 500
+   responses carry the headers. HSTS is gated on `APP_ENV=production`
+   because the bare-IP EC2 deploy is HTTP-only and HSTS over HTTP is
+   harmful.
+
+2. **`'unsafe-inline'` allowed for `style-src` only, not `script-src`.**
+   Templates rely on inline `style="..."` attributes in 22+ places, and
+   tightening that without breaking the visual design is a multi-day
+   refactor. The single inline `<script>` block in `backup_admin.html`
+   was extracted to `static/javascripts/admin_backup.js` so `script-src`
+   can stay tight at `'self'` (no inline, no eval). XSS protection
+   therefore lives in `script-src`; `style-src 'unsafe-inline'` is the
+   accepted residual risk.
+
+3. **`router.SetTrustedProxies([]string{"127.0.0.1"})` in `main.go`.**
+   On the EC2 deploy, nginx fronts the Go app on localhost:3000, so
+   only nginx should be allowed to set `X-Forwarded-For`. Default Gin
+   trust-everyone behavior would let any client spoof their IP. The
+   test router in `setupTestRouter` mirrors this so the test surface
+   matches production (per the #35 gotcha).
+
+4. **Pin Go 1.25.9 in `.tool-versions` and `go.mod`.** `govulncheck`
+   on 1.25.0 reported CVEs all fixed in 1.25.x patch releases. 1.25.9
+   was the latest available via asdf at deploy time. Re-running
+   `govulncheck` on 1.25.9 returns no findings. Pinning in
+   `.tool-versions` makes `asdf install` reproducible; bumping the
+   `go` directive in `go.mod` makes anyone running a stale toolchain
+   fail at compile time rather than silently shipping vulnerable
+   binaries.
+
+5. **`govulncheck` and `go mod verify` are pre-deploy gates, not CI
+   gates.** Documented in `docs/week6/deployment.md` Step 1 and
+   Redeploying section. CP7 did not set up GitHub Actions CI (#17
+   remains open); the gates run locally on the developer machine
+   before each `scp`. If/when #17 lands, the gates move into the CI
+   workflow.
+
+**Rationale:** Each of the four was a few lines of code (or zero, for
+the toolchain pin) with high security upside, and they cluster naturally
+into one PR (#75). The decision NOT to refactor inline styles is the
+load-bearing trade -- it keeps CSP headers shippable today instead of
+deferring all of them indefinitely waiting on a perfect template
+refactor. The `script-src 'self'` constraint required moving one
+small JS file, which surfaced as a nice forcing function: any future
+inline script will fail loudly via a CSP violation in DevTools console
+rather than slip in unnoticed.
+
+---
+
+## DEC-029: Admin tools-index pattern (heavy tools as cards, light settings inline)
+
+**Date:** 2026-05-01 (CP7 mid-implementation, after DEC-027 backup
+shipped)
+**Context:** DEC-027 shipped `/admin/backup` as a dedicated page,
+leaving `/admin` as the placeholder "Admin panel coming soon" stub.
+With more admin features likely to land post-CP7 (patron self-
+registration toggle `cs408-go-stack-o1x`, offline cover sync
+`cs408-go-stack-0eh`), the question was whether to fold backup into
+`/admin` (one big page) or build out `/admin` as a tools dashboard.
+
+**Decision:**
+
+1. **`/admin` is a tools-index page**, not a stub and not a single
+   monolithic admin form. The page has labeled sections; each section
+   is either a card grid linking out to a dedicated tool page, or an
+   inline block of lightweight controls.
+
+2. **Heavy tools get their own card on `/admin` and drill into a
+   dedicated `/admin/<tool>` page.** "Heavy" means: multi-section
+   layout, modal interlocks, file uploads, multi-step flows, or
+   substantial per-tool state. Backup is the canonical heavy tool --
+   stats panel + export + import-with-modal -- and it lives at
+   `/admin/backup`.
+
+3. **Light tools live inline as sections directly on `/admin`.** "Light"
+   means: a single toggle, a single text field, a single button. The
+   patron self-registration toggle (when it ships) is the canonical
+   light example: one boolean setting, one form, one button. No need
+   for a dedicated `/admin/registration` route.
+
+4. **`/admin` moved from staff-accessible to admin-only access.** The
+   pre-CP7 placeholder was in the staff route group, but every actual
+   admin tool is admin-only. The mismatch (staff sees an Admin link to
+   a page with no tools they can use) is bad UX. Mirrored in
+   `setupTestRouter`; `TestStaffRoleCannotAccessAdminRoutes` was
+   updated to assert the new boundary.
+
+5. **The standalone "Backup" link in the sidebar was removed.** Only
+   the "Admin" link remains under the admin-only block. Drilling from
+   `/admin` -> Backup card -> `/admin/backup` is the path. New tools
+   add a card on `/admin`, not a sidebar entry.
+
+**Rationale:** Naive future-proofing said "build a sidebar group with
+Admin > Backup > Future Thing". That visual nesting was overkill for
+the actual backlog (probably 3-4 admin tools total over the project
+lifetime). The tools-index pattern scales linearly without sidebar
+clutter and makes the access-tier boundary explicit at the route
+level, not just the template level. The card-vs-inline split is a
+judgment call per tool; the criterion ("does this need its own
+page?") is loose on purpose so future tools don't get force-fit
+into the wrong category.

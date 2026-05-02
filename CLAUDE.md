@@ -116,12 +116,12 @@ Deploy guide: `docs/week6/deployment.md` (build, scp, systemctl).
 
 ## Current State
 
-CP1-CP4: complete. CP5: complete (closed 2026-04-18, 6 days early). CP6: complete (closed 2026-04-25, PR #42, 169 tests passing). CP7: active, target close 2026-04-30.
+All checkpoints complete. CP1-CP4 shipped over weeks 3-5. CP5 closed 2026-04-18 (6 days early). CP6 closed 2026-04-25 (PR #42, 169 tests). CP7 closed 2026-05-01 across PRs #74 / #75 / #76, deployed to EC2 the same day. Final test coverage 67.6% on `go-full-stack`, 87.5% on `internal/safezip`.
 
 For per-checkpoint detail:
 - `bd memories cp5-architecture` -- staff / book / patron CRUD, OL integration, cover validation
 - `bd memories cp6-architecture` -- loans + dashboard + kiosk + role-differentiated routing
-- `DECISIONS.md` -- DEC-001 through DEC-026
+- `DECISIONS.md` -- DEC-001 through DEC-029 (DEC-027: backup design; DEC-028: security hardening; DEC-029: admin tools-index pattern)
 - `git log` -- implementation history
 
 ---
@@ -133,7 +133,7 @@ For per-checkpoint detail:
 - Use environment variables for all secrets -- never hardcode
 - Return correct HTTP status codes
 - Validate and sanitize inputs server-side on every endpoint
-- Rate limiting and CORS are CP7 scope. When you add a new endpoint before CP7, note the gap rather than assuming middleware exists.
+- Defensive headers (X-Frame-Options DENY, CSP locked to local assets, X-Content-Type-Options nosniff) are applied router-wide via `SecurityHeaders` middleware. Rate limiting and CORS were de-scoped from CP7; if a future endpoint needs either, add per-route middleware.
 - Always use parameterized queries (`?` placeholders) -- never string concatenation
 - Commits should be descriptive and reference issue numbers where applicable
 - Keep solutions lightweight -- consistent with the Absolute Code philosophy
@@ -147,7 +147,7 @@ For per-checkpoint detail:
 - **Test router uses the production middleware chain** (fixed in #35). `setupTestRouter` returns `(router, dm)` and mirrors `main.go` route groups exactly. Use `loginAs(t, dm, username, role)` to get a session cookie + CSRF token, then `req.AddCookie(sess)` and set `csrf_token` on POSTs. `logoutHelper` exists for the logout path.
 - **Schema changes don't migrate.** `createSchema` uses `CREATE TABLE IF NOT EXISTS`. Altering a column requires either `ALTER TABLE` or nuking `data/database.sqlite` locally.
 - **Go has no hot-reload.** Template edits take effect only after a process restart (templates are parsed once at startup via `template.Must` in `main.go`). Go source edits take effect only after re-running `go run .`. Symptom of forgetting: the browser sees the old behavior with no errors. If something "didn't do anything," restart the server first.
-- **Static assets cache aggressively in the browser.** `router.Static` serves `static/javascripts/app.js` and `static/stylesheets/style.css` without cache-busting query strings or asset fingerprinting, so after a JS/CSS edit the browser may still hold the prior version. Symptom: `typeof initWhateverIJustAdded` is `"undefined"` in the console even though the file on disk is current. Fix during dev: hard refresh (Ctrl+Shift+R) or keep DevTools open with "Disable cache" checked in the Network tab. Proper fix is CP7 polish -- a `?v=<build-time>` query or content-hash URL.
+- **Static assets cache aggressively in the browser.** `router.Static` serves `static/javascripts/app.js` and `static/stylesheets/style.css` without cache-busting query strings or asset fingerprinting, so after a JS/CSS edit the browser may still hold the prior version. Symptom: `typeof initWhateverIJustAdded` is `"undefined"` in the console even though the file on disk is current. Fix during dev: hard refresh (Ctrl+Shift+R) or keep DevTools open with "Disable cache" checked in the Network tab. Proper fix (a `?v=<build-time>` query or content-hash URL) was de-scoped from CP7; it lives in the deferred backlog.
 
 ---
 
@@ -164,15 +164,13 @@ For per-checkpoint detail:
 
 ## Open Issues / Current Focus
 
-**Deadline:** 2026-05-01. CP7 target close 4/30, buffer day 5/1.
+CP1-CP7 closed; LibreShelf is feature-complete for CS408 submission. See `bd memories cp5-architecture` / `cp6-architecture` and `git log` for retrospective detail.
 
-CP1-CP6 closed. See `bd memories cp5-architecture` / `cp6-architecture` and `git log` for retrospective detail.
+### CP7 -- Admin Panel + Security Hardening + Deploy (closed 2026-05-01)
 
-### CP7 -- Admin Panel + Security Hardening + Deploy
-
-- [ ] #23 -- Admin panel: ZIP export and import (with Zip Slip protection).
-- [ ] #24 -- Testing, polish, and deploy: `SecurityHeaders` middleware, `SetTrustedProxies`, `go mod verify`, `govulncheck`, final EC2 redeploy with a clean DB to pick up new seed passwords.
-- [ ] #62 (cs408-go-stack-al3) -- Test coverage push, scheduled LAST after #23 and #24 ship. Baseline 61.8% post-`LoadUser` cleanup. Target 75%+ overall, 90%+ on auth/middleware/validators/transactional DB, 80%+ on handlers. Zip Slip rejection test for admin import path; `httptest.NewServer` for OL and cover-URL paths.
+- [x] #23 -- Admin panel: ZIP export and import (DEC-027). Shipped via PR #74. `internal/safezip` package handles Zip Slip / symlink / absolute-path / size limits with two-pass validation. Export uses `VACUUM INTO`; import uses an in-process swap under a global `sync.RWMutex` with `.bak` rollback and live-session preservation.
+- [x] #24 -- Testing, polish, and deploy. Shipped via PR #75 + follow-up `af31e3d`. `SecurityHeaders` middleware (X-Frame-Options DENY, CSP locked to local assets, X-Content-Type-Options nosniff, Referrer-Policy same-origin, HSTS gated on APP_ENV=production), `SetTrustedProxies([]string{"127.0.0.1"})`, Go 1.25.0 -> 1.25.9 toolchain bump (cleared 19 stdlib CVEs flagged by `govulncheck`), nginx `client_max_body_size 100M` for backup imports, EC2 redeployed and verified end-to-end.
+- [x] #62 (cs408-go-stack-al3) -- Test coverage push, partial. Shipped via PR #76. 61.2% baseline -> 67.6% (+6.4%); `internal/safezip` held at 87.5%. 75% headline target NOT reached; reaching it requires fault-injection scaffolding for handler error paths and was deferred. Mandatory items shipped: Zip Slip rejection test, `httptest.NewServer` for OL paths, `httptest.NewServer` for cover-URL paths.
 
 ### Deferred post-submission backlog
 
