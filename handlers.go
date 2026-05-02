@@ -21,6 +21,19 @@ func getDB(c *gin.Context) *DatabaseManager {
 	return c.MustGet("db").(*DatabaseManager)
 }
 
+// DBReadLock holds the DatabaseManager's read lock for the duration of
+// the request. Allows many concurrent readers but blocks while
+// HandleBackupImport holds the write lock during a database swap.
+// Routes that need exclusive DB access (only the import endpoint) must
+// be in a group that does NOT include this middleware, and must take
+// dm.mu.Lock() themselves.
+func DBReadLock(c *gin.Context) {
+	dm := getDB(c)
+	dm.mu.RLock()
+	defer dm.mu.RUnlock()
+	c.Next()
+}
+
 // HandleIndex renders Dashboard
 func HandleIndex(c *gin.Context) {
 	dm := getDB(c)
