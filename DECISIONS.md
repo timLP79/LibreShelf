@@ -608,7 +608,7 @@ before the final EC2 deploy.
    binaries.
 
 5. **`govulncheck` and `go mod verify` are pre-deploy gates, not CI
-   gates.** Documented in `docs/week6/deployment.md` Step 1 and
+   gates.** Documented in `docs/deployment.md` Step 1 and
    Redeploying section. CP7 did not set up GitHub Actions CI (#17
    remains open); the gates run locally on the developer machine
    before each `scp`. If/when #17 lands, the gates move into the CI

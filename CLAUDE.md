@@ -93,7 +93,7 @@ go test -v -run TestX   # run a specific test
 sqlite3 data/database.sqlite  # inspect the local DB
 ```
 
-Deploy guide: `docs/week6/deployment.md` (build, scp, systemctl).
+Deploy guide: `docs/deployment.md` (build, scp, systemctl).
 
 ---
 
@@ -154,10 +154,10 @@ For per-checkpoint detail:
 ## Key References
 
 - [Technical plan and architecture](./docs/plan.md) -- single source of truth for design
-- [Product specification](./docs/week7/LibreShelf%20-%20Product%20Specification.pdf)
-- [UI wireframes](./docs/week7/wire-frames/)
+- [Product specification](./docs/product-spec/libreshelf-product-specification.pdf)
+- [UI wireframes](./docs/product-spec/wireframes/)
 - [Security plan](./docs/security.md)
-- [Deployment guide](./docs/week6/deployment.md)
+- [Deployment guide](./docs/deployment.md)
 - [Design decisions log](./DECISIONS.md)
 
 ---

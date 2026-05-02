@@ -450,7 +450,7 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
   - `SecurityHeaders` middleware applied router-wide: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: same-origin`, locked-down CSP, `Strict-Transport-Security` gated on `APP_ENV=production`
   - `router.SetTrustedProxies([]string{"127.0.0.1"})` so Gin only honors `X-Forwarded-For` from the local nginx proxy
   - Go 1.25.0 -> 1.25.9 toolchain bump cleared 19 stdlib CVEs flagged by `govulncheck`. Pinned in `.tool-versions` and `go.mod`.
-  - `go mod verify` + `govulncheck ./...` documented as pre-deploy gates in `docs/week6/deployment.md`
+  - `go mod verify` + `govulncheck ./...` documented as pre-deploy gates in `docs/deployment.md`
   - nginx `client_max_body_size 100M` added to deployment guide after a live 413 on backup import (`af31e3d`)
   - Final EC2 redeploy verified end-to-end (security headers visible in DevTools, no CSP violations, backup admin works on prod)
 - ✅ [#62](https://github.com/timLP79/cs408-go-stack/issues/62) (cs408-go-stack-al3) -- Test coverage push (PR #76, partial)

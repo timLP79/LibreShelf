@@ -103,14 +103,14 @@ This is a solo developer project.
 |------|-------------|
 | [`plan.md`](./plan.md) | LibreShelf architecture, schema, routes, and checkpoint plan |
 | [`security.md`](./security.md) | Security model, threat mitigations, and per-CP security checklist |
-| [`week7/LibreShelf - Product Specification.pdf`](./week7/LibreShelf%20-%20Product%20Specification.pdf) | LibreShelf product specification (Week 7 assignment) |
-| [`week7/wire-frames/`](./week7/wire-frames/) | UI wire frames for all 6 pages |
-| [`week6/deployment.md`](./week6/deployment.md) | EC2 deployment guide (systemd + nginx) |
-| [`tutorials/GO_LEARNING_GUIDE.md`](./tutorials/GO_LEARNING_GUIDE.md) | Go syntax reference |
-| [`week3/BOOTSTRAP_INTEGRATION_GUIDE.md`](./week3/BOOTSTRAP_INTEGRATION_GUIDE.md) | Bootstrap 5 integration guide |
-| [`week3/TESTING_AND_DEBUGGING_GUIDE.md`](./week3/TESTING_AND_DEBUGGING_GUIDE.md) | Testing and debugging tutorial |
-| [`week3/tech-stack-survey.md`](./week3/tech-stack-survey.md) | Tech stack comparison and rationale |
-| [`week3/CANVAS_DISCUSSION_POST.md`](./week3/CANVAS_DISCUSSION_POST.md) | Hello World assignment submission |
+| [`product-spec/libreshelf-product-specification.pdf`](./product-spec/libreshelf-product-specification.pdf) | LibreShelf product specification (Week 7 assignment) |
+| [`product-spec/wireframes/`](./product-spec/wireframes/) | UI wireframes for all 6 pages |
+| [`deployment.md`](./deployment.md) | EC2 deployment guide (systemd + nginx) |
+| [`tutorials/go-learning-guide.md`](./tutorials/go-learning-guide.md) | Go syntax reference |
+| [`bootstrap-integration-guide.md`](./bootstrap-integration-guide.md) | Bootstrap 5 integration guide |
+| [`testing-and-debugging-guide.md`](./testing-and-debugging-guide.md) | Testing and debugging tutorial |
+| [`tech-stack-survey.md`](./tech-stack-survey.md) | Tech stack comparison and rationale |
+| [`canvas-discussion-post.md`](./canvas-discussion-post.md) | Hello World assignment submission |
 
 ---
 
@@ -224,17 +224,17 @@ go-full-stack/
 │   ├── README.md                    # This file
 │   ├── plan.md                      # LibreShelf architecture and checkpoint plan
 │   ├── security.md                  # Security model and per-CP mitigations
-│   ├── tutorials/GO_LEARNING_GUIDE.md
-│   ├── week3/
-│   │   ├── BOOTSTRAP_INTEGRATION_GUIDE.md
-│   │   ├── TESTING_AND_DEBUGGING_GUIDE.md
-│   │   ├── tech-stack-survey.md
-│   │   └── CANVAS_DISCUSSION_POST.md
-│   ├── week6/
-│   │   └── deployment.md
-│   └── week7/
-│       ├── LibreShelf - Product Specification.pdf
-│       └── wire-frames/
+│   ├── deployment.md                # EC2 deployment guide (systemd + nginx)
+│   ├── cp6-planning.md              # CP6 planning notes + deferred design
+│   ├── bootstrap-integration-guide.md
+│   ├── testing-and-debugging-guide.md
+│   ├── tech-stack-survey.md
+│   ├── canvas-discussion-post.md
+│   ├── tutorials/
+│   │   └── go-learning-guide.md
+│   └── product-spec/
+│       ├── libreshelf-product-specification.pdf
+│       └── wireframes/
 ├── go.mod
 ├── go.sum
 └── README.md                        # Project intro and quick start
@@ -446,7 +446,7 @@ func TestSomething(t *testing.T) {
 }
 ```
 
-See [TESTING_AND_DEBUGGING_GUIDE.md](./week3/TESTING_AND_DEBUGGING_GUIDE.md) for a complete tutorial.
+See [testing-and-debugging-guide.md](./testing-and-debugging-guide.md) for a complete tutorial.
 
 ---
 
@@ -456,7 +456,7 @@ See [TESTING_AND_DEBUGGING_GUIDE.md](./week3/TESTING_AND_DEBUGGING_GUIDE.md) for
 2. **Delve** — official Go debugger: `dlv debug` or `dlv test`
 3. **VS Code** — Go extension with Delve integration; switched from GoLand due to resource constraints
 
-See [TESTING_AND_DEBUGGING_GUIDE.md](./week3/TESTING_AND_DEBUGGING_GUIDE.md) for examples.
+See [testing-and-debugging-guide.md](./testing-and-debugging-guide.md) for examples.
 
 ---
 
@@ -507,7 +507,7 @@ Closes #18
 
 The app runs as a systemd service behind an nginx reverse proxy on Ubuntu EC2.
 
-- Full guide: [docs/week6/deployment.md](./week6/deployment.md)
+- Full guide: [docs/deployment.md](./deployment.md)
 - systemd unit: [`deploy/go-full-stack.service`](../deploy/go-full-stack.service)
 - Architecture: Browser → nginx (port 80) → Go app (port 3000)
 
@@ -517,10 +517,10 @@ The app runs as a systemd service behind an nginx reverse proxy on Ubuntu EC2.
 
 ### Project docs
 - [plan.md](./plan.md) — LibreShelf architecture and design decisions
-- [GO_LEARNING_GUIDE.md](./tutorials/GO_LEARNING_GUIDE.md) — Go syntax reference
-- [TESTING_AND_DEBUGGING_GUIDE.md](./week3/TESTING_AND_DEBUGGING_GUIDE.md) — Testing tutorial
-- [BOOTSTRAP_INTEGRATION_GUIDE.md](./week3/BOOTSTRAP_INTEGRATION_GUIDE.md) — Bootstrap guide
-- [tech-stack-survey.md](./week3/tech-stack-survey.md) — Tech stack comparison
+- [go-learning-guide.md](./tutorials/go-learning-guide.md) — Go syntax reference
+- [testing-and-debugging-guide.md](./testing-and-debugging-guide.md) — Testing tutorial
+- [bootstrap-integration-guide.md](./bootstrap-integration-guide.md) — Bootstrap guide
+- [tech-stack-survey.md](./tech-stack-survey.md) — Tech stack comparison
 
 ### External
 - [Gin Documentation](https://gin-gonic.com/docs/)

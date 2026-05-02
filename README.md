@@ -64,10 +64,10 @@ Passwords must be 8+ characters with at least one uppercase letter, one digit, a
 ## Documentation
 
 - [Technical plan and architecture](./docs/plan.md)
-- [Product specification](./docs/week7/LibreShelf%20-%20Product%20Specification.pdf)
-- [UI wire frames](./docs/week7/wire-frames/)
-- [Deployment guide (EC2 + systemd + nginx)](./docs/week6/deployment.md)
-- [Go learning guide](./docs/tutorials/GO_LEARNING_GUIDE.md)
+- [Product specification](./docs/product-spec/libreshelf-product-specification.pdf)
+- [UI wireframes](./docs/product-spec/wireframes/)
+- [Deployment guide (EC2 + systemd + nginx)](./docs/deployment.md)
+- [Go learning guide](./docs/tutorials/go-learning-guide.md)
 
 ## License
 
