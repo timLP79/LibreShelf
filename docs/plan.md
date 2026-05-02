@@ -415,7 +415,7 @@ Returns: title, authors, cover URL, publish year. Called server-side; result for
 ---
 
 ### CP6 -- Loans + Kiosk + Dashboard ✅
-**Closed 2026-04-25 via PR #42, 169 tests passing.** Scope disciplined via the v2 reality-check on 2026-04-19 and refined on 2026-04-20 -- workflow polish (rapid-scan portal, sidebar restructure, fuller dashboard redesign with mini-lists, printed overdue notices) remains deferred post-submission. Server-side catalog pagination also deferred post-submission as Path 2 (AJAX fragment swap). Full plan and deferred-design notes in [`cp6-planning.md`](./cp6-planning.md). The original-scope notes below describe what landed.
+**Closed 2026-04-25 via PR #42, 169 tests passing.** Scope disciplined via the v2 reality-check on 2026-04-19 and refined on 2026-04-20 -- workflow polish (rapid-scan portal `cs408-go-stack-yu3`, sidebar restructure `-650`, fuller dashboard redesign `-ak6`, printed overdue notices `-wdy`) remains deferred post-submission. Server-side catalog pagination also deferred as Path 2 (AJAX fragment swap, `-3d0`). Each deferred item carries its full design in the bead description; run `bd show <id>` for detail. The original-scope notes below describe what landed.
 
 - [#22](https://github.com/timLP79/cs408-go-stack/issues/22) -- Loan system (trimmed)
   - `db.go`: loan schema (`due_date DATE NOT NULL`, `returned_at DATETIME`, `fine_cents INTEGER NOT NULL DEFAULT 0` future hook), plus DB methods `CheckoutBook`, `ReturnBook`, `GetActiveLoans`, `GetOverdueLoans`, `GetLoanHistoryByBook`, `GetLoanHistoryByPatron`. Both writes transactional (loan row + `quantity_available` adjustment in one tx, per DEC-022).

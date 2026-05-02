@@ -443,8 +443,8 @@ defined as a single package-level constant (`const DefaultLoanTermDays = 14`)
 passed to `CheckoutBook` by the handler. Per-book or per-patron overrides deferred
 post-submission. The book-detail page keeps its existing checkout scaffold as the
 checkout UX; no separate `/checkout` portal in CP6. The rapid-scan portal design
-from the v1 planning doc is preserved in `docs/cp6-planning.md` for a future
-un-defer when transaction volume justifies it.
+is preserved in bead `cs408-go-stack-yu3` for a future un-defer when transaction
+volume justifies it.
 **Rationale:** Two states expressible by one query param keeps the URL shareable,
 the template single, and the tests trivial. Fourteen days is the standard public
 library default (Boise Public, Ball State Bracken, most US library systems) and

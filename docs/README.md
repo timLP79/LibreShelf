@@ -73,7 +73,7 @@ This is a solo developer project.
 - ✅ Color scheme — slate blue sidebar, soft white-gray background, accent stat cards
 - ✅ Merged PR #27, tagged v2
 
-**Next up:** CP6 — loan foundation + kiosk anonymous browse + catalog pagination. Scope disciplined on 2026-04-19 via the v2 reality-check; workflow polish (rapid-scan portal, sidebar restructure, dashboard redesign, printed overdue notices, patron-facing mini-lists) moved to post-submission. Full plan in `cp6-planning.md`.
+**Next up:** CP6 — loan foundation + kiosk anonymous browse + catalog pagination. Scope disciplined on 2026-04-19 via the v2 reality-check; workflow polish (rapid-scan portal, sidebar restructure, dashboard redesign, printed overdue notices, patron-facing mini-lists) moved to post-submission. Each deferred item lives as a bead; run `bd list --status=open` to browse.
 
 **Open milestones:**
 - [CP6 #22](https://github.com/timLP79/cs408-go-stack/issues/22) Loan system (trimmed): loan schema + transactional DB methods + checkout/return handlers on book-detail scaffold + `/loans` list view with `active|overdue` filter + kiosk anonymous browse. Favorites only if time permits. SSE and patron holds deferred.
@@ -225,7 +225,6 @@ go-full-stack/
 │   ├── plan.md                      # LibreShelf architecture and checkpoint plan
 │   ├── security.md                  # Security model and per-CP mitigations
 │   ├── deployment.md                # EC2 deployment guide (systemd + nginx)
-│   ├── cp6-planning.md              # CP6 planning notes + deferred design
 │   ├── bootstrap-integration-guide.md
 │   ├── testing-and-debugging-guide.md
 │   ├── tech-stack-survey.md
