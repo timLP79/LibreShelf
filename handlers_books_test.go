@@ -980,3 +980,133 @@ func TestBookDeleteReturns404ForMissing(t *testing.T) {
 	}
 }
 
+
+// TestBookNewFormRenders pins the GET /books/new form for staff.
+// The handler is a thin renderTemplate call; this test exists so a
+// future template edit that breaks the form surfaces here rather
+// than only at create-time.
+func TestBookNewFormRenders(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "staff_new_book_form", "staff")
+
+	req, _ := http.NewRequest("GET", "/books/new", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "<form") {
+		t.Errorf("expected a form in the body; got %s", body[:min(200, len(body))])
+	}
+}
+
+func TestOpenLibraryLookupHappy(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "staff_ol_happy", "staff")
+
+	prev := openLibraryBaseURL
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{
+			"ISBN:9780141439518": {
+				"title": "Pride and Prejudice",
+				"authors": [{"name": "Jane Austen"}],
+				"publishers": [{"name": "Penguin"}],
+				"publish_date": "1813",
+				"cover": {"large": "https://example.com/c.jpg"}
+			}
+		}`))
+	}))
+	openLibraryBaseURL = srv.URL
+	t.Cleanup(func() { openLibraryBaseURL = prev; srv.Close() })
+
+	req, _ := http.NewRequest("GET", "/api/openlibrary/isbn/9780141439518", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "Pride and Prejudice") {
+		t.Errorf("body missing title: %s", rr.Body.String())
+	}
+}
+
+func TestOpenLibraryLookupNotFound(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "staff_ol_404", "staff")
+
+	prev := openLibraryBaseURL
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	openLibraryBaseURL = srv.URL
+	t.Cleanup(func() { openLibraryBaseURL = prev; srv.Close() })
+
+	req, _ := http.NewRequest("GET", "/api/openlibrary/isbn/9780141439518", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "not_found") {
+		t.Errorf("body missing not_found: %s", rr.Body.String())
+	}
+}
+
+func TestOpenLibraryLookupUpstreamError(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "staff_ol_5xx", "staff")
+
+	prev := openLibraryBaseURL
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	openLibraryBaseURL = srv.URL
+	t.Cleanup(func() { openLibraryBaseURL = prev; srv.Close() })
+
+	req, _ := http.NewRequest("GET", "/api/openlibrary/isbn/9780141439518", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want 502", rr.Code)
+	}
+}
+
+func TestCatalogRendersForStaff(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "staff_catalog", "staff")
+
+	req, _ := http.NewRequest("GET", "/catalog", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Catalog") {
+		t.Errorf("expected 'Catalog' in body")
+	}
+}
+
+func TestDashboardRendersForStaff(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "staff_dash", "staff")
+
+	req, _ := http.NewRequest("GET", "/", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("dashboard status = %d, want 200", rr.Code)
+	}
+}

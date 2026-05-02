@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -217,5 +218,143 @@ func TestCountAdminsReflectsCurrentState(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("expected 1 admin after demotion, got %d", count)
+	}
+}
+
+func TestUpdateBookCover(t *testing.T) {
+	dm := setupTestDB(t)
+
+	isbn := "9780000000001"
+	id, err := dm.CreateBook(&Book{
+		Title:             "Test Book",
+		ISBN:              &isbn,
+		QuantityTotal:     1,
+		QuantityAvailable: 1,
+	}, []string{"Author"})
+	if err != nil {
+		t.Fatalf("CreateBook: %v", err)
+	}
+	if err := dm.UpdateBookCover(id, "abc123.jpg"); err != nil {
+		t.Fatalf("UpdateBookCover: %v", err)
+	}
+	got, err := dm.GetBookByID(id)
+	if err != nil {
+		t.Fatalf("GetBookByID: %v", err)
+	}
+	if got.CoverFilename == nil || *got.CoverFilename != "abc123.jpg" {
+		t.Errorf("CoverFilename = %v, want abc123.jpg", got.CoverFilename)
+	}
+
+	if err := dm.UpdateBookCover(id, "xyz999.png"); err != nil {
+		t.Fatalf("UpdateBookCover (second): %v", err)
+	}
+	got, _ = dm.GetBookByID(id)
+	if got.CoverFilename == nil || *got.CoverFilename != "xyz999.png" {
+		t.Errorf("after second update, CoverFilename = %v, want xyz999.png", got.CoverFilename)
+	}
+
+	// Update of a non-existent id is a no-op (UPDATE with no matching
+	// row does not error in SQLite).
+	if err := dm.UpdateBookCover(999999, "ignored.jpg"); err != nil {
+		t.Errorf("UpdateBookCover on missing id should be a no-op, got %v", err)
+	}
+}
+
+func TestUpdateBookHappy(t *testing.T) {
+	dm := setupTestDB(t)
+	isbn := "9780000111111"
+	id, err := dm.CreateBook(&Book{
+		Title:             "Original",
+		ISBN:              &isbn,
+		QuantityTotal:     1,
+		QuantityAvailable: 1,
+	}, []string{"First Author"})
+	if err != nil {
+		t.Fatalf("CreateBook: %v", err)
+	}
+
+	newTitle := "Updated"
+	newISBN := "9780000222222"
+	year := 2026
+	if err := dm.UpdateBook(id, &Book{
+		Title:             newTitle,
+		ISBN:              &newISBN,
+		Year:              &year,
+		QuantityTotal:     5,
+		QuantityAvailable: 4,
+	}, []string{"Author A", "Author B"}); err != nil {
+		t.Fatalf("UpdateBook: %v", err)
+	}
+
+	got, err := dm.GetBookByID(id)
+	if err != nil {
+		t.Fatalf("GetBookByID: %v", err)
+	}
+	if got.Title != newTitle {
+		t.Errorf("Title = %q, want %q", got.Title, newTitle)
+	}
+	if got.ISBN == nil || *got.ISBN != newISBN {
+		t.Errorf("ISBN = %v, want %s", got.ISBN, newISBN)
+	}
+	if got.QuantityTotal != 5 {
+		t.Errorf("QuantityTotal = %d, want 5", got.QuantityTotal)
+	}
+	if !strings.Contains(got.Authors, "Author A") || !strings.Contains(got.Authors, "Author B") {
+		t.Errorf("Authors = %q, want both Author A and Author B", got.Authors)
+	}
+}
+
+func TestGetLoanHistoryStatuses(t *testing.T) {
+	dm := setupTestDB(t)
+	isbn := "9780000333333"
+	bookID, err := dm.CreateBook(&Book{
+		Title: "T", ISBN: &isbn, QuantityTotal: 5, QuantityAvailable: 5,
+	}, []string{"A"})
+	if err != nil {
+		t.Fatalf("CreateBook: %v", err)
+	}
+	patronID := mustCreateUser(t, dm, "p_history", "patron")
+	if _, err := dm.db.Exec(`INSERT INTO patrons (id, name) VALUES (?, ?)`, patronID, "Test Patron"); err != nil {
+		t.Fatalf("seed patron: %v", err)
+	}
+
+	// Active loan: due in the future, not returned.
+	if _, err := dm.db.Exec(
+		`INSERT INTO loans (book_id, patron_id, due_date) VALUES (?, ?, DATE('now', '+14 days'))`,
+		bookID, patronID,
+	); err != nil {
+		t.Fatalf("active loan: %v", err)
+	}
+	// Overdue loan: due in the past, not returned.
+	if _, err := dm.db.Exec(
+		`INSERT INTO loans (book_id, patron_id, due_date) VALUES (?, ?, DATE('now', '-3 days'))`,
+		bookID, patronID,
+	); err != nil {
+		t.Fatalf("overdue loan: %v", err)
+	}
+	// Returned loan: returned_at set.
+	if _, err := dm.db.Exec(
+		`INSERT INTO loans (book_id, patron_id, due_date, returned_at) VALUES (?, ?, DATE('now', '-30 days'), DATETIME('now', '-25 days'))`,
+		bookID, patronID,
+	); err != nil {
+		t.Fatalf("returned loan: %v", err)
+	}
+
+	records, err := dm.GetLoanHistory(bookID)
+	if err != nil {
+		t.Fatalf("GetLoanHistory: %v", err)
+	}
+	statuses := map[string]int{}
+	for _, r := range records {
+		statuses[r.Status]++
+	}
+	if statuses["active"] != 1 {
+		t.Errorf("active count = %d, want 1; statuses=%v", statuses["active"], statuses)
+	}
+	if statuses["overdue"] != 1 {
+		t.Errorf("overdue count = %d, want 1; statuses=%v", statuses["overdue"], statuses)
+	}
+	if statuses["returned"] != 1 {
+		t.Errorf("returned count = %d, want 1; statuses=%v", statuses["returned"], statuses)
 	}
 }
