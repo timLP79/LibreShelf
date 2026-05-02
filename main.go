@@ -130,7 +130,6 @@ func main() {
 	staff.POST("/patrons", HandlePatronCreate)
 	staff.POST("/patrons/:id/edit", HandlePatronEdit)
 	staff.POST("/patrons/:id/delete", HandlePatronDelete)
-	staff.GET("/admin", HandleAdmin)
 	staff.GET("/api/openlibrary/isbn/:isbn", HandleOpenLibraryLookup)
 	staff.GET("/books/new", HandleBookNew)
 	staff.POST("/books", HandleBookCreate)
@@ -149,6 +148,7 @@ func main() {
 	admin.POST("/staff/:id/delete", HandleStaffDelete)
 	admin.POST("/staff/:id/password", HandleStaffResetPassword)
 	admin.POST("/books/:id/delete", HandleBookDelete)
+	admin.GET("/admin", HandleAdmin)
 	admin.GET("/admin/backup", HandleBackupAdmin)
 	admin.GET("/admin/backup/export", HandleBackupExport)
 
