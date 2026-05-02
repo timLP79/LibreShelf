@@ -21,13 +21,19 @@ Browser → port 80 → nginx → port 3000 → Go app (systemd service)
 
 ## Step 1: Build the Binary Locally
 
-From your local repo directory:
+From your local repo directory, run the pre-deploy gates and then build for Linux:
 
 ```bash
-go build -o go-full-stack .
+go mod verify                                # confirm go.sum integrity
+govulncheck ./...                            # surface known CVEs in code we call
+GOOS=linux GOARCH=amd64 go build -o go-full-stack .
 ```
 
-This produces a single self-contained binary. No Go installation is needed on the server.
+`go mod verify` and `govulncheck` must both exit clean before deploying. If `govulncheck` flags an
+issue in the standard library, bump the Go toolchain in `.tool-versions` and `go.mod`. If it flags
+a dependency, update that module via `go get -u <module>` and rerun.
+
+The build produces a single self-contained binary. No Go installation is needed on the server.
 
 ## Step 2: SSH into EC2
 
@@ -139,22 +145,31 @@ sudo systemctl restart nginx
 ## Redeploying After Code Changes
 
 ```bash
-# 1. Build locally (explicit Linux target for deployment)
+# 1. Pre-deploy gates -- both must exit clean
+go mod verify
+govulncheck ./...
+
+# 2. Build locally (explicit Linux target for deployment)
 GOOS=linux GOARCH=amd64 go build -o go-full-stack .
 
-# 2. Stop the service on EC2 first — scp cannot overwrite a running binary
+# 3. Stop the service on EC2 first -- scp cannot overwrite a running binary
 ssh -i your-key.pem ubuntu@<ec2-public-ip> "sudo systemctl stop go-full-stack"
 
-# 3. Pull new templates/static files on EC2
+# 4. Pull new templates/static files on EC2
 ssh -i your-key.pem ubuntu@<ec2-public-ip> "cd cs408-go-stack && git pull"
 
-# 4. Copy the new binary to EC2
+# 5. Copy the new binary to EC2
 scp -i your-key.pem go-full-stack ubuntu@<ec2-public-ip>:~/cs408-go-stack/
 
-# 5. Start the service again
+# 6. (Optional) Wipe the database to pick up bumped seed passwords --
+#    SeedDefaultUsers skips users that already exist, so a password
+#    change in source does not propagate to existing rows.
+ssh -i your-key.pem ubuntu@<ec2-public-ip> "rm -f ~/cs408-go-stack/data/database.sqlite*"
+
+# 7. Start the service again
 ssh -i your-key.pem ubuntu@<ec2-public-ip> "sudo systemctl start go-full-stack"
 ```
 
-> **Note:** The service must be stopped before copying the binary — Linux will return a
+> **Note:** The service must be stopped before copying the binary -- Linux will return a
 > "dest open: Failure" error if you try to overwrite a running executable. Always stop
 > first, copy, then start.

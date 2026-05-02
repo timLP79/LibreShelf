@@ -74,7 +74,7 @@ Do not use Write/Edit tools to create or modify Go files. Tim writes all Go code
 
 | Layer | Technology |
 |-------|-----------|
-| Language | Go 1.24+ |
+| Language | Go 1.25.9+ (pinned in `.tool-versions`; bumped from 1.25.0 to clear stdlib CVEs flagged by `govulncheck`) |
 | Web framework | Gin (`github.com/gin-gonic/gin`) |
 | Templating | Go `html/template` with layout pattern |
 | Database | SQLite via `modernc.org/sqlite` (pure Go, no CGo) |
