@@ -48,6 +48,27 @@ func postBackupImport(t *testing.T, router *gin.Engine, sess *http.Cookie, csrf 
 	return rr
 }
 
+// TestAdminToolsIndexRenders pins the /admin tools-index page so a
+// future template edit that breaks the page surfaces here. Admin
+// only.
+func TestAdminToolsIndexRenders(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin", "admin")
+
+	req := httptest.NewRequest("GET", "/admin", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Backup and Restore") {
+		t.Errorf("admin index missing Backup card; body=%s", body)
+	}
+}
+
 func TestBackupExport_Happy(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, _ := loginAs(t, dm, "admin", "admin")

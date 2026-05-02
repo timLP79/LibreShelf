@@ -12,8 +12,12 @@ import (
 	"time"
 )
 
+// openLibraryBaseURL is a var (not const) so tests can swap it at the
+// httptest.Server URL via t.Cleanup(...) without spinning up a real
+// network proxy. Production callers never mutate it.
+var openLibraryBaseURL = "https://openlibrary.org/api/books"
+
 const (
-	openLibraryBaseURL   = "https://openlibrary.org/api/books"
 	openLibraryUserAgent = "LibreShelf/0.1 (cs408-go-stack)"
 	openLibraryTimeout   = 10 * time.Second
 )
