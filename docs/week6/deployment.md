@@ -93,6 +93,12 @@ server {
     listen 80;
     server_name _;
 
+    # Admin backup import uploads can be tens of MB. nginx's default 1 MB
+    # cap returns 413 before the request reaches the Go app. 100 MB is
+    # well below the safezip MaxTotalSize cap (500 MB) and well above
+    # realistic library backups for a long time.
+    client_max_body_size 100M;
+
     location / {
         proxy_pass http://localhost:3000;
         proxy_set_header Host $host;
