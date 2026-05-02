@@ -77,6 +77,10 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
+	if err := router.SetTrustedProxies([]string{"127.0.0.1"}); err != nil {
+		t.Fatalf("SetTrustedProxies: %v", err)
+	}
+	router.Use(SecurityHeaders)
 	router.Use(DatabaseMiddleware(dm))
 
 	// Public routes

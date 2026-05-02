@@ -99,6 +99,18 @@ func main() {
 	// Setup router
 	router := gin.Default()
 
+	// Trust only the local nginx reverse proxy for X-Forwarded-* headers.
+	// Default Gin trusts every proxy, which lets any client spoof their
+	// IP via X-Forwarded-For. The EC2 deployment fronts the Go app with
+	// nginx on localhost; behind any other topology this list needs to
+	// change.
+	if err := router.SetTrustedProxies([]string{"127.0.0.1"}); err != nil {
+		log.Fatalf("failed to set trusted proxies: %v", err)
+	}
+
+	// Defensive headers on every response, including 404/500.
+	router.Use(SecurityHeaders)
+
 	// Static files
 	router.Static("/stylesheets", "static/stylesheets")
 	router.Static("/javascripts", "static/javascripts")

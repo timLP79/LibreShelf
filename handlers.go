@@ -4,9 +4,41 @@ import (
 	"bytes"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
+
+// SecurityHeaders sets defensive HTTP response headers on every reply.
+// Applied at the router level so even error responses (404, 500) carry
+// these headers.
+//
+// CSP allows 'unsafe-inline' for style-src because the templates rely
+// on inline style="..." attrs in many places; tightening that requires
+// a template-wide refactor. script-src defaults to 'self' (no inline,
+// no eval) since all JS is loaded from /javascripts. img-src allows
+// data: for the small data URLs Bootstrap embeds.
+//
+// HSTS is only useful over HTTPS, which the bare-IP EC2 deploy does
+// not have. Gated on APP_ENV=production so a future HTTPS-fronted
+// deploy turns it on without code changes.
+func SecurityHeaders(c *gin.Context) {
+	h := c.Writer.Header()
+	h.Set("X-Content-Type-Options", "nosniff")
+	h.Set("X-Frame-Options", "DENY")
+	h.Set("Referrer-Policy", "same-origin")
+	h.Set("Content-Security-Policy",
+		"default-src 'self'; "+
+			"style-src 'self' 'unsafe-inline'; "+
+			"img-src 'self' data:; "+
+			"frame-ancestors 'none'; "+
+			"base-uri 'self'; "+
+			"form-action 'self'")
+	if os.Getenv("APP_ENV") == "production" {
+		h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+	}
+	c.Next()
+}
 
 // DatabaseMiddleware store the DatabaseManager in the Gin context
 func DatabaseMiddleware(dm *DatabaseManager) gin.HandlerFunc {
