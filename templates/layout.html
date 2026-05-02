@@ -47,6 +47,7 @@
             {{end}}
             {{if and .User (eq .User.Role "admin")}}
             <a class="nav-link rounded" href="/staff">Staff</a>
+            <a class="nav-link rounded" href="/admin/backup">Backup</a>
             {{end}}
         </nav>
         {{if .User}}

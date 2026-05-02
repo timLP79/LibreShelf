@@ -409,6 +409,35 @@ func (dm *DatabaseManager) CountOutOfStock() (int, error) {
 	return count, err
 }
 
+func (dm *DatabaseManager) CountBooks() (int, error) {
+	var count int
+	err := dm.db.QueryRow(`SELECT COUNT(*) FROM books`).Scan(&count)
+	return count, err
+}
+
+func (dm *DatabaseManager) CountPatrons() (int, error) {
+	var count int
+	err := dm.db.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'patron'`).Scan(&count)
+	return count, err
+}
+
+func (dm *DatabaseManager) CountTotalLoans() (int, error) {
+	var count int
+	err := dm.db.QueryRow(`SELECT COUNT(*) FROM loans`).Scan(&count)
+	return count, err
+}
+
+// SnapshotTo writes a consistent point-in-time copy of the database to
+// destPath using SQLite's VACUUM INTO. destPath must NOT already exist.
+// VACUUM INTO does not accept parameter bindings for the destination,
+// so the path is escaped and inlined. Callers should construct destPath
+// from a process-controlled source (e.g. os.MkdirTemp).
+func (dm *DatabaseManager) SnapshotTo(destPath string) error {
+	escaped := strings.ReplaceAll(destPath, "'", "''")
+	_, err := dm.db.Exec(fmt.Sprintf("VACUUM INTO '%s'", escaped))
+	return err
+}
+
 type DatabaseManager struct {
 	db *sql.DB
 }

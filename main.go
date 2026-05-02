@@ -63,6 +63,7 @@ func main() {
 	templateNames := []string{
 		"index", "catalog", "book_detail", "book_form",
 		"patrons", "admin", "staff", "loans", "my_loans",
+		"backup_admin",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -148,6 +149,8 @@ func main() {
 	admin.POST("/staff/:id/delete", HandleStaffDelete)
 	admin.POST("/staff/:id/password", HandleStaffResetPassword)
 	admin.POST("/books/:id/delete", HandleBookDelete)
+	admin.GET("/admin/backup", HandleBackupAdmin)
+	admin.GET("/admin/backup/export", HandleBackupExport)
 
 	router.NoRoute(HandleNotFound)
 

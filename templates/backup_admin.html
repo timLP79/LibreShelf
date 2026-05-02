@@ -1,0 +1,62 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="mb-1">Backup and Restore</h1>
+        <p class="text-muted mb-0">Download a full library backup or restore from a prior backup ZIP</p>
+    </div>
+</div>
+
+{{if .Error}}<div class="alert alert-danger">{{.Error}}</div>{{end}}
+{{if .Success}}<div class="alert alert-success">{{.Success}}</div>{{end}}
+
+<section class="mb-4">
+    <h2 class="h5 mb-3">Library statistics</h2>
+    <div class="card">
+        <div class="card-body">
+            <div class="row g-3 text-center">
+                <div class="col">
+                    <div class="text-muted small text-uppercase">Books</div>
+                    <div class="fs-3 fw-semibold">{{.Stats.Books}}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted small text-uppercase">Patrons</div>
+                    <div class="fs-3 fw-semibold">{{.Stats.Patrons}}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted small text-uppercase">Active loans</div>
+                    <div class="fs-3 fw-semibold">{{.Stats.ActiveLoans}}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted small text-uppercase">Overdue</div>
+                    <div class="fs-3 fw-semibold {{if gt .Stats.OverdueLoans 0}}text-danger{{end}}">{{.Stats.OverdueLoans}}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted small text-uppercase">Total loans</div>
+                    <div class="fs-3 fw-semibold">{{.Stats.TotalLoans}}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="mb-4">
+    <h2 class="h5 mb-3">Export backup</h2>
+    <div class="card">
+        <div class="card-body">
+            <p class="mb-3">Downloads a ZIP containing a consistent snapshot of the database and every cover image. Backups include session tokens; treat the file as sensitive.</p>
+            <a href="/admin/backup/export" class="btn" style="background-color: #1e3a5f; color: #ffffff;">
+                Download backup
+            </a>
+        </div>
+    </div>
+</section>
+
+<section class="mb-4">
+    <h2 class="h5 mb-3">Restore from backup</h2>
+    <div class="card">
+        <div class="card-body">
+            <p class="text-muted mb-0">Import form -- Session 3.</p>
+        </div>
+    </div>
+</section>
+{{end}}

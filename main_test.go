@@ -58,6 +58,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	templateNames := []string{
 		"index", "catalog", "book_detail", "book_form",
 		"patrons", "admin", "staff", "loans", "my_loans", "error",
+		"backup_admin",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -123,6 +124,8 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	admin.POST("/staff/:id/delete", HandleStaffDelete)
 	admin.POST("/staff/:id/password", HandleStaffResetPassword)
 	admin.POST("/books/:id/delete", HandleBookDelete)
+	admin.GET("/admin/backup", HandleBackupAdmin)
+	admin.GET("/admin/backup/export", HandleBackupExport)
 
 	router.NoRoute(HandleNotFound)
 
