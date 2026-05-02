@@ -43,7 +43,7 @@
     <h2 class="h5 mb-3">Export backup</h2>
     <div class="card">
         <div class="card-body">
-            <p class="mb-3">Downloads a ZIP containing a consistent snapshot of the database and every cover image. Backups include session tokens; treat the file as sensitive.</p>
+            <p class="mb-3">Download a ZIP of the database and covers. Treat as sensitive -- backups include session tokens.</p>
             <a href="/admin/backup/export" class="btn" style="background-color: #1e3a5f; color: #ffffff;">
                 Download backup
             </a>
@@ -55,7 +55,7 @@
     <h2 class="h5 mb-3">Restore from backup</h2>
     <div class="card">
         <div class="card-body">
-            <p class="mb-3">Replaces the current database and covers with a previous backup ZIP. The previous data is preserved as <code>database.sqlite.bak</code> and <code>covers.bak/</code>. Active sessions survive the swap.</p>
+            <p class="mb-3">Restore the database and covers from a backup ZIP. Previous data is kept as <code>.bak</code> for rollback.</p>
             <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#importModal">
                 Restore from backup...
             </button>
@@ -74,7 +74,7 @@
             </div>
             <div class="modal-body">
                 <div class="alert alert-warning">
-                    <strong>This will overwrite the current database and covers.</strong> The current data is kept as <code>.bak</code> for one-step rollback only -- a second import overwrites it.
+                    This overwrites the current database and covers. Previous data is kept as <code>.bak</code> for rollback.
                 </div>
                 <div class="mb-3">
                     <label for="backupZipInput" class="form-label">Backup ZIP</label>
