@@ -17,7 +17,7 @@ Browser → port 80 → nginx → port 3000 → Go app (systemd service)
 - An EC2 instance running Ubuntu
 - SSH access via .pem key file
 - Port 80 open in the EC2 security group (standard HTTP — open by default in most setups)
-- Go 1.24+ installed locally
+- Go 1.25.9+ installed locally (pinned in `.tool-versions`; bumped from 1.25.0 to clear stdlib CVEs flagged by `govulncheck`)
 
 ## Step 1: Build the Binary Locally
 

@@ -1,5 +1,7 @@
 # CP6 Planning
 
+> **Status (2026-05-02):** CP6 closed 2026-04-25 via PR #42 (169 tests passing). CP7 closed 2026-05-01 across PRs #74 / #75 / #76 and shipped to EC2 the same day. This document is preserved as-written for the planning narrative and the deferred-design notes; the session-status table below has been updated to reflect what actually shipped, but the rest of the body is the original plan and reasoning. For the current state of the project, see `CLAUDE.md`, `DECISIONS.md` (DEC-024 through DEC-029), and `git log`.
+
 **Context:**
 - CP6 target close: 2026-04-27 (buffer day 2026-05-01)
 - Today: 2026-04-19
@@ -104,12 +106,12 @@ Three DEC entries to write in session 2 (design session). Do not write DECs for 
 | 2 | Loans backend | Schema rewrite + 8 DB methods (transactional) + 13 unit tests. cs408-go-stack-wsx + x25 | 3-4 | done 2026-04-24 |
 | 3a | Loans UI scaffolding | 6 flash codes + `templates/loans.html` + book-detail checkout form wire-up. cs408-go-stack-ho3 | 1-1.5 | done 2026-04-24 |
 | 3b | Loan handlers + tests | `handlers_loans.go` (3 handlers) + `HandleBookDetail` patron fetch + routes + 13 handler tests. cs408-go-stack-8k5 | 2-2.5 | done 2026-04-25 |
-| 4 | Dashboard (role-differentiated essentials) | Three staff/admin cards (Overdue, Active Loans, Out of Stock) + one patron card (My Active Loans + next due date); role-gated template blocks; `Count*` queries already exist | 1.5-2 | not started |
-| 5 | Kiosk public browse | `/kiosk` route, anonymous browse, reused catalog grid minus staff controls | 2-3 | not started |
+| 4 | Dashboard (role-differentiated essentials) | Three staff/admin cards (Overdue, Active Loans, Out of Stock) + one patron card (My Active Loans + next due date); role-gated template blocks; `Count*` queries already exist | 1.5-2 | done 2026-04-25 |
+| 5 | Kiosk public browse | `/kiosk` route, anonymous browse, reused catalog grid minus staff controls | 2-3 | done 2026-04-25 |
 | 6 | ~~Favorites~~ | Deferred post-submission 2026-04-24 | -- | deferred |
-| 7 | CP6 close | Integration smoke, role-boundary tests, EC2 redeploy with clean DB, PR + merge | 1-2 | not started |
+| 7 | CP6 close | Integration smoke, role-boundary tests, EC2 redeploy with clean DB, PR + merge | 1-2 | done 2026-04-25 (PR #42, 169 tests) |
 
-**Done so far: ~7-9 hours.** **Remaining: ~5-7 hours.** On track for 4/27 close.
+**Final: CP6 closed 2026-04-25 via PR #42, two days ahead of the 4/27 target. CP7 followed and closed 2026-05-01.**
 
 ---
 
