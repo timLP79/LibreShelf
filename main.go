@@ -30,17 +30,24 @@ func main() {
 	// Initialize the database
 	dm := NewDatabaseManager(dataDir + "/" + dbName)
 	dm.SeedDefaultUsers()
-	dm.SeedBooks()
 
-	// Opportunistically backfill covers from Open Library for any book
-	// that has an ISBN but no cover file yet. Safe to call every
-	// startup: the inner SELECT is a no-op after all seed books have
-	// their covers. 60s total budget so a slow OL (or network block)
-	// cannot wedge the server at boot -- the inner HTTP client also
-	// has its own 10s per-request timeout.
-	seedCoverCtx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
-	dm.FetchAndStoreSeedCovers(seedCoverCtx)
-	cancel()
+	// LIBRESHELF_SKIP_SEED skips the book + cover seed steps so the
+	// server starts with login working but otherwise empty -- useful
+	// for testing the backup import flow against a clean state and
+	// for staging deployments that should not carry test data.
+	if os.Getenv("LIBRESHELF_SKIP_SEED") == "" {
+		dm.SeedBooks()
+
+		// Opportunistically backfill covers from Open Library for any book
+		// that has an ISBN but no cover file yet. Safe to call every
+		// startup: the inner SELECT is a no-op after all seed books have
+		// their covers. 60s total budget so a slow OL (or network block)
+		// cannot wedge the server at boot -- the inner HTTP client also
+		// has its own 10s per-request timeout.
+		seedCoverCtx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+		dm.FetchAndStoreSeedCovers(seedCoverCtx)
+		cancel()
+	}
 
 	// Template helpers
 	funcMap := template.FuncMap{
@@ -63,6 +70,7 @@ func main() {
 	templateNames := []string{
 		"index", "catalog", "book_detail", "book_form",
 		"patrons", "admin", "staff", "loans", "my_loans",
+		"backup_admin",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -111,7 +119,7 @@ func main() {
 
 	// Authenticated routes -- any logged in user
 	auth := router.Group("/")
-	auth.Use(RequireAuth, CSRFProtect)
+	auth.Use(RequireAuth, CSRFProtect, DBReadLock)
 	auth.GET("/", HandleIndex)
 	auth.GET("/catalog", HandleCatalog)
 	auth.GET("/books/:id", HandleBookDetail)
@@ -119,17 +127,16 @@ func main() {
 
 	// Patron-only routes
 	patron := router.Group("/")
-	patron.Use(RequireAuth, RequirePatron, CSRFProtect)
+	patron.Use(RequireAuth, RequirePatron, CSRFProtect, DBReadLock)
 	patron.GET("/my/loans", HandleMyLoans)
 
 	// Staff routes -- admin + staff
 	staff := router.Group("/")
-	staff.Use(RequireAuth, RequireStaff, CSRFProtect)
+	staff.Use(RequireAuth, RequireStaff, CSRFProtect, DBReadLock)
 	staff.GET("/patrons", HandlePatronList)
 	staff.POST("/patrons", HandlePatronCreate)
 	staff.POST("/patrons/:id/edit", HandlePatronEdit)
 	staff.POST("/patrons/:id/delete", HandlePatronDelete)
-	staff.GET("/admin", HandleAdmin)
 	staff.GET("/api/openlibrary/isbn/:isbn", HandleOpenLibraryLookup)
 	staff.GET("/books/new", HandleBookNew)
 	staff.POST("/books", HandleBookCreate)
@@ -139,15 +146,25 @@ func main() {
 	staff.POST("/loans/:id/return", HandleReturn)
 	staff.GET("/loans", HandleLoansList)
 
-	// Admin-only routes
+	// Admin-only routes (read-locked like everything else)
 	admin := router.Group("/")
-	admin.Use(RequireAuth, RequireAdmin, CSRFProtect)
+	admin.Use(RequireAuth, RequireAdmin, CSRFProtect, DBReadLock)
 	admin.GET("/staff", HandleStaffList)
 	admin.POST("/staff", HandleStaffCreate)
 	admin.POST("/staff/:id/edit", HandleStaffEdit)
 	admin.POST("/staff/:id/delete", HandleStaffDelete)
 	admin.POST("/staff/:id/password", HandleStaffResetPassword)
 	admin.POST("/books/:id/delete", HandleBookDelete)
+	admin.GET("/admin", HandleAdmin)
+	admin.GET("/admin/backup", HandleBackupAdmin)
+	admin.GET("/admin/backup/export", HandleBackupExport)
+
+	// Admin write routes -- swap the DB out from under everyone else.
+	// No DBReadLock; the import handler takes dm.mu.Lock() directly,
+	// since Go's sync.RWMutex cannot upgrade a read lock to a write lock.
+	adminWrite := router.Group("/")
+	adminWrite.Use(RequireAuth, RequireAdmin, CSRFProtect)
+	adminWrite.POST("/admin/backup/import", HandleBackupImport)
 
 	router.NoRoute(HandleNotFound)
 

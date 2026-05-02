@@ -43,10 +43,10 @@
             <a class="nav-link rounded" href="/catalog">Catalog</a>
             {{if and .User (or (eq .User.Role "admin") (eq .User.Role "staff"))}}
             <a class="nav-link rounded" href="/patrons">Patrons</a>
-            <a class="nav-link rounded" href="/admin">Admin</a>
             {{end}}
             {{if and .User (eq .User.Role "admin")}}
             <a class="nav-link rounded" href="/staff">Staff</a>
+            <a class="nav-link rounded" href="/admin">Admin</a>
             {{end}}
         </nav>
         {{if .User}}

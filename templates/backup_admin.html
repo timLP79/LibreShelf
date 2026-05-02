@@ -1,0 +1,112 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="mb-1">Backup and Restore</h1>
+        <p class="text-muted mb-0">Download a full library backup or restore from a prior backup ZIP</p>
+    </div>
+</div>
+
+{{if .Error}}<div class="alert alert-danger">{{.Error}}</div>{{end}}
+{{if .Success}}<div class="alert alert-success">{{.Success}}</div>{{end}}
+
+<section class="mb-4">
+    <h2 class="h5 mb-3">Library statistics</h2>
+    <div class="card">
+        <div class="card-body">
+            <div class="row g-3 text-center">
+                <div class="col">
+                    <div class="text-muted small text-uppercase">Books</div>
+                    <div class="fs-3 fw-semibold">{{.Stats.Books}}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted small text-uppercase">Patrons</div>
+                    <div class="fs-3 fw-semibold">{{.Stats.Patrons}}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted small text-uppercase">Active loans</div>
+                    <div class="fs-3 fw-semibold">{{.Stats.ActiveLoans}}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted small text-uppercase">Overdue</div>
+                    <div class="fs-3 fw-semibold {{if gt .Stats.OverdueLoans 0}}text-danger{{end}}">{{.Stats.OverdueLoans}}</div>
+                </div>
+                <div class="col">
+                    <div class="text-muted small text-uppercase">Total loans</div>
+                    <div class="fs-3 fw-semibold">{{.Stats.TotalLoans}}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="mb-4">
+    <h2 class="h5 mb-3">Export backup</h2>
+    <div class="card">
+        <div class="card-body">
+            <p class="mb-3">Download a ZIP of the database and covers. Treat as sensitive -- backups include session tokens.</p>
+            <a href="/admin/backup/export" class="btn" style="background-color: #1e3a5f; color: #ffffff;">
+                Download backup
+            </a>
+        </div>
+    </div>
+</section>
+
+<section class="mb-4">
+    <h2 class="h5 mb-3">Restore from backup</h2>
+    <div class="card">
+        <div class="card-body">
+            <p class="mb-3">Restore the database and covers from a backup ZIP. Previous data is kept as <code>.bak</code> for rollback.</p>
+            <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#importModal">
+                Restore from backup...
+            </button>
+        </div>
+    </div>
+</section>
+
+<!-- Import modal: file input + checkbox interlock + Confirm button disabled until ticked. -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-labelledby="importModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <form method="POST" action="/admin/backup/import" enctype="multipart/form-data" class="modal-content">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+            <div class="modal-header">
+                <h5 class="modal-title" id="importModalLabel">Restore from backup</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    This overwrites the current database and covers. Previous data is kept as <code>.bak</code> for rollback.
+                </div>
+                <div class="mb-3">
+                    <label for="backupZipInput" class="form-label">Backup ZIP</label>
+                    <input type="file" class="form-control" id="backupZipInput" name="backup_zip" accept=".zip,application/zip" required>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="confirmCheckbox" name="confirm" value="on" required>
+                    <label class="form-check-label" for="confirmCheckbox">
+                        I have a backup of my data and I understand this will replace the current state.
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" id="importConfirmBtn" class="btn btn-warning" disabled>Restore</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function() {
+    var modal = document.getElementById('importModal');
+    if (!modal) { return; }
+    var checkbox = modal.querySelector('#confirmCheckbox');
+    var fileInput = modal.querySelector('#backupZipInput');
+    var confirmBtn = modal.querySelector('#importConfirmBtn');
+    function update() {
+        confirmBtn.disabled = !(checkbox.checked && fileInput.files && fileInput.files.length > 0);
+    }
+    checkbox.addEventListener('change', update);
+    fileInput.addEventListener('change', update);
+})();
+</script>
+{{end}}

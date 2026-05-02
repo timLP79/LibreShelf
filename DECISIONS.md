@@ -482,3 +482,79 @@ restrictive (3 feels stingy for families) and too liberal (10 makes the dashboar
 tuning them later is one-line change. Catching these inside `CheckoutBook` keeps
 the check and the insert atomic; validating in the handler would open a TOCTOU
 race between check and insert when multiple staff check out books concurrently.
+
+---
+
+## DEC-027: Admin backup/restore -- ZIP scope, consistency, swap strategy, safety interlocks
+
+**Date:** 2026-04-26 (CP7 design session)
+**Context:** CP7 ships an admin panel feature (#23) that lets an admin export
+the library to a portable backup ZIP and import a backup ZIP to restore state.
+The export must produce a consistent point-in-time copy under concurrent
+writes; the import must not silently corrupt operator data, must reject
+malicious archives (Zip Slip), and must be reversible if the operator picks
+the wrong file. Seven sub-decisions, captured together because they are
+intertwined.
+
+**Decision:**
+
+1. **ZIP scope.** Backup contains exactly two paths: `data/database.sqlite`
+   (the entire DB including the sessions table) and the `data/covers/`
+   directory. Logs, config, the binary, templates, static assets, and
+   `.beads/` are explicitly out of scope -- they come from the deploy and
+   from git, not from operator data.
+
+2. **Export consistency.** Use SQLite's `VACUUM INTO '/tmp/snapshot.sqlite'`
+   to produce a consistent point-in-time copy before zipping. ZIP the
+   snapshot file (not the live DB), then delete the snapshot. This rules
+   out torn-write corruption when a checkout/return happens during export.
+
+3. **Import strategy.** In-process swap with a global `sync.RWMutex`. The
+   import handler takes the write lock, closes `*sql.DB`, swaps files,
+   reopens. All other handlers take the read lock when accessing the DB.
+   No restart required. Lock window is ~200-500ms on a small DB; invisible
+   to a single-library deployment with ~5 concurrent users.
+
+4. **Pre-swap backup.** Before overwriting, rename existing files
+   to `data/database.sqlite.bak` and `data/covers.bak/` (atomic on the
+   same filesystem). On reopen failure, rename `.bak` back and reopen the
+   original. On reopen success, keep the most recent `.bak` indefinitely
+   (next import overwrites it). Exclude `*.bak` and `*.bak/` from the
+   export walk so backups do not recursively contain previous backups.
+
+5. **Zip Slip protection.** Carved into a new `internal/safezip/` package
+   (first use of `internal/` in this repo). `SafeExtract(zipPath, destDir)`
+   validates every entry: `filepath.Rel(absDest, targetPath)` must not
+   start with `..` and must not be absolute; entries with the symlink mode
+   bit are rejected outright. Unblocks future reuse by the deferred `#63`
+   offline cover sync workflow without a refactor.
+
+6. **No CLI counterpart in CP7.** Web UI export only. A CLI subcommand
+   (`go run . export-backup --out=...`) was considered for SSH/cron
+   workflows and for shared plumbing with `#63`'s `cmd/cover-fetcher/`,
+   but deferred to keep CP7 scope tight. Operators who need scripted
+   backups can `curl -b cookies.txt /admin/export -o backup.zip` against
+   the same handler.
+
+7. **Import confirmation interlock.** Medium friction: Bootstrap modal +
+   a checkbox labeled "I have a backup. I understand this replaces the
+   current database." The Confirm button is disabled until the box is
+   ticked. Lighter (modal-only) was rejected because users blow past
+   reflexive Confirm dialogs; heavier (type the word "REPLACE") was
+   rejected because the `.bak` rollback (decision 4) gives a recovery
+   path even if the operator clicks through.
+
+**Rationale:** Each of the seven was a balance between security posture
+and complexity tax. The pattern is: pick the safer option whenever the
+implementation cost is small. `VACUUM INTO` is one statement; safezip is
+a small package; pre-swap rename is two `os.Rename` calls. The cumulative
+result is an admin panel where the destructive operation has three
+independent layers of protection (Zip Slip rejection, write-lock atomic
+swap, `.bak` rollback) and the operator has to deliberately tick a box
+to fire it. The choice to skip the CLI and to pick medium-not-heavy
+confirmation explicitly trades small marginal protection for keeping
+CP7 scope ship-able by the 2026-04-30 target. The `internal/safezip/`
+package extraction is the one place where we paid future-tax now (against
+the "don't design for hypothetical future requirements" rule) because
+`#63`'s design explicitly depends on it and the alternative is a refactor
+on the day we need it.

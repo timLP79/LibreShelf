@@ -52,6 +52,7 @@ var flashMessages = map[string]string{
 	"loan_no_copies":           "No copies available to check out.",
 	"loan_already_returned":    "This loan has already been returned.",
 	"loan_patron_required":     "Please select a patron before checking out.",
+	"backup_imported":          "Backup restored. The previous database and covers are preserved as .bak files for one-step rollback.",
 }
 
 func flashCookieName(kind string) string {

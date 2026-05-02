@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -409,8 +410,39 @@ func (dm *DatabaseManager) CountOutOfStock() (int, error) {
 	return count, err
 }
 
+func (dm *DatabaseManager) CountBooks() (int, error) {
+	var count int
+	err := dm.db.QueryRow(`SELECT COUNT(*) FROM books`).Scan(&count)
+	return count, err
+}
+
+func (dm *DatabaseManager) CountPatrons() (int, error) {
+	var count int
+	err := dm.db.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'patron'`).Scan(&count)
+	return count, err
+}
+
+func (dm *DatabaseManager) CountTotalLoans() (int, error) {
+	var count int
+	err := dm.db.QueryRow(`SELECT COUNT(*) FROM loans`).Scan(&count)
+	return count, err
+}
+
+// SnapshotTo writes a consistent point-in-time copy of the database to
+// destPath using SQLite's VACUUM INTO. destPath must NOT already exist.
+// VACUUM INTO does not accept parameter bindings for the destination,
+// so the path is escaped and inlined. Callers should construct destPath
+// from a process-controlled source (e.g. os.MkdirTemp).
+func (dm *DatabaseManager) SnapshotTo(destPath string) error {
+	escaped := strings.ReplaceAll(destPath, "'", "''")
+	_, err := dm.db.Exec(fmt.Sprintf("VACUUM INTO '%s'", escaped))
+	return err
+}
+
 type DatabaseManager struct {
-	db *sql.DB
+	mu     sync.RWMutex
+	db     *sql.DB
+	dbPath string
 }
 
 func NewDatabaseManager(dbPath string) *DatabaseManager {
@@ -419,23 +451,86 @@ func NewDatabaseManager(dbPath string) *DatabaseManager {
 		log.Fatalf("Failed to create data directory: %v", err)
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := openDB(dbPath)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
 
-	// Enable foreign key enforcement
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
-		log.Fatalf("Failed to enable foreign keys: %v", err)
-	}
-
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		log.Fatalf("Failed to enable WAL mode: %v", err)
-	}
-
-	dm := &DatabaseManager{db: db}
+	dm := &DatabaseManager{db: db, dbPath: dbPath}
 	dm.createSchema()
 	return dm
+}
+
+// openDB opens a SQLite database with foreign keys + WAL mode, returning
+// any error rather than calling log.Fatal. Used by HandleBackupImport
+// when reopening after a swap, where a non-fatal failure must be
+// recoverable rather than killing the server.
+func openDB(dbPath string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open: %w", err)
+	}
+	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("foreign_keys: %w", err)
+	}
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("WAL: %w", err)
+	}
+	return db, nil
+}
+
+type sessionRow struct {
+	Token     string
+	UserID    int
+	CSRFToken string
+	ExpiresAt string
+}
+
+// DumpSessions returns every row of the sessions table. Used by the
+// import handler to preserve live sessions across a database swap.
+func (dm *DatabaseManager) DumpSessions() ([]sessionRow, error) {
+	rows, err := dm.db.Query(`SELECT token, user_id, csrf_token, expires_at FROM sessions`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []sessionRow
+	for rows.Next() {
+		var s sessionRow
+		if err := rows.Scan(&s.Token, &s.UserID, &s.CSRFToken, &s.ExpiresAt); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+// RestoreSessions truncates the sessions table and re-inserts the given
+// rows. Sessions whose user_id no longer exists in the (possibly
+// imported) users table are skipped to avoid foreign key violations.
+func (dm *DatabaseManager) RestoreSessions(sessions []sessionRow) error {
+	if _, err := dm.db.Exec(`DELETE FROM sessions`); err != nil {
+		return err
+	}
+	for _, s := range sessions {
+		var exists int
+		err := dm.db.QueryRow(`SELECT 1 FROM users WHERE id = ?`, s.UserID).Scan(&exists)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if _, err := dm.db.Exec(
+			`INSERT INTO sessions (token, user_id, csrf_token, expires_at) VALUES (?, ?, ?, ?)`,
+			s.Token, s.UserID, s.CSRFToken, s.ExpiresAt,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (dm *DatabaseManager) createSchema() {

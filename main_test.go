@@ -58,6 +58,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	templateNames := []string{
 		"index", "catalog", "book_detail", "book_form",
 		"patrons", "admin", "staff", "loans", "my_loans", "error",
+		"backup_admin",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -86,7 +87,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 
 	// Authenticated routes -- any logged in user
 	auth := router.Group("/")
-	auth.Use(RequireAuth, CSRFProtect)
+	auth.Use(RequireAuth, CSRFProtect, DBReadLock)
 	auth.GET("/", HandleIndex)
 	auth.GET("/catalog", HandleCatalog)
 	auth.GET("/books/:id", HandleBookDetail)
@@ -94,17 +95,16 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 
 	// Patron-only routes
 	patron := router.Group("/")
-	patron.Use(RequireAuth, RequirePatron, CSRFProtect)
+	patron.Use(RequireAuth, RequirePatron, CSRFProtect, DBReadLock)
 	patron.GET("/my/loans", HandleMyLoans)
 
 	// Staff routes -- admin + staff
 	staff := router.Group("/")
-	staff.Use(RequireAuth, RequireStaff, CSRFProtect)
+	staff.Use(RequireAuth, RequireStaff, CSRFProtect, DBReadLock)
 	staff.GET("/patrons", HandlePatronList)
 	staff.POST("/patrons", HandlePatronCreate)
 	staff.POST("/patrons/:id/edit", HandlePatronEdit)
 	staff.POST("/patrons/:id/delete", HandlePatronDelete)
-	staff.GET("/admin", HandleAdmin)
 	staff.GET("/api/openlibrary/isbn/:isbn", HandleOpenLibraryLookup)
 	staff.GET("/books/new", HandleBookNew)
 	staff.POST("/books", HandleBookCreate)
@@ -114,15 +114,23 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	staff.POST("/loans/:id/return", HandleReturn)
 	staff.GET("/loans", HandleLoansList)
 
-	// Admin-only routes
+	// Admin-only routes (read-locked)
 	admin := router.Group("/")
-	admin.Use(RequireAuth, RequireAdmin, CSRFProtect)
+	admin.Use(RequireAuth, RequireAdmin, CSRFProtect, DBReadLock)
 	admin.GET("/staff", HandleStaffList)
 	admin.POST("/staff", HandleStaffCreate)
 	admin.POST("/staff/:id/edit", HandleStaffEdit)
 	admin.POST("/staff/:id/delete", HandleStaffDelete)
 	admin.POST("/staff/:id/password", HandleStaffResetPassword)
 	admin.POST("/books/:id/delete", HandleBookDelete)
+	admin.GET("/admin", HandleAdmin)
+	admin.GET("/admin/backup", HandleBackupAdmin)
+	admin.GET("/admin/backup/export", HandleBackupExport)
+
+	// Admin write routes -- no DBReadLock; takes write lock directly.
+	adminWrite := router.Group("/")
+	adminWrite.Use(RequireAuth, RequireAdmin, CSRFProtect)
+	adminWrite.POST("/admin/backup/import", HandleBackupImport)
 
 	router.NoRoute(HandleNotFound)
 
@@ -321,13 +329,14 @@ func TestAuthedRoutesReturn200AsAdmin(t *testing.T) {
 }
 
 // TestStaffRoutesReturn200AsStaff verifies the staff group routes serve
-// 200 for a staff-role session. Admin routes not tested here because the
-// admin group has no routes registered yet.
+// 200 for a staff-role session. /admin moved to the admin group when the
+// backup tools landed; staff role no longer has access there (covered by
+// TestStaffRoleCannotAccessAdminRoutes).
 func TestStaffRoutesReturn200AsStaff(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, _ := loginAs(t, dm, "staff1", "staff")
 
-	for _, route := range []string{"/patrons", "/admin"} {
+	for _, route := range []string{"/patrons"} {
 		req, _ := http.NewRequest("GET", route, nil)
 		req.AddCookie(sess)
 		rr := httptest.NewRecorder()
@@ -364,8 +373,8 @@ func TestProtectedRoutesRedirectWithoutAuth(t *testing.T) {
 // TestPatronCannotAccessStaffRoutes asserts the RequireStaff middleware
 // actually rejects a patron-role session with 403, not 200 or redirect.
 // Regression pin for the role chain, separate from the auth chain.
-// Covers both staff-group routes (/patrons, /admin) and admin-group
-// routes (/staff) -- patrons must be rejected by both.
+// Covers staff-group routes (/patrons) and admin-group routes (/staff,
+// /admin) -- patrons must be rejected by both.
 func TestPatronCannotAccessStaffRoutes(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, _ := loginAs(t, dm, "patron1", "patron")
@@ -383,17 +392,17 @@ func TestPatronCannotAccessStaffRoutes(t *testing.T) {
 }
 
 // TestStaffRoleCannotAccessAdminRoutes asserts that a staff-role session
-// is rejected by the admin-group middleware chain with 403. /staff is
-// admin-only even though /patrons and /admin (the routes) are reachable
-// by any staff-tier user. Regression pin for the RequireAdmin boundary:
-// if a future edit accidentally drops RequireAdmin from the admin group,
-// a staff session would start passing through to HandleStaffList and this
-// test would fire.
+// is rejected by the admin-group middleware chain with 403. /admin moved
+// here when the backup tools landed; the admin-only group also covers
+// /staff and the backup paths. Regression pin for the RequireAdmin
+// boundary: if a future edit accidentally drops RequireAdmin from the
+// admin group, a staff session would start passing through and one of
+// these hits would fire.
 func TestStaffRoleCannotAccessAdminRoutes(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, _ := loginAs(t, dm, "staff1", "staff")
 
-	for _, route := range []string{"/staff"} {
+	for _, route := range []string{"/staff", "/admin", "/admin/backup"} {
 		req, _ := http.NewRequest("GET", route, nil)
 		req.AddCookie(sess)
 		rr := httptest.NewRecorder()
