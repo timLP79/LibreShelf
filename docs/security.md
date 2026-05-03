@@ -166,7 +166,7 @@ func SecurityHeaders(c *gin.Context) {
     h.Set("Content-Security-Policy",
         "default-src 'self'; "+
             "style-src 'self' 'unsafe-inline'; "+
-            "img-src 'self' data:; "+
+            "img-src 'self' data: https://covers.openlibrary.org; "+
             "frame-ancestors 'none'; "+
             "base-uri 'self'; "+
             "form-action 'self'")
@@ -194,6 +194,14 @@ one inline `<script>` block in `backup_admin.html` was extracted to
 `/static/javascripts/admin_backup.js` so this constraint can hold. Any future inline
 script will fail loudly with a CSP violation in DevTools console rather than slip in
 silently.
+
+**`img-src` exception for `https://covers.openlibrary.org`:** the OL Lookup button on
+the Add/Edit Book form prefills a hidden `cover_url` field with the OL cover URL and
+also stages an `<img>` preview pointing at the same URL. Without this exception the
+preview renders as a broken image (saving still works because `SaveCoverFromURL` runs
+server-side, where CSP does not apply). Strictly smaller trust extension than what the
+server already does -- the Go code already fetches cover bytes from this host on every
+book create that uses the OL flow. No other external image hosts are allowed.
 
 Coverage: see `handlers_security_test.go` -- pins headers on a public page, on a 404
 response, and HSTS on/off based on `APP_ENV`.

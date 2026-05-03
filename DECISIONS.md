@@ -576,11 +576,18 @@ before the final EC2 deploy.
    else.** Sets `X-Content-Type-Options: nosniff`, `X-Frame-Options:
    DENY`, `Referrer-Policy: same-origin`, and a Content-Security-Policy
    of `default-src 'self'; style-src 'self' 'unsafe-inline'; img-src
-   'self' data:; frame-ancestors 'none'; base-uri 'self'; form-action
-   'self'`. Applied via `router.Use(SecurityHeaders)` so even 404 / 500
-   responses carry the headers. HSTS is gated on `APP_ENV=production`
-   because the bare-IP EC2 deploy is HTTP-only and HSTS over HTTP is
-   harmful.
+   'self' data: https://covers.openlibrary.org; frame-ancestors 'none';
+   base-uri 'self'; form-action 'self'`. Applied via
+   `router.Use(SecurityHeaders)` so even 404 / 500 responses carry the
+   headers. HSTS is gated on `APP_ENV=production` because the bare-IP
+   EC2 deploy is HTTP-only and HSTS over HTTP is harmful. The
+   `https://covers.openlibrary.org` entry on `img-src` was added
+   post-CP7 so the OL Lookup cover preview can render in the Add/Edit
+   Book form -- saving worked without it (server-side fetch in
+   `SaveCoverFromURL`), but the in-form preview required the browser
+   to load the image directly and CSP was blocking it. Strictly
+   smaller trust extension than what the server already does on the
+   same host.
 
 2. **`'unsafe-inline'` allowed for `style-src` only, not `script-src`.**
    Templates rely on inline `style="..."` attributes in 22+ places, and

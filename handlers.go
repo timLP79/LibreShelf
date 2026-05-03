@@ -17,7 +17,10 @@ import (
 // on inline style="..." attrs in many places; tightening that requires
 // a template-wide refactor. script-src defaults to 'self' (no inline,
 // no eval) since all JS is loaded from /javascripts. img-src allows
-// data: for the small data URLs Bootstrap embeds.
+// data: for the small data URLs Bootstrap embeds, plus
+// covers.openlibrary.org so the OL Lookup cover preview can render
+// in the Add/Edit Book form (the server already trusts that host
+// when SaveCoverFromURL fetches the bytes).
 //
 // HSTS is only useful over HTTPS, which the bare-IP EC2 deploy does
 // not have. Gated on APP_ENV=production so a future HTTPS-fronted
@@ -30,7 +33,7 @@ func SecurityHeaders(c *gin.Context) {
 	h.Set("Content-Security-Policy",
 		"default-src 'self'; "+
 			"style-src 'self' 'unsafe-inline'; "+
-			"img-src 'self' data:; "+
+			"img-src 'self' data: https://covers.openlibrary.org; "+
 			"frame-ancestors 'none'; "+
 			"base-uri 'self'; "+
 			"form-action 'self'")
