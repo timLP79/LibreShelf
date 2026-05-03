@@ -299,7 +299,6 @@ function initBookForm() {
     var publisherField = document.getElementById("book-publisher");
     var coverUrlField = document.getElementById("cover-url");
     var coverPreview = document.getElementById("cover-preview");
-    var coverPlaceholder = document.getElementById("cover-placeholder");
     var coverUrlNote = document.getElementById("cover-url-note");
 
     function setStatus(msg, kind) {
@@ -350,11 +349,7 @@ function initBookForm() {
                 if (data.publisher) publisherField.value = data.publisher;
                 if (data.cover_url) {
                     coverUrlField.value = data.cover_url;
-                    if (coverPreview) {
-                        coverPreview.src = data.cover_url;
-                        coverPreview.style.display = "";
-                    }
-                    if (coverPlaceholder) coverPlaceholder.style.display = "none";
+                    if (coverPreview) coverPreview.src = data.cover_url;
                     if (coverUrlNote) coverUrlNote.style.display = "";
                 }
                 setStatus("Prefilled from Open Library. Review before saving.", "success");
@@ -379,8 +374,6 @@ function initBookForm() {
             var reader = new FileReader();
             reader.onload = function (e) {
                 coverPreview.src = e.target.result;
-                coverPreview.style.display = "";
-                if (coverPlaceholder) coverPlaceholder.style.display = "none";
             };
             reader.readAsDataURL(file);
         });

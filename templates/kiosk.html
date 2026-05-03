@@ -43,13 +43,9 @@
             <div class="card h-100">
                 <div class="position-relative">
                     <div class="book-cover-placeholder">
-                        {{if .CoverFilename}}
-                        <img src="/covers/{{deref .CoverFilename}}" class="card-img-top" alt="{{.Title}} cover">
-                        {{else}}
-                        <div class="no-cover d-flex align-items-center justify-content-center text-muted">
-                            [Book Cover]
-                        </div>
-                        {{end}}
+                        <img src="{{if .CoverFilename}}/covers/{{deref .CoverFilename}}{{else}}/images/no-cover.svg{{end}}"
+                             class="card-img-top" alt="{{.Title}} cover"
+                             onerror="this.onerror=null; this.src='/images/no-cover.svg';">
                     </div>
                     {{if gt .QuantityAvailable 0}}
                     <span class="badge availability-badge badge-available">Available</span>

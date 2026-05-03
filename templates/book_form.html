@@ -105,15 +105,10 @@
                 <div class="col-sm-10">
                     <div class="d-flex align-items-start gap-3">
                         <div>
-                            {{if and .Book .Book.CoverFilename}}
-                                <img src="/covers/{{deref .Book.CoverFilename}}" alt="Cover preview" id="cover-preview"
-                                     style="width: 150px; height: 220px; object-fit: cover;">
-                            {{else}}
-                                <img src="" alt="Cover preview" id="cover-preview"
-                                     style="width: 150px; height: 220px; object-fit: cover; display: none;">
-                                <div id="cover-placeholder" class="text-muted border rounded d-flex align-items-center justify-content-center"
-                                     style="width: 150px; height: 220px;">No cover</div>
-                            {{end}}
+                            <img src="{{if and .Book .Book.CoverFilename}}/covers/{{deref .Book.CoverFilename}}{{else}}/images/no-cover.svg{{end}}"
+                                 alt="Cover preview" id="cover-preview"
+                                 style="width: 150px; height: 220px; object-fit: cover;"
+                                 onerror="this.onerror=null; this.src='/images/no-cover.svg';">
                         </div>
                         <div class="flex-grow-1">
                             <input type="file" class="form-control" id="cover-file" name="cover"
