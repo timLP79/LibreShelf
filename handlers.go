@@ -18,9 +18,12 @@ import (
 // a template-wide refactor. script-src defaults to 'self' (no inline,
 // no eval) since all JS is loaded from /javascripts. img-src allows
 // data: for the small data URLs Bootstrap embeds, plus
-// covers.openlibrary.org so the OL Lookup cover preview can render
-// in the Add/Edit Book form (the server already trusts that host
-// when SaveCoverFromURL fetches the bytes).
+// covers.openlibrary.org and archive.org (and IA subdomains) so the
+// OL Lookup cover preview can render in the Add/Edit Book form. OL
+// covers HTTP-302 redirect to archive.org (Internet Archive's CDN),
+// and CSP applies to the final URL after redirect, so both hosts
+// must be allowlisted. The server already trusts these hosts when
+// SaveCoverFromURL fetches the bytes server-side.
 //
 // HSTS is only useful over HTTPS, which the bare-IP EC2 deploy does
 // not have. Gated on APP_ENV=production so a future HTTPS-fronted
@@ -33,7 +36,7 @@ func SecurityHeaders(c *gin.Context) {
 	h.Set("Content-Security-Policy",
 		"default-src 'self'; "+
 			"style-src 'self' 'unsafe-inline'; "+
-			"img-src 'self' data: https://covers.openlibrary.org; "+
+			"img-src 'self' data: https://covers.openlibrary.org https://archive.org https://*.archive.org; "+
 			"frame-ancestors 'none'; "+
 			"base-uri 'self'; "+
 			"form-action 'self'")
