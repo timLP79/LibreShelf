@@ -351,8 +351,24 @@ function initBookForm() {
                     coverUrlField.value = data.cover_url;
                     if (coverPreview) coverPreview.src = data.cover_url;
                     if (coverUrlNote) coverUrlNote.style.display = "";
+                } else if (coverUrlField.value) {
+                    // OL has no cover for this ISBN, but a previous OL
+                    // Lookup staged one in this session. Clear the staged
+                    // URL and reset the preview to the placeholder so the
+                    // previous lookup's cover doesn't visually carry over.
+                    // An existing book-detail cover (cover_filename set in
+                    // DB) is NOT reached here -- coverUrlField.value stays
+                    // empty in edit mode unless an OL Lookup populated it,
+                    // so the original /covers/<file> preview is preserved
+                    // when OL has nothing to offer.
+                    coverUrlField.value = "";
+                    if (coverPreview) coverPreview.src = "/images/no-cover.svg";
+                    if (coverUrlNote) coverUrlNote.style.display = "none";
                 }
-                setStatus("Prefilled from Open Library. Review before saving.", "success");
+                var msg = data.cover_url
+                    ? "Prefilled from Open Library. Review before saving."
+                    : "Prefilled from Open Library (no cover available). Review before saving.";
+                setStatus(msg, "success");
             }).catch(function () {
                 lookupBtn.disabled = false;
                 setStatus("Couldn't reach Open Library. Try again or fill in manually.", "error");
