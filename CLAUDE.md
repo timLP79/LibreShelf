@@ -7,13 +7,13 @@ working agreements for this project.
 
 ## About This Project
 
-LibreShelf is a self-hostable library management system built for CS408 Spring 2026 at Boise State.
-It lets a small library manage books, patrons, and loans through a simple web UI. A public kiosk
-supports self-service browsing with optional patron login for favorites and holds. All checkout and
-return transactions are staff-only.
+LibreShelf is a self-hostable library management system. It lets a small library manage books,
+patrons, and loans through a simple web UI. A public kiosk supports self-service browsing with
+optional patron login for favorites and holds. All checkout and return transactions are staff-only.
 
-**Live at:** EC2 instance (URL available on request)
-**Repo:** github.com/timLP79/cs408-go-stack
+Originally built for CS408 Spring 2026 at Boise State; now an ongoing personal project.
+
+**Repo:** github.com/timLP79/LibreShelf
 
 ---
 
@@ -57,10 +57,10 @@ travels with the repo.
 
 ## Coding Collaboration
 
-**Go (this project):** Tutor mode. Show what needs to be written and explain it thoroughly.
-Do not use Write/Edit tools to create or modify Go files. Tim writes all Go code.
-**Exceptions:** Claude can directly edit SQL schema in `createSchema()`, repetitive data entry
-(seed data, struct literals), and test files.
+**Go (this project):** Default is direct edits with permission. Before using Write/Edit on
+any Go file, propose the change (the function or block, what's changing, and why) and wait
+for approval. Once approved, edit directly. Tim may ask for tutor mode on specific tasks --
+when he does, switch to showing code without writing it and explaining each piece.
 
 **HTML templates, CSS, JS:** Claude can write and edit these files directly.
 
@@ -87,7 +87,7 @@ Do not use Write/Edit tools to create or modify Go files. Tim writes all Go code
 
 ```bash
 go run .                # start the app on :3000 (PORT env to override)
-go build -o go-full-stack .
+go build -o libreshelf .
 go test ./...           # full suite (35 passing on cp5-crud)
 go test -v -run TestX   # run a specific test
 sqlite3 data/database.sqlite  # inspect the local DB
@@ -106,7 +106,7 @@ Deploy guide: `docs/deployment.md` (build, scp, systemctl).
 
 ## Infrastructure
 
-- Deployed to EC2 with systemd service (`deploy/go-full-stack.service`)
+- Deployed via systemd service (`deploy/libreshelf.service`)
 - Reverse proxy: nginx
 - Secrets: environment variables (PORT, DATA_DIR, DB_NAME, ADMIN_PASSWORD)
 - Database file: `data/database.sqlite` (gitignored)
@@ -116,7 +116,7 @@ Deploy guide: `docs/deployment.md` (build, scp, systemctl).
 
 ## Current State
 
-All checkpoints complete. CP1-CP4 shipped over weeks 3-5. CP5 closed 2026-04-18 (6 days early). CP6 closed 2026-04-25 (PR #42, 169 tests). CP7 closed 2026-05-01 across PRs #74 / #75 / #76, deployed to EC2 the same day. Final test coverage 67.6% on `go-full-stack`, 87.5% on `internal/safezip`.
+All checkpoints complete. CP1-CP4 shipped over weeks 3-5. CP5 closed 2026-04-18 (6 days early). CP6 closed 2026-04-25 (PR #42, 169 tests). CP7 closed 2026-05-01 across PRs #74 / #75 / #76, deployed to EC2 the same day. Final test coverage 67.6% on `libreshelf`, 87.5% on `internal/safezip`.
 
 For per-checkpoint detail:
 - `bd memories cp5-architecture` -- staff / book / patron CRUD, OL integration, cover validation
