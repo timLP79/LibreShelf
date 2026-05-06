@@ -94,20 +94,27 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 
 	// Authenticated routes -- any logged in user
 	auth := router.Group("/")
-	auth.Use(RequireAuth, CSRFProtect, DBReadLock)
+	auth.Use(RequireAuth, RequirePasswordCurrent, CSRFProtect, DBReadLock)
 	auth.GET("/", HandleIndex)
 	auth.GET("/catalog", HandleCatalog)
 	auth.GET("/books/:id", HandleBookDetail)
-	auth.POST("/logout", HandleLogout)
+
+	// Account routes -- no RequirePasswordCurrent; must stay reachable
+	// while the flag is set.
+	account := router.Group("/")
+	account.Use(RequireAuth, CSRFProtect, DBReadLock)
+	account.GET("/account/change-password", HandleChangePassword)
+	account.POST("/account/change-password", HandleChangePasswordPost)
+	account.POST("/logout", HandleLogout)
 
 	// Patron-only routes
 	patron := router.Group("/")
-	patron.Use(RequireAuth, RequirePatron, CSRFProtect, DBReadLock)
+	patron.Use(RequireAuth, RequirePasswordCurrent, RequirePatron, CSRFProtect, DBReadLock)
 	patron.GET("/my/loans", HandleMyLoans)
 
 	// Staff routes -- admin + staff
 	staff := router.Group("/")
-	staff.Use(RequireAuth, RequireStaff, CSRFProtect, DBReadLock)
+	staff.Use(RequireAuth, RequirePasswordCurrent, RequireStaff, CSRFProtect, DBReadLock)
 	staff.GET("/patrons", HandlePatronList)
 	staff.POST("/patrons", HandlePatronCreate)
 	staff.POST("/patrons/:id/edit", HandlePatronEdit)
@@ -123,7 +130,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 
 	// Admin-only routes (read-locked)
 	admin := router.Group("/")
-	admin.Use(RequireAuth, RequireAdmin, CSRFProtect, DBReadLock)
+	admin.Use(RequireAuth, RequirePasswordCurrent, RequireAdmin, CSRFProtect, DBReadLock)
 	admin.GET("/staff", HandleStaffList)
 	admin.POST("/staff", HandleStaffCreate)
 	admin.POST("/staff/:id/edit", HandleStaffEdit)
@@ -136,7 +143,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 
 	// Admin write routes -- no DBReadLock; takes write lock directly.
 	adminWrite := router.Group("/")
-	adminWrite.Use(RequireAuth, RequireAdmin, CSRFProtect)
+	adminWrite.Use(RequireAuth, RequirePasswordCurrent, RequireAdmin, CSRFProtect)
 	adminWrite.POST("/admin/backup/import", HandleBackupImport)
 
 	router.NoRoute(HandleNotFound)
