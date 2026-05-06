@@ -64,6 +64,7 @@ func main() {
 			}
 			return ""
 		},
+		"add": func(a, b int) int { return a + b },
 	}
 
 	templates = make(map[string]*template.Template)
@@ -71,6 +72,7 @@ func main() {
 		"index", "catalog", "book_detail", "book_form",
 		"patrons", "admin", "staff", "loans", "my_loans",
 		"backup_admin", "admin_settings",
+		"admin_patrons_import", "admin_patrons_import_preview", "admin_patrons_import_result",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -181,6 +183,15 @@ func main() {
 	admin.GET("/admin/backup/export", HandleBackupExport)
 	admin.GET("/admin/settings", HandleSettings)
 	admin.POST("/admin/settings", HandleSettingsPost)
+
+	// Patron import -- gated by RequireStaffImportAccess so admins
+	// always reach it, staff only when staff_can_import_patrons is on.
+	patronImport := router.Group("/")
+	patronImport.Use(RequireAuth, RequirePasswordCurrent, RequireStaffImportAccess, CSRFProtect, DBReadLock)
+	patronImport.GET("/admin/patrons/import", HandlePatronImportForm)
+	patronImport.POST("/admin/patrons/import", HandlePatronImportPreview)
+	patronImport.POST("/admin/patrons/import/confirm", HandlePatronImportCommit)
+	patronImport.GET("/admin/patrons/import/download/:token", HandleImportDownload)
 
 	// Admin write routes -- swap the DB out from under everyone else.
 	// No DBReadLock; the import handler takes dm.mu.Lock() directly,

@@ -143,6 +143,14 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	admin.GET("/admin/settings", HandleSettings)
 	admin.POST("/admin/settings", HandleSettingsPost)
 
+	// Patron import (mirror)
+	patronImport := router.Group("/")
+	patronImport.Use(RequireAuth, RequirePasswordCurrent, RequireStaffImportAccess, CSRFProtect, DBReadLock)
+	patronImport.GET("/admin/patrons/import", HandlePatronImportForm)
+	patronImport.POST("/admin/patrons/import", HandlePatronImportPreview)
+	patronImport.POST("/admin/patrons/import/confirm", HandlePatronImportCommit)
+	patronImport.GET("/admin/patrons/import/download/:token", HandleImportDownload)
+
 	// Admin write routes -- no DBReadLock; takes write lock directly.
 	adminWrite := router.Group("/")
 	adminWrite.Use(RequireAuth, RequirePasswordCurrent, RequireAdmin, CSRFProtect)

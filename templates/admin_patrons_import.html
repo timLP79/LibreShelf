@@ -1,0 +1,59 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="mb-1">Patron Import</h1>
+        <p class="text-muted mb-0">Bulk-import patrons from a CSV file</p>
+    </div>
+    <a href="/admin" class="btn btn-sm btn-outline-secondary">Back to Admin</a>
+</div>
+
+{{if .Error}}<div class="alert alert-danger">{{.Error}}</div>{{end}}
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h2 class="h6 mb-3">Upload</h2>
+
+        <form method="POST" action="/admin/patrons/import" enctype="multipart/form-data">
+            <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+            <div class="mb-3">
+                <label for="csv_file" class="form-label">CSV file</label>
+                <input class="form-control" type="file" id="csv_file" name="csv_file" accept=".csv,text/csv" required>
+                <div class="form-text small">
+                    Up to 10 MB. The first row must contain column headers. Standard
+                    columns auto-detected: <code>name</code>, <code>email</code>,
+                    <code>phone</code>, and any of <code>idoc_number</code> /
+                    <code>inmate_id</code> / <code>library_card</code> /
+                    <code>student_id</code> / <code>patron_id</code> /
+                    <code>external_id</code>. Other columns are preserved as patron
+                    metadata.
+                </div>
+            </div>
+
+            <fieldset class="mb-3">
+                <legend class="form-label fs-6">Account type</legend>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="account_mode"
+                           id="mode_records_only" value="records_only" checked>
+                    <label class="form-check-label" for="mode_records_only">
+                        <strong>Patron records only</strong>
+                        <span class="text-muted small d-block">Records for staff-mediated checkout. No login accounts.</span>
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="account_mode"
+                           id="mode_with_logins" value="with_logins">
+                    <label class="form-check-label" for="mode_with_logins">
+                        <strong>Patron records with login accounts</strong>
+                        <span class="text-muted small d-block">Each patron gets a username and a temporary password (provided as a CSV download). Patrons must change the password on first login.</span>
+                    </label>
+                </div>
+            </fieldset>
+
+            <button type="submit" class="btn" style="background-color: #1e3a5f; color: #ffffff;">
+                Continue to Preview
+            </button>
+        </form>
+    </div>
+</div>
+{{end}}
