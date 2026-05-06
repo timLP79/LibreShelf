@@ -99,9 +99,15 @@ system, and a few UX polish items.
 
 ## License
 
-LibreShelf is proprietary commercial software. Copyright (c) 2026 Tim Palacios.
-All rights reserved. See [LICENSE](./LICENSE) for terms.
+LibreShelf is proprietary software. Copyright (c) 2026 Tim Palacios. See
+[LICENSE](./LICENSE) for the full terms.
 
-The source is published here for portfolio and evaluation purposes only.
-Compiling, running, hosting, or redistributing LibreShelf requires a separate
-commercial license. To inquire, please contact the author.
+**Free for individual personal use.** You may install and run LibreShelf
+on your own hardware at no charge to manage your own household-scale book
+collection.
+
+**Commercial license required** for any organizational use -- including
+businesses, churches, nonprofits, schools, public libraries, government
+agencies, and correctional facilities -- and for hosting LibreShelf on
+behalf of others. To inquire about a commercial license, please contact
+the author.

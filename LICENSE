@@ -2,27 +2,57 @@ LibreShelf -- Library Management System
 
 Copyright (c) 2026 Tim Palacios. All rights reserved.
 
-This software and associated documentation files (the "Software") are the
-proprietary and confidential property of Tim Palacios. The Software source
-is published in this repository for portfolio, evaluation, and reference
-purposes only.
 
-No license, express or implied, is granted to any person or entity to use,
-copy, modify, merge, publish, distribute, sublicense, sell copies of, or
-deploy the Software, in whole or in part, except under the terms of a
-separate written commercial license agreement signed by the copyright
-holder.
+1. PERMITTED USE -- INDIVIDUAL PERSONAL USE ONLY
 
-Reading the source is permitted. Compiling, running, hosting, redistributing,
-or incorporating the Software (or any derivative work) into another product
-or service is not permitted without a commercial license.
+Subject to the terms below, you are permitted, at no charge, to:
+
+  (a) Read, study, and inspect the source code in this repository.
+
+  (b) Compile, install, and run the Software on your own personal hardware
+      for the sole purpose of managing your own individual personal book
+      collection (a household-scale collection used by you and members of
+      your immediate household).
+
+
+2. USES REQUIRING A COMMERCIAL LICENSE
+
+The following uses are not covered by section 1 and require a separate
+written commercial license agreement signed by the copyright holder:
+
+  (a) Any use by or on behalf of an organization, including but not limited
+      to businesses, churches, nonprofits, schools, libraries open to the
+      public, government agencies, and correctional facilities, regardless
+      of whether the organization charges a fee for access.
+
+  (b) Any use to provide library or catalog services to persons outside
+      your immediate household.
+
+  (c) Distribution, sublicensing, sale, or rental of the Software, in
+      whole or in part, in original or modified form, to any third party.
+
+  (d) Incorporation of the Software, or any derivative work, into another
+      product or service offered to others.
+
+  (e) Hosting, operating, or making the Software available as a service
+      to any third party.
+
+
+3. RESERVATION OF RIGHTS
+
+All rights not expressly granted in section 1 are reserved by the copyright
+holder. No license, express or implied, is granted by estoppel or otherwise
+beyond what is set out above.
 
 To inquire about commercial licensing, please contact the copyright holder.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING
-FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
-DEALINGS IN THE SOFTWARE.
+
+4. NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR
+OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE,
+ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
