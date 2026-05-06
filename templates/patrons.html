@@ -41,7 +41,7 @@
                         <td>{{.Name}}</td>
                         <td>{{if .Email}}{{deref .Email}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                         <td>{{if .Phone}}{{deref .Phone}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
-                        <td><code>{{.Username}}</code></td>
+                        <td>{{if .Username}}<code>{{.Username}}</code>{{else}}<span class="text-muted small">no login</span>{{end}}</td>
                         <td class="text-muted">{{.JoinedDate}}</td>
                         <td class="text-end">
                             <button type="button" class="btn btn-sm btn-outline-secondary patron-edit-btn"

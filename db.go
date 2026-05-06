@@ -2084,9 +2084,9 @@ var (
 
 func (dm *DatabaseManager) GetAllPatrons() ([]Patron, error) {
 	rows, err := dm.db.Query(`
-		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata, u.username
+		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata, COALESCE(u.username, '')
 		FROM patrons p
-		JOIN users u ON u.patron_id = p.id
+		LEFT JOIN users u ON u.patron_id = p.id
 		ORDER BY p.name`)
 	if err != nil {
 		return nil, err
@@ -2107,9 +2107,9 @@ func (dm *DatabaseManager) GetAllPatrons() ([]Patron, error) {
 func (dm *DatabaseManager) GetPatronByID(id int) (*Patron, error) {
 	p := &Patron{}
 	err := dm.db.QueryRow(`
-		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata, u.username
+		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata, COALESCE(u.username, '')
 		FROM patrons p
-		JOIN users u ON u.patron_id = p.id
+		LEFT JOIN users u ON u.patron_id = p.id
 		WHERE p.id = ?`, id,
 	).Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.JoinedDate, &p.Metadata, &p.Username)
 	if err != nil {
