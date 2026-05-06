@@ -1,13 +1,14 @@
-# LibreShelf — Security Reference
+# LibreShelf -- Security Reference
 
 This document covers the security model, known risks, and mitigations for LibreShelf.
-See [`plan.md`](./plan.md) for the per-checkpoint security schedule.
+See [`architecture.md`](./architecture.md) for the broader design context and
+[`../DECISIONS.md`](../DECISIONS.md) for numbered design decisions referenced below.
 
 ---
 
 ## Threat Model
 
-LibreShelf is designed for **trusted internal networks** — a school, office, or home library.
+LibreShelf is designed for **trusted internal networks** -- a school, office, or home library.
 
 **Assumed environment:**
 - Deployed behind nginx on a private or semi-private network
@@ -61,7 +62,7 @@ CDN cannot inject malicious scripts into LibreShelf pages.
 
 ---
 
-## File Upload Security (CP3 — Cover Images)
+## File Upload Security (Cover Images)
 
 When accepting image uploads for book covers:
 
@@ -99,7 +100,7 @@ When accepting image uploads for book covers:
 
 ---
 
-## ZIP Import Security (CP7, shipped via PR #74)
+## ZIP Import Security
 
 **Zip Slip** is a vulnerability where a malicious ZIP contains entries with paths like
 `../../etc/passwd`. Extracting naively overwrites files outside the intended directory.
@@ -141,8 +142,8 @@ hand-rolled lying-header bomb fixture that patches both the central directory an
 the data descriptor `UncompressedSize` fields. `TestBackupImport_RejectsZipSlip`
 exercises the integration path through the admin handler.
 
-The package is exported under `internal/` so the deferred `#63` offline cover sync
-workflow can reuse it without a refactor.
+The package is exported under `internal/` so the deferred offline cover sync workflow
+(see open backlog) can reuse it without a refactor.
 
 See [DEC-027](../DECISIONS.md) for the design rationale, including why the package
 lives at `internal/safezip` and why the import does in-process file swapping rather
@@ -150,7 +151,7 @@ than a process restart.
 
 ---
 
-## HTTP Security Headers (CP7, shipped via PR #75)
+## HTTP Security Headers
 
 `SecurityHeaders` middleware in `handlers.go` sets defensive headers on every response,
 including 404 / 500 error pages. Applied router-wide via `router.Use(SecurityHeaders)` in
@@ -188,9 +189,9 @@ func SecurityHeaders(c *gin.Context) {
 | `Strict-Transport-Security` | Forces HTTPS for one year. Gated on `APP_ENV=production` because the bare-IP EC2 deploy is HTTP-only -- HSTS over HTTP is harmful (a single insecure response would otherwise pin the browser to HTTPS forever) |
 
 **Trade-off, documented:** `style-src` allows `'unsafe-inline'` because the templates rely
-on inline `style="..."` attributes in 22+ places. Removing those is a multi-day refactor
-that didn't fit CP7 scope. `script-src` stays tight at `'self'` (no inline, no eval); the
-one inline `<script>` block in `backup_admin.html` was extracted to
+on inline `style="..."` attributes in 22+ places. Tightening this is a multi-day refactor
+tracked on the open backlog. `script-src` stays tight at `'self'` (no inline, no eval);
+the one inline `<script>` block in `backup_admin.html` was extracted to
 `/static/javascripts/admin_backup.js` so this constraint can hold. Any future inline
 script will fail loudly with a CSP violation in DevTools console rather than slip in
 silently.
@@ -216,20 +217,12 @@ response, and HSTS on/off based on `APP_ENV`.
 
 ## HTTPS / TLS
 
-**Not available for this class deployment.**
+Let's Encrypt does not issue certificates for bare IP addresses; a domain name is required.
+For deployments without a domain (development, intranet on raw IP), LibreShelf runs on HTTP
+only and the `Secure` cookie flag must stay disabled, otherwise the session cookie is never
+sent back to the server and login breaks silently.
 
-Let's Encrypt does not issue certificates for bare IP addresses — a domain name is
-required. The current EC2 instance uses a raw IP address assigned by the professor,
-so HTTPS is not configurable in this environment.
-
-**What this means in practice:**
-- The app runs on HTTP only — traffic is not encrypted in transit
-- The `Secure` cookie flag must be disabled (see Cookie Security below) — otherwise
-  the session cookie is never sent back to the server and login breaks entirely
-- This is acceptable for a class project demo; it would not be acceptable in production
-
-**If a domain name becomes available in the future**, nginx TLS termination with
-Let's Encrypt would look like this (kept for reference):
+For any deployment exposed to the public internet, terminate TLS at nginx with Let's Encrypt:
 
 ```nginx
 server {
@@ -255,7 +248,7 @@ server {
 
 ---
 
-## Trusted Proxies (CP7, shipped via PR #75)
+## Trusted Proxies
 
 Default Gin trusts every proxy for `X-Forwarded-For` and emits the warning *"You trusted
 all proxies, this is NOT safe."* on startup. The fix is in `main.go`, applied at router
@@ -281,7 +274,7 @@ default-trust-everything behavior would re-emerge.
 
 ---
 
-## Authentication (CP2, expanded in CP4)
+## Authentication
 
 LibreShelf uses server-side sessions with three roles: `admin`, `staff`, and `patron`
 (see DEC-014 for the role model).
@@ -307,7 +300,7 @@ if err != nil {
 `bcrypt.DefaultCost` (currently 10) makes hashing intentionally slow — it takes ~100ms.
 This is a feature: it makes brute-force attacks expensive.
 
-### Password Complexity Policy (CP5, DEC-021)
+### Password Complexity Policy (DEC-021)
 
 Every password-setting path must run the candidate through `ValidatePassword` in
 `validators.go` before hashing. The rules:
@@ -322,8 +315,8 @@ Enforcement points:
 - `SeedDefaultUsers` validates `ADMIN_PASSWORD` (env override) at startup and
   `log.Fatalf`s on failure. Seed defaults (`Admin123!`, `Staff123!`, `Patron123!`)
   all satisfy the rule.
-- Staff create/password-reset handlers (#39).
-- Patron create (#21).
+- Staff create / password-reset handlers.
+- Patron create.
 - Any future admin password-change handler.
 
 `ValidateUsername` lives in the same file and enforces 3-32 characters with the
@@ -347,7 +340,7 @@ sanity vs. brute-force resistance).
 
 ### Cookie Security
 ```go
-// Secure flag requires HTTPS; must be false for HTTP-only deployments.
+// Secure flag requires HTTPS; stays false for HTTP-only deployments.
 // If set to true on an HTTP server, the browser will never send the cookie
 // back and login will silently break.
 secure := os.Getenv("APP_ENV") == "production"
@@ -367,17 +360,12 @@ c.SetCookie(
 | Attribute | Purpose |
 |-----------|---------|
 | `HttpOnly` | Prevents JavaScript from reading the cookie; blocks XSS-based session theft |
-| `Secure` | Cookie only sent over HTTPS; disabled here since we are HTTP-only |
+| `Secure` | Cookie only sent over HTTPS; toggled by `APP_ENV=production` |
 | `SameSite=Strict` | Cookie not sent on cross-site requests; first line of defense against CSRF |
 
-> **Note:** `Secure: false` is a known limitation of this deployment. The `HttpOnly`
-> and `SameSite=Strict` attributes still protect against XSS-based theft and CSRF.
-> If HTTPS becomes available, set `APP_ENV=production` and the flag enables automatically.
-
-> **History note:** CP2 documented `SameSite=Strict` as part of the session design but the
-> original code never called `c.SetSameSite(http.SameSiteStrictMode)` before `c.SetCookie`,
-> so browsers used their default (Lax). The missing call was added in CP4 during the CSRF
-> work (#32). See DEC-004 addendum.
+> **Note:** for HTTP-only deployments the `Secure` flag is intentionally off; `HttpOnly`
+> and `SameSite=Strict` still defend against XSS-based theft and CSRF. Set
+> `APP_ENV=production` once HTTPS is in front of the app to flip it on.
 
 ### Session Hijacking Prevention
 - Tokens generated with `crypto/rand` (cryptographically secure) — never `math/rand`
@@ -386,7 +374,7 @@ c.SetCookie(
 - 8-hour expiry — user must re-login after expiry
 - On logout: delete the session row from the DB immediately
 
-### CSRF Protection (CP4, implemented)
+### CSRF Protection
 
 Every state-changing request is protected by a CSRF token. Two separate mechanisms handle
 the two cases: authenticated requests use a session-bound synchronizer token; unauthenticated
@@ -502,7 +490,9 @@ staff.GET("/admin", HandleAdmin)
 // Admin-only
 admin := router.Group("/")
 admin.Use(RequireAuth, RequireAdmin, CSRFProtect)
-// (admin-only routes added in later checkpoints)
+admin.GET("/staff", HandleStaff)
+admin.GET("/admin", HandleAdminIndex)
+admin.GET("/admin/backup", HandleBackupAdmin)
 ```
 
 ---
@@ -522,7 +512,7 @@ admin.Use(RequireAuth, RequireAdmin, CSRFProtect)
 
 ## Dependency Security
 
-Before final deployment (CP7):
+Before any deploy:
 ```bash
 # Verify all dependencies match go.sum checksums
 go mod verify
@@ -532,29 +522,16 @@ go install golang.org/x/vuln/cmd/govulncheck@latest
 govulncheck ./...
 ```
 
-Keep `go.sum` committed to the repository — it ensures reproducible, tamper-evident builds.
+Keep `go.sum` committed; it ensures reproducible, tamper-evident builds.
 
 ---
 
-## Quick Security Checklist
+## Pre-Deploy Checklist
 
-### Every CP
-- [ ] All DB queries use `?` parameterized placeholders — no string concatenation
-- [ ] User input is validated server-side before use
-- [ ] Error responses don't leak internal paths, stack traces, or SQL
-
-### CP5 (done)
-- [x] Cover image uploads: MIME type checked, extension restricted, size limited, filename sanitized (originally scheduled CP3; actually landed in CP5 with #20)
-
-### CP6 (done)
-- [x] Loan IDOR on return: return handler verifies the submitted `loan_id` belongs to an active (non-returned) loan before acting; no caller-controlled `patron_id` on the return path
-
-### CP7 (done)
-- [x] ZIP import: path traversal check on every extracted file via `internal/safezip`, per-file and total size limits enforced (DEC-027)
-- [x] Security headers middleware added (`SecurityHeaders` in `handlers.go`, applied router-wide; DEC-028)
-- [x] Trusted proxies configured (`router.SetTrustedProxies([]string{"127.0.0.1"})` in `main.go`)
-- [x] `go mod verify` passes
-- [x] `govulncheck ./...` clean (after Go 1.25.0 -> 1.25.9 toolchain bump)
-- [x] `data/` directory permissions managed by systemd service (User=ubuntu, default umask)
-- [ ] HTTPS configured in nginx -- not feasible on bare-IP EC2 deploy; will activate when a domain name is available
-- [ ] CSV import -- de-scoped from CP7; tracked as `cs408-go-stack-8ap` in the deferred backlog
+- [ ] All DB queries use `?` parameterized placeholders -- no string concatenation
+- [ ] All user input is validated server-side before use
+- [ ] Error responses do not leak internal paths, stack traces, or SQL
+- [ ] `go mod verify` passes
+- [ ] `govulncheck ./...` clean
+- [ ] `data/` directory permissions appropriate for the runtime user (systemd default umask)
+- [ ] HTTPS configured in nginx (or `APP_ENV` left unset for HTTP-only intranet deployments)

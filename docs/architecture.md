@@ -1,0 +1,320 @@
+# LibreShelf Architecture
+
+LibreShelf is a self-hostable library management system. A small library (school, office, or
+personal collection) manages books, patrons, and loans through a simple web UI. A public kiosk
+lets anyone browse the catalog without logging in; patrons may optionally log in to favorite
+books and request holds. All checkout and return transactions are handled by staff.
+
+This document is the architecture and design reference. For security details see
+[`security.md`](./security.md). For deployment instructions see [`deployment.md`](./deployment.md).
+For numbered design decisions see [`../DECISIONS.md`](../DECISIONS.md).
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Language | Go 1.25.9+ |
+| Web framework | Gin (`github.com/gin-gonic/gin`) |
+| Templating | Go `html/template` with layout pattern |
+| Database | SQLite via `modernc.org/sqlite` (pure Go, no CGo) |
+| CSS | Bootstrap 5.3 (served locally; no CDN) |
+| Deployment | systemd + nginx |
+
+---
+
+## Routes
+
+| Route | Page | Access |
+|-------|------|--------|
+| `GET /login` | Login | Public |
+| `POST /login` | Login action | Public |
+| `POST /logout` | Logout action | Any logged-in user |
+| `GET /` | Dashboard | Any logged-in user |
+| `GET /catalog` | Catalog | Any logged-in user |
+| `GET /books/:id` | Book detail | Any logged-in user |
+| `GET /kiosk` | Public anonymous catalog | Public |
+| `GET /kiosk/books/:id` | Public read-only book detail | Public |
+| `GET /loans` | Active / overdue loan list with filter | Staff + admin |
+| `POST /books/:id/checkout` | Check out a copy to a patron | Staff + admin |
+| `POST /loans/:id/return` | Return a checked-out copy | Staff + admin |
+| `GET /my/loans` | Patron's own active loans | Patron |
+| `GET /patrons` | Patron list | Staff + admin |
+| `POST /patrons` | Create patron | Staff + admin |
+| `POST /patrons/:id/edit` | Edit patron | Staff + admin |
+| `POST /patrons/:id/delete` | Delete patron | Staff + admin |
+| `GET /staff` | Staff management | Admin |
+| `POST /staff` | Create staff / admin | Admin |
+| `POST /staff/:id/edit` | Edit staff / admin | Admin |
+| `POST /staff/:id/delete` | Delete staff / admin | Admin |
+| `POST /staff/:id/password` | Reset staff password | Admin |
+| `GET /books/new` | Add-book form | Staff + admin |
+| `POST /books` | Create book | Staff + admin |
+| `GET /books/:id/edit` | Edit-book form | Staff + admin |
+| `POST /books/:id/edit` | Update book | Staff + admin |
+| `POST /books/:id/delete` | Delete book | Admin |
+| `GET /api/openlibrary/isbn/:isbn` | Open Library ISBN lookup proxy (JSON) | Staff + admin |
+| `GET /admin` | Admin tools index | Admin |
+| `GET /admin/backup` | Backup admin page (stats + export + restore modal) | Admin |
+| `GET /admin/backup/export` | ZIP backup download | Admin |
+| `POST /admin/backup/import` | ZIP backup restore (atomic swap with `.bak` rollback) | Admin |
+
+---
+
+## Database Schema
+
+```sql
+CREATE TABLE books (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    isbn               TEXT UNIQUE,                       -- null for books without ISBN
+    title              TEXT NOT NULL,
+    publisher          TEXT,
+    year               INTEGER,
+    description        TEXT,
+    cover_filename     TEXT,                              -- filename only; file lives in DATA_DIR/covers/
+    genre              TEXT,
+    quantity_total     INTEGER DEFAULT 1,
+    quantity_available INTEGER DEFAULT 1                  -- decremented on checkout, incremented on return
+);
+
+CREATE TABLE authors (
+    id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE              -- case-insensitive uniqueness
+);
+
+CREATE TABLE book_authors (
+    book_id   INTEGER NOT NULL REFERENCES books(id) ON DELETE CASCADE,
+    author_id INTEGER NOT NULL REFERENCES authors(id) ON DELETE CASCADE,
+    position  INTEGER NOT NULL DEFAULT 0,                 -- 1-indexed author order on the book jacket
+    PRIMARY KEY (book_id, author_id)
+);
+
+CREATE TABLE patrons (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    email       TEXT,
+    phone       TEXT,
+    joined_date DATETIME DEFAULT CURRENT_TIMESTAMP,
+    metadata    TEXT                                      -- JSON, nullable; UI deferred (DEC-016)
+);
+
+CREATE TABLE loans (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    book_id        INTEGER REFERENCES books(id),
+    patron_id      INTEGER REFERENCES patrons(id),
+    checked_out_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    due_date       DATE NOT NULL,
+    returned_at    DATETIME,                              -- NULL while still checked out
+    fine_cents     INTEGER NOT NULL DEFAULT 0             -- reserved for future fine tracking (DEC-026)
+);
+
+-- Overdue is never stored; computed at query time:
+--   returned_at IS NULL AND due_date < DATE('now')
+
+CREATE TABLE users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    username      TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,                          -- bcrypt
+    role          TEXT NOT NULL CHECK(role IN ('admin', 'staff', 'patron')),
+    patron_id     INTEGER REFERENCES patrons(id),         -- NULL for admin and staff
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE sessions (
+    token      TEXT PRIMARY KEY,                          -- crypto/rand
+    user_id    INTEGER NOT NULL REFERENCES users(id),
+    csrf_token TEXT NOT NULL,                             -- crypto/rand, bound to session (DEC-017)
+    expires_at DATETIME NOT NULL                          -- canonical UTC "YYYY-MM-DD HH:MM:SS" (DEC-018)
+);
+```
+
+### Seed Accounts
+
+Created on first run if they don't exist:
+
+| Username | Password | Role | Notes |
+|----------|----------|------|-------|
+| `admin` | `Admin123!` | admin | Overridable via `ADMIN_PASSWORD` (validated on startup; DEC-021) |
+| `staff1` | `Staff123!` | staff | |
+| `patron1` | `Patron123!` | patron | `users.patron_id` is NULL; the seed user can log in but has no `patrons` row. New patrons created via `HandlePatronCreate` get a linked `patrons` row per DEC-022 |
+
+---
+
+## Directory Structure
+
+```
+libreshelf/
+├── main.go                       # Entry point: router, template loading, middleware, server
+├── main_test.go                  # HTTP boundary + role tests; setupTestRouter + loginAs helpers
+├── db.go                         # DatabaseManager: schema creation + all CRUD methods
+├── db_test.go                    # DB method tests
+├── handlers.go                   # renderTemplate / renderPage helpers + dashboard / admin / kiosk / not-found
+├── handlers_auth.go              # Login, logout, session middleware, RequireAuth / RequireStaff / RequireAdmin, CSRFProtect
+├── handlers_books.go             # Catalog, detail, Create / Edit / Update / Delete, Open Library proxy
+├── handlers_books_test.go
+├── handlers_patrons.go           # Patron list, create, edit, delete
+├── handlers_patrons_test.go
+├── handlers_staff.go             # Staff list, create, edit, delete, reset-password
+├── handlers_staff_test.go
+├── handlers_loans.go             # Checkout / return + /loans list view + /my/loans
+├── handlers_loans_test.go
+├── handlers_kiosk_test.go
+├── db_loans_test.go
+├── handlers_admin.go             # Admin tools index + backup export / import (DEC-027, DEC-029)
+├── handlers_admin_test.go        # Backup export / import tests including Zip Slip rejection
+├── handlers_security_test.go     # SecurityHeaders + HSTS gating tests (DEC-028)
+├── handlers_auth_test.go
+├── openlibrary.go                # Open Library API client (DEC-008)
+├── openlibrary_test.go
+├── covers.go                     # Cover upload + OL-URL download with MIME / size / extension validation
+├── covers_test.go
+├── flash.go                      # HttpOnly flash cookies (success + error + detail companion)
+├── validators.go                 # IsValidISBN, ValidateUsername, ValidatePassword, generateBaseUsername
+├── validators_test.go
+├── validators_isbn_test.go
+├── internal/safezip/             # ZIP extraction with Zip Slip / symlink / size protections (DEC-027)
+│   ├── doc.go
+│   ├── extract.go
+│   └── extract_test.go           # 13 cases at 87.5% coverage including hand-rolled zip-bomb fixture
+├── templates/
+│   ├── layout.html               # Base layout with responsive offcanvas sidebar
+│   ├── login.html                # Standalone login (no sidebar)
+│   ├── index.html                # Dashboard
+│   ├── catalog.html              # 4-wide book grid; search / filter
+│   ├── book_detail.html          # Single book view + Edit / Delete (type-to-confirm delete)
+│   ├── book_form.html            # Shared new / edit form: ISBN + OL Lookup, cover preview
+│   ├── patrons.html              # Patron list + Add / Edit / Delete modals
+│   ├── staff.html                # Staff list + Add / Edit / Delete / Reset Password modals
+│   ├── admin.html                # Admin tools index (DEC-029)
+│   ├── backup_admin.html         # Backup admin: stats + export + restore-from-backup modal (DEC-027)
+│   ├── kiosk.html                # Public catalog grid
+│   ├── kiosk_layout.html         # Public kiosk shell (no sidebar, "Public Terminal" header)
+│   ├── kiosk_book_detail.html    # Public read-only book detail
+│   ├── loans.html                # Active / overdue loan list with filter
+│   ├── my_loans.html             # Patron's own active loans (RequirePatron)
+│   └── error.html                # 404 / 500 error page
+├── static/
+│   ├── stylesheets/
+│   │   ├── bootstrap.min.css
+│   │   └── style.css
+│   ├── javascripts/
+│   │   ├── bootstrap.bundle.min.js
+│   │   ├── app.js                # Catalog filter, modal init, OL Lookup, cover preview, live validation
+│   │   └── admin_backup.js       # Backup-restore modal interlock (extracted for CSP)
+│   └── images/
+│       └── favicon.svg
+├── data/                         # Gitignored; holds database.sqlite, covers/, WAL files
+├── deploy/
+│   └── libreshelf.service        # systemd unit
+├── docs/                         # Architecture, security, deployment, archived class artifacts
+├── .tool-versions                # Go toolchain pin (asdf / mise)
+├── CLAUDE.md                     # Internal working notes
+├── DECISIONS.md                  # Numbered architectural decisions
+├── README.md
+├── go.mod
+├── go.sum
+└── .gitignore
+```
+
+---
+
+## Access Control
+
+Three roles enforced via middleware chains (see DEC-014):
+
+| Middleware | Routes |
+|-----------|--------|
+| `RequireAuth` + `DBReadLock` | `/`, `/catalog`, `/books/:id`, `POST /logout` |
+| `RequirePatron` + `DBReadLock` | `/my/loans` |
+| `RequireStaff` + `DBReadLock` | `/patrons` + patron CRUD, book add/edit, OL lookup proxy, `/loans`, checkout, return |
+| `RequireAdmin` + `DBReadLock` | `/staff` + staff CRUD + password reset, book delete, `/admin`, `/admin/backup`, backup export |
+| `RequireAdmin` (no `DBReadLock`) | `POST /admin/backup/import` -- takes the write lock directly to swap the DB file (DEC-027) |
+| `LoadUser` (optional auth) | `/kiosk`, `/kiosk/books/:id` |
+| Public | `GET /login`, `POST /login`, static files |
+
+Permissions:
+
+| Capability | Admin | Staff | Patron |
+|---|---|---|---|
+| Dashboard, catalog, book detail | Yes | Yes | Yes |
+| Loan history on book detail | Yes | Yes | No |
+| Checkout / return | Yes | Yes | No |
+| Book add / edit | Yes | Yes | No |
+| Book delete | Yes | No | No |
+| Open Library ISBN lookup | Yes | Yes | No |
+| Patron list and CRUD | Yes | Yes | No |
+| Staff management (list, add, edit, delete, reset password) | Yes | No | No |
+| Admin tools (`/admin`) | Yes | No | No |
+| ZIP export / import | Yes | No | No |
+
+Patrons cannot self-checkout; their login exists for browsing, favorites, and (deferred) holds
+on the kiosk.
+
+---
+
+## Key Design Decisions
+
+For the full numbered design decisions log see [`../DECISIONS.md`](../DECISIONS.md). Below
+are the highlights of the architecture-shaping calls.
+
+### Bootstrap served locally
+
+Bootstrap is bundled in `static/stylesheets/` and `static/javascripts/` rather than loaded
+from a CDN. This keeps the app fully offline-capable (a primary deployment target) and
+eliminates CDN supply-chain risk.
+
+### Flat package structure
+
+All `.go` files in `package main` at the repo root, split by concern via filename suffix
+(`handlers_books.go`, `handlers_patrons.go`, etc.). Sub-packages would add indirection
+without benefit at this scale. The one exception is `internal/safezip`, pulled out because
+it is reusable, has its own boundary, and merits isolated tests.
+
+### Open Library API: server-side proxy
+
+ISBN metadata is fetched server-side at `GET /api/openlibrary/isbn/:isbn` to avoid CORS,
+keep client JS simple, and allow server-side validation (`IsValidISBN`) before any outbound
+request. The handler returns clean JSON to the form for prefill.
+
+### ZIP backup using the standard library
+
+`archive/zip` from the standard library is sufficient. Extraction goes through the
+purpose-built `internal/safezip` package, which enforces six rules (no symlinks, no
+backslash, no absolute paths, Zip Slip via `filepath.Rel`, per-file size cap, total size
+cap) in pass 1 before any byte hits disk in pass 2. See DEC-027.
+
+### Template loading
+
+`map[string]*template.Template`, one entry per page, each paired with `layout.html`. The
+`renderTemplate` helper executes `"layout"`, which pulls in the page's `"content"` block.
+Templates are parsed once at startup via `template.Must` -- there is no hot reload; a
+template edit takes effect only after a process restart.
+
+### SQLite driver
+
+`modernc.org/sqlite` registers as `"sqlite"`, not `"sqlite3"`. Pure Go -- no CGo, no system
+library dependency. This means a single static binary for any GOOS/GOARCH target.
+
+### Loan state via columns, not a status field
+
+The three loan states (active, returned, overdue) are derivable from `returned_at` and
+`due_date`, so there is no `status` column to keep in sync. Overdue is computed at query
+time: `returned_at IS NULL AND due_date < DATE('now')`. See DEC-024.
+
+### Single `/loans` page with a filter
+
+Active and overdue loans share one list view template with a query-param filter
+(`/loans?filter=active|overdue`). No per-patron grouping, no print CSS in v1. See DEC-025.
+
+### Admin tools index pattern
+
+`/admin` is a card-grid landing page that drills into dedicated `/admin/<tool>` routes
+(currently just `/admin/backup`). Lightweight settings can land inline as the toolset grows.
+See DEC-029.
+
+### Schema changes do not migrate
+
+`createSchema()` uses `CREATE TABLE IF NOT EXISTS`. Altering an existing column requires
+either an `ALTER TABLE` migration or wiping `data/database.sqlite` locally. There is no
+migration framework yet -- the schema has been small enough to manage by hand.
