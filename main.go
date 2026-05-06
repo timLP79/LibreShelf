@@ -91,6 +91,10 @@ func main() {
 		"templates/login.html",
 	))
 
+	templates["account_change_password"] = template.Must(template.ParseFiles(
+		"templates/account_change_password.html",
+	))
+
 	templates["error"] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
 		"templates/layout.html",
 		"templates/error.html",
@@ -133,6 +137,14 @@ func main() {
 	auth.GET("/catalog", HandleCatalog)
 	auth.GET("/books/:id", HandleBookDetail)
 	auth.POST("/logout", HandleLogout)
+
+	// Account routes -- no RequirePasswordCurrent here; this page must
+	// remain reachable while the flag is set, otherwise users with
+	// must_change_password=1 can't unstick themselves.
+	account := router.Group("/")
+	account.Use(RequireAuth, CSRFProtect, DBReadLock)
+	account.GET("/account/change-password", HandleChangePassword)
+	account.POST("/account/change-password", HandleChangePasswordPost)
 
 	// Patron-only routes
 	patron := router.Group("/")
