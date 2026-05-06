@@ -99,4 +99,9 @@ system, and a few UX polish items.
 
 ## License
 
-Licensed under the MIT License -- see [LICENSE](./LICENSE).
+LibreShelf is proprietary commercial software. Copyright (c) 2026 Tim Palacios.
+All rights reserved. See [LICENSE](./LICENSE) for terms.
+
+The source is published here for portfolio and evaluation purposes only.
+Compiling, running, hosting, or redistributing LibreShelf requires a separate
+commercial license. To inquire, please contact the author.
