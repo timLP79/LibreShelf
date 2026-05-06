@@ -4,7 +4,9 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"regexp"
 	"strings"
 	"unicode"
@@ -82,6 +84,49 @@ func normalizeFreeText(s string) string {
 // caller (CreatePatron) checks the users table for collisions inside
 // its transaction and appends "2", "3", ... until a free username is
 // found, keeping the check atomic with the insert.
+// generateTempPassword excludes visually ambiguous characters (0/O,
+// 1/l/I) so credential sheets can be read aloud and hand-typed.
+func generateTempPassword() (string, error) {
+	const (
+		uppers   = "ABCDEFGHJKMNPQRSTUVWXYZ"
+		lowers   = "abcdefghjkmnpqrstuvwxyz"
+		digits   = "23456789"
+		specials = "!@#$%^&*"
+		mixed    = uppers + lowers + digits + specials
+	)
+	pick := func(set string) (byte, error) {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(set))))
+		if err != nil {
+			return 0, err
+		}
+		return set[n.Int64()], nil
+	}
+	out := make([]byte, 12)
+	classChars := []string{uppers, digits, specials}
+	for i, set := range classChars {
+		c, err := pick(set)
+		if err != nil {
+			return "", err
+		}
+		out[i] = c
+	}
+	for i := len(classChars); i < len(out); i++ {
+		c, err := pick(mixed)
+		if err != nil {
+			return "", err
+		}
+		out[i] = c
+	}
+	for i := len(out) - 1; i > 0; i-- {
+		j, err := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
+		if err != nil {
+			return "", err
+		}
+		out[i], out[j.Int64()] = out[j.Int64()], out[i]
+	}
+	return string(out), nil
+}
+
 func generateBaseUsername(name string) string {
 	fields := strings.Fields(name)
 	if len(fields) == 0 {
