@@ -1,0 +1,40 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="mb-1">Settings</h1>
+        <p class="text-muted mb-0">System-wide toggles and configuration</p>
+    </div>
+    <a href="/admin" class="btn btn-sm btn-outline-secondary">Back to Admin</a>
+</div>
+
+{{if .Error}}<div class="alert alert-danger">{{.Error}}</div>{{end}}
+{{if .Success}}<div class="alert alert-success">{{.Success}}</div>{{end}}
+
+<form method="POST" action="/admin/settings">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+
+    <section class="card mb-3">
+        <div class="card-body">
+            <h2 class="h6 mb-3">Patron management</h2>
+
+            <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" role="switch"
+                       id="staff_can_import_patrons" name="staff_can_import_patrons"
+                       {{if .Settings.StaffCanImportPatrons}}checked{{end}}>
+                <label class="form-check-label" for="staff_can_import_patrons">
+                    <strong>Allow staff to import patrons</strong>
+                </label>
+                <div class="form-text small">
+                    When enabled, staff users gain access to the CSV patron import tool.
+                    Other admin-only features (backup / restore, staff management, settings)
+                    remain restricted to admins.
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <button type="submit" class="btn" style="background-color: #1e3a5f; color: #ffffff;">
+        Save Settings
+    </button>
+</form>
+{{end}}

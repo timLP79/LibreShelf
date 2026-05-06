@@ -140,6 +140,8 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	admin.GET("/admin", HandleAdmin)
 	admin.GET("/admin/backup", HandleBackupAdmin)
 	admin.GET("/admin/backup/export", HandleBackupExport)
+	admin.GET("/admin/settings", HandleSettings)
+	admin.POST("/admin/settings", HandleSettingsPost)
 
 	// Admin write routes -- no DBReadLock; takes write lock directly.
 	adminWrite := router.Group("/")

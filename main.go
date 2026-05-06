@@ -70,7 +70,7 @@ func main() {
 	templateNames := []string{
 		"index", "catalog", "book_detail", "book_form",
 		"patrons", "admin", "staff", "loans", "my_loans",
-		"backup_admin",
+		"backup_admin", "admin_settings",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -179,6 +179,8 @@ func main() {
 	admin.GET("/admin", HandleAdmin)
 	admin.GET("/admin/backup", HandleBackupAdmin)
 	admin.GET("/admin/backup/export", HandleBackupExport)
+	admin.GET("/admin/settings", HandleSettings)
+	admin.POST("/admin/settings", HandleSettingsPost)
 
 	// Admin write routes -- swap the DB out from under everyone else.
 	// No DBReadLock; the import handler takes dm.mu.Lock() directly,
