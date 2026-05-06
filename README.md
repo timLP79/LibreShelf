@@ -109,5 +109,9 @@ collection.
 **Commercial license required** for any organizational use -- including
 businesses, churches, nonprofits, schools, public libraries, government
 agencies, and correctional facilities -- and for hosting LibreShelf on
-behalf of others. To inquire about a commercial license, please contact
-the author.
+behalf of others.
+
+To inquire about a commercial license, open an issue at
+[github.com/timLP79/LibreShelf/issues](https://github.com/timLP79/LibreShelf/issues)
+with the title `Commercial license inquiry`, or contact the author via
+their [GitHub profile](https://github.com/timLP79).
