@@ -221,7 +221,7 @@ go test
 **Expected output (if passing):**
 ```
 PASS
-ok      go-full-stack   0.123s
+ok      libreshelf   0.123s
 ```
 
 **2. Run with verbose output:**
@@ -235,7 +235,7 @@ go test -v
     main_test.go:56: ✅ Index route test passed!
 --- PASS: TestIndexRoute (0.01s)
 PASS
-ok      go-full-stack   0.123s
+ok      libreshelf   0.123s
 ```
 
 **3. Run with coverage:**
@@ -247,7 +247,7 @@ go test -cover
 ```
 PASS
 coverage: 42.9% of statements
-ok      go-full-stack   0.145s
+ok      libreshelf   0.145s
 ```
 
 ---
@@ -260,14 +260,14 @@ ok      go-full-stack   0.145s
 === RUN   TestIndexRoute
 --- PASS: TestIndexRoute (0.01s)
 PASS
-ok      go-full-stack   0.123s
+ok      libreshelf   0.123s
 ```
 
 **Reading this:**
 - `=== RUN` - Test is starting
 - `--- PASS` - Test passed
 - `(0.01s)` - Time it took
-- `ok go-full-stack 0.123s` - All tests in package passed
+- `ok libreshelf 0.123s` - All tests in package passed
 
 ### When Tests Fail
 
@@ -277,7 +277,7 @@ ok      go-full-stack   0.123s
 --- FAIL: TestIndexRoute (0.01s)
 FAIL
 exit status 1
-FAIL    go-full-stack   0.125s
+FAIL    libreshelf   0.125s
 ```
 
 **Reading this:**

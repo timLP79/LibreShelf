@@ -442,8 +442,8 @@ if port == "" {
 `os.Getenv` returns the value of an environment variable, or an empty string if it's not set. This is how you configure an app differently in development vs production without changing code:
 
 ```bash
-PORT=8080 ./go-full-stack   # uses 8080
-./go-full-stack              # uses 3000 (default)
+PORT=8080 ./libreshelf   # uses 8080
+./libreshelf             # uses 3000 (default)
 ```
 
 ---
@@ -1512,7 +1512,7 @@ internal/safezip/
   extract_test.go
 ```
 
-**Where the project's package layout grew:** all earlier code lives in `package main` at the root. `internal/safezip` is the first sub-package: a focused chunk of logic (safe ZIP extraction) with its own tests, importable from `main` as `"github.com/timLP79/cs408-go-stack/internal/safezip"`.
+**Where the project's package layout grew:** all earlier code lives in `package main` at the root. `internal/safezip` is the first sub-package: a focused chunk of logic (safe ZIP extraction) with its own tests, importable from `main` as `"libreshelf/internal/safezip"`.
 
 **Why pull it out of `package main`?**
 - Reusable: any handler that needs to extract a ZIP can call `safezip.SafeExtract`
@@ -1521,7 +1521,7 @@ internal/safezip/
 
 **The `internal/` directory is a special compiler rule:**
 - A package under `internal/` can only be imported by packages **rooted at the same parent**
-- `internal/safezip` is importable by `main` (same root: `github.com/timLP79/cs408-go-stack/`)
+- `internal/safezip` is importable by `main` (same root: `libreshelf/`)
 - It would NOT be importable by some unrelated repo even if they `go get`'d it
 - Use this for "library code I want clean boundaries on, but not a public API" - which is exactly what `safezip` is
 
@@ -2161,7 +2161,7 @@ book, err := FetchOpenLibraryBook(ctx, "9780441013593")
 - No collisions between parallel tests, even across packages
 - No CI flakiness from "port already in use"
 
-**This was the CP7 coverage push.** Earlier tests used mocks for the OL HTTP client. Switching to `httptest.NewServer` exercises the real HTTP layer (request building, header parsing, error handling) instead of stubbing it out. Higher coverage AND higher fidelity. Closed under PR #76; see `cs408-go-stack-al3` for the full scope.
+**This was the CP7 coverage push.** Earlier tests used mocks for the OL HTTP client. Switching to `httptest.NewServer` exercises the real HTTP layer (request building, header parsing, error handling) instead of stubbing it out. Higher coverage AND higher fidelity. Closed under PR #76; see beads issue `cs408-go-stack-al3` for the full scope.
 
 ---
 
@@ -2212,7 +2212,7 @@ if errors.Is(err, os.ErrNotExist) {
 | Add days/months/years | `t.AddDate(y, m, d)` | `time.Now().AddDate(0, 0, 14)` |
 | Date duration | `n * time.Second` | `300 * time.Second` |
 | Format date | `t.Format("2006-01-02")` | reference time is `Mon Jan 2 15:04:05 MST 2006` |
-| Sub-package import | `"github.com/.../internal/pkg"` | `"github.com/timLP79/cs408-go-stack/internal/safezip"` |
+| Sub-package import | `"github.com/.../internal/pkg"` | `"libreshelf/internal/safezip"` |
 | Package doc file | `// Package x ...\npackage x` in `doc.go` | `internal/safezip/doc.go` |
 | Open ZIP | `r, err := zip.OpenReader(path)` | `internal/safezip/extract.go:35` |
 | Iterate ZIP entries | `for _, f := range r.File` | `extract.go:47, 59` |

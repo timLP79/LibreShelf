@@ -117,7 +117,7 @@ func TestIndexRoute(t *testing.T) {
 
 ### Screenshots/Repo link:
 
-**GitHub:** https://github.com/timLP79/cs408-go-stack
+**GitHub:** https://github.com/timLP79/LibreShelf
 
 **Screenshots in repo (`/screenshots/`):**
 1. Server running locally
