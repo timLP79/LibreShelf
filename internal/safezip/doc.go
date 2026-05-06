@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Tim Palacios. All rights reserved.
+// Licensed under the LibreShelf License (see LICENSE in the repo root).
+
 // Package safezip provides ZIP extraction with protection against
 // path-traversal attacks (Zip Slip), absolute-path entries, symlinks,
 // and zip-bomb attacks. The lying-header check in extractEntry is

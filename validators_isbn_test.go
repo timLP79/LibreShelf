@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Tim Palacios. All rights reserved.
+// Licensed under the LibreShelf License (see LICENSE in the repo root).
+
 package main
 
 import "testing"
