@@ -18,7 +18,7 @@ import (
 var openLibraryBaseURL = "https://openlibrary.org/api/books"
 
 const (
-	openLibraryUserAgent = "LibreShelf/0.1 (cs408-go-stack)"
+	openLibraryUserAgent = "LibreShelf/0.1 (+https://github.com/timLP79/LibreShelf)"
 	openLibraryTimeout   = 10 * time.Second
 )
 

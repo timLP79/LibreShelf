@@ -1,4 +1,4 @@
-module go-full-stack
+module libreshelf
 
 go 1.25.9
 

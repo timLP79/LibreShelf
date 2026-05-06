@@ -26,7 +26,7 @@ From your local repo directory, run the pre-deploy gates and then build for Linu
 ```bash
 go mod verify                                # confirm go.sum integrity
 govulncheck ./...                            # surface known CVEs in code we call
-GOOS=linux GOARCH=amd64 go build -o go-full-stack .
+GOOS=linux GOARCH=amd64 go build -o libreshelf .
 ```
 
 `go mod verify` and `govulncheck` must both exit clean before deploying. If `govulncheck` flags an
@@ -53,7 +53,7 @@ The repo must be cloned on EC2 for the `templates/` directory — the binary loa
 from a relative path and must run from the repo directory.
 
 ```bash
-git clone https://github.com/timLP79/cs408-go-stack.git cs408-go-stack
+git clone https://github.com/timLP79/LibreShelf.git libreshelf
 ```
 
 ## Step 5: Copy the Binary to EC2
@@ -61,7 +61,7 @@ git clone https://github.com/timLP79/cs408-go-stack.git cs408-go-stack
 From your local machine:
 
 ```bash
-scp -i your-key.pem go-full-stack ubuntu@<ec2-public-ip>:~/cs408-go-stack/
+scp -i your-key.pem libreshelf ubuntu@<ec2-public-ip>:~/libreshelf/
 ```
 
 ## Step 6: Install and Start the systemd Service
@@ -69,11 +69,11 @@ scp -i your-key.pem go-full-stack ubuntu@<ec2-public-ip>:~/cs408-go-stack/
 On EC2:
 
 ```bash
-sudo cp ~/cs408-go-stack/deploy/go-full-stack.service /etc/systemd/system/
+sudo cp ~/libreshelf/deploy/libreshelf.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable go-full-stack
-sudo systemctl start go-full-stack
-sudo systemctl status go-full-stack
+sudo systemctl enable libreshelf
+sudo systemctl start libreshelf
+sudo systemctl status libreshelf
 ```
 
 The service runs the app on port 3000 and restarts it automatically on failure or reboot.
@@ -83,7 +83,7 @@ The service runs the app on port 3000 and restarts it automatically on failure o
 Create the nginx site config:
 
 ```bash
-sudo nano /etc/nginx/sites-available/go-full-stack
+sudo nano /etc/nginx/sites-available/libreshelf
 ```
 
 Paste:
@@ -110,7 +110,7 @@ server {
 Enable the site and restart nginx:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/go-full-stack /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/libreshelf /etc/nginx/sites-enabled/
 sudo rm /etc/nginx/sites-enabled/default
 sudo nginx -t
 sudo systemctl restart nginx
@@ -120,7 +120,7 @@ sudo systemctl restart nginx
 
 ```bash
 # Check Go app is running
-sudo systemctl status go-full-stack
+sudo systemctl status libreshelf
 
 # Test app directly
 curl http://localhost:3000
@@ -135,14 +135,14 @@ Then visit `http://<ec2-public-ip>` in your browser (no port needed).
 
 ```bash
 # View Go app logs
-journalctl -u go-full-stack -f
+journalctl -u libreshelf -f
 
 # View nginx logs
 sudo tail -f /var/log/nginx/access.log
 sudo tail -f /var/log/nginx/error.log
 
 # Restart Go app
-sudo systemctl restart go-full-stack
+sudo systemctl restart libreshelf
 
 # Restart nginx
 sudo systemctl restart nginx
@@ -156,24 +156,24 @@ go mod verify
 govulncheck ./...
 
 # 2. Build locally (explicit Linux target for deployment)
-GOOS=linux GOARCH=amd64 go build -o go-full-stack .
+GOOS=linux GOARCH=amd64 go build -o libreshelf .
 
 # 3. Stop the service on EC2 first -- scp cannot overwrite a running binary
-ssh -i your-key.pem ubuntu@<ec2-public-ip> "sudo systemctl stop go-full-stack"
+ssh -i your-key.pem ubuntu@<ec2-public-ip> "sudo systemctl stop libreshelf"
 
 # 4. Pull new templates/static files on EC2
-ssh -i your-key.pem ubuntu@<ec2-public-ip> "cd cs408-go-stack && git pull"
+ssh -i your-key.pem ubuntu@<ec2-public-ip> "cd libreshelf && git pull"
 
 # 5. Copy the new binary to EC2
-scp -i your-key.pem go-full-stack ubuntu@<ec2-public-ip>:~/cs408-go-stack/
+scp -i your-key.pem libreshelf ubuntu@<ec2-public-ip>:~/libreshelf/
 
 # 6. (Optional) Wipe the database to pick up bumped seed passwords --
 #    SeedDefaultUsers skips users that already exist, so a password
 #    change in source does not propagate to existing rows.
-ssh -i your-key.pem ubuntu@<ec2-public-ip> "rm -f ~/cs408-go-stack/data/database.sqlite*"
+ssh -i your-key.pem ubuntu@<ec2-public-ip> "rm -f ~/libreshelf/data/database.sqlite*"
 
 # 7. Start the service again
-ssh -i your-key.pem ubuntu@<ec2-public-ip> "sudo systemctl start go-full-stack"
+ssh -i your-key.pem ubuntu@<ec2-public-ip> "sudo systemctl start libreshelf"
 ```
 
 > **Note:** The service must be stopped before copying the binary -- Linux will return a

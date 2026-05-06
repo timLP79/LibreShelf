@@ -13,7 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"go-full-stack/internal/safezip"
+	"libreshelf/internal/safezip"
 )
 
 type BackupStats struct {
