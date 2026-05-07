@@ -29,9 +29,14 @@ func HandlePatronList(c *gin.Context) {
 		return
 	}
 
+	user := c.MustGet("user").(*User)
+	canImport := user.Role == "admin" ||
+		(user.Role == "staff" && dm.GetSettingBool("staff_can_import_patrons", false))
+
 	renderTemplate(c, "patrons", gin.H{
 		"Title":         "Patrons",
 		"Patrons":       patrons,
+		"CanImport":     canImport,
 		"Success":       readAndClearFlash(c, flashKindSuccess),
 		"SuccessDetail": readAndClearFlashDetail(c),
 		"Error":         readAndClearFlash(c, flashKindError),

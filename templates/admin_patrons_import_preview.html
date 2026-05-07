@@ -4,7 +4,11 @@
         <h1 class="mb-1">Patron Import: Preview</h1>
         <p class="text-muted mb-0">Review the parsed CSV, then confirm to commit.</p>
     </div>
+    {{if eq .User.Role "admin"}}
     <a href="/admin" class="btn btn-sm btn-outline-secondary">Back to Admin</a>
+    {{else}}
+    <a href="/patrons" class="btn btn-sm btn-outline-secondary">Back to Patrons</a>
+    {{end}}
 </div>
 
 <div class="card mb-3">
