@@ -11,6 +11,7 @@
 </head>
 <body>
 
+{{if .User}}
 <!-- Mobile top bar (visible below lg breakpoint) -->
 <nav class="navbar d-lg-none sidebar-topbar">
     <div class="container-fluid">
@@ -23,9 +24,11 @@
         </span>
     </div>
 </nav>
+{{end}}
 
 <div class="d-flex min-vh-100">
 
+    {{if .User}}
     <!-- Sidebar: offcanvas on mobile, pinned on desktop -->
     <div class="offcanvas-lg offcanvas-start d-flex flex-column p-3 sidebar" tabindex="-1" id="sidebar">
         <div class="mb-4">
@@ -61,6 +64,7 @@
         </form>
         {{end}}
     </div>
+    {{end}}
 
     <!-- Main Content -->
     <div class="flex-grow-1 p-4">
