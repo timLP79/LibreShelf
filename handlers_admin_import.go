@@ -274,7 +274,11 @@ func stashCSVDownload(rows [][]string, filename string) string {
 	var buf bytes.Buffer
 	w := csv.NewWriter(&buf)
 	for _, r := range rows {
-		_ = w.Write(r)
+		defanged := make([]string, len(r))
+		for i, cell := range r {
+			defanged[i] = defangCSVCell(cell)
+		}
+		_ = w.Write(defanged)
 	}
 	w.Flush()
 	if err := w.Error(); err != nil {
@@ -308,6 +312,24 @@ func HandleImportDownload(c *gin.Context) {
 		c.String(http.StatusNotFound, "Download expired or already used.")
 		return
 	}
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate, private")
+	c.Header("Pragma", "no-cache")
 	c.Header("Content-Disposition", "attachment; filename="+entry.Filename)
 	c.Data(http.StatusOK, "text/csv; charset=utf-8", entry.Body)
+}
+
+// defangCSVCell prefixes a single quote on cells that would otherwise be
+// interpreted as a formula by Excel / LibreOffice / Sheets when the CSV
+// is opened. Defending against CSV / formula injection where attacker-
+// controlled patron Name cells could exfiltrate adjacent plaintext temp
+// passwords via =HYPERLINK / =IMPORTXML / =WEBSERVICE.
+func defangCSVCell(s string) string {
+	if s == "" {
+		return s
+	}
+	switch s[0] {
+	case '=', '+', '-', '@', '\t', '\r':
+		return "'" + s
+	}
+	return s
 }
