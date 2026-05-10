@@ -1,0 +1,105 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="mb-1">Patron Import: Preview</h1>
+        <p class="text-muted mb-0">Review the parsed CSV, then confirm to commit.</p>
+    </div>
+    {{if eq .User.Role "admin"}}
+    <a href="/admin" class="btn btn-sm btn-outline-secondary">Back to Admin</a>
+    {{else}}
+    <a href="/patrons" class="btn btn-sm btn-outline-secondary">Back to Patrons</a>
+    {{end}}
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h2 class="h6 mb-3">Summary</h2>
+
+        <div class="row g-3 mb-3">
+            <div class="col-sm-6 col-md-3">
+                <div class="text-muted small">Will be inserted</div>
+                <div class="fs-4 fw-semibold text-success">{{.Insertable}}</div>
+            </div>
+            <div class="col-sm-6 col-md-3">
+                <div class="text-muted small">Skipped (duplicate)</div>
+                <div class="fs-4 fw-semibold text-warning">{{add .DupExternal .DupEmail}}</div>
+            </div>
+            <div class="col-sm-6 col-md-3">
+                <div class="text-muted small">Skipped (empty name)</div>
+                <div class="fs-4 fw-semibold text-warning">{{.EmptyName}}</div>
+            </div>
+            <div class="col-sm-6 col-md-3">
+                <div class="text-muted small">Malformed rows</div>
+                <div class="fs-4 fw-semibold text-danger">{{.Malformed}}</div>
+            </div>
+        </div>
+
+        <div class="text-muted small">
+            <div>Total rows in CSV: {{.Total}}</div>
+            <div>Existing patrons in the system: {{.ExistingCount}}</div>
+            <div>Account mode: {{if eq .AccountMode "with_logins"}}Patron records <em>with login accounts</em> (you will receive a credentials CSV after import).{{else}}Patron records only (no logins).{{end}}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h2 class="h6 mb-3">Detected columns</h2>
+        <dl class="row mb-0 small">
+            <dt class="col-sm-3">Standard</dt>
+            <dd class="col-sm-9">
+                {{if .StandardColumns}}{{range $i, $c := .StandardColumns}}{{if $i}}, {{end}}<code>{{$c}}</code>{{end}}{{else}}<em>(none)</em>{{end}}
+            </dd>
+            <dt class="col-sm-3">Stored as metadata</dt>
+            <dd class="col-sm-9">
+                {{if .MetadataColumns}}{{range $i, $c := .MetadataColumns}}{{if $i}}, {{end}}<code>{{$c}}</code>{{end}}{{else}}<em>(none)</em>{{end}}
+            </dd>
+        </dl>
+    </div>
+</div>
+
+{{if .Sample}}
+<div class="card mb-3">
+    <div class="card-body">
+        <h2 class="h6 mb-3">Sample (first {{len .Sample}} rows that will be inserted)</h2>
+        <div class="table-responsive">
+            <table class="table table-sm table-striped">
+                <thead>
+                    <tr>
+                        <th>Line</th>
+                        <th>Name</th>
+                        <th>External ID</th>
+                        <th>Email</th>
+                        <th>Phone</th>
+                        <th>Metadata keys</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {{range .Sample}}
+                    <tr>
+                        <td>{{.LineNumber}}</td>
+                        <td>{{.Name}}</td>
+                        <td>{{.ExternalID}}</td>
+                        <td>{{.Email}}</td>
+                        <td>{{.Phone}}</td>
+                        <td class="small text-muted">
+                            {{range $k, $v := .Metadata}}{{$k}} {{end}}
+                        </td>
+                    </tr>
+                {{end}}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{{end}}
+
+<form method="POST" action="/admin/patrons/import/confirm" class="d-flex gap-2">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="token" value="{{.Token}}">
+    <button type="submit" class="btn" style="background-color: #1e3a5f; color: #ffffff;">
+        Import {{.Insertable}} {{if eq .Insertable 1}}patron{{else}}patrons{{end}}
+    </button>
+    <a href="/admin/patrons/import" class="btn btn-outline-secondary">Cancel</a>
+</form>
+{{end}}

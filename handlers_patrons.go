@@ -29,9 +29,14 @@ func HandlePatronList(c *gin.Context) {
 		return
 	}
 
+	user := c.MustGet("user").(*User)
+	canImport := user.Role == "admin" ||
+		(user.Role == "staff" && dm.GetSettingBool("staff_can_import_patrons", false))
+
 	renderTemplate(c, "patrons", gin.H{
 		"Title":         "Patrons",
 		"Patrons":       patrons,
+		"CanImport":     canImport,
 		"Success":       readAndClearFlash(c, flashKindSuccess),
 		"SuccessDetail": readAndClearFlashDetail(c),
 		"Error":         readAndClearFlash(c, flashKindError),
@@ -173,4 +178,123 @@ func HandlePatronDelete(c *gin.Context) {
 	setFlash(c, flashKindSuccess, "patron_deleted")
 	setFlashDetail(c, patron.Name)
 	c.Redirect(http.StatusFound, "/patrons")
+}
+
+func HandlePatronLoginCredentials(c *gin.Context) {
+	dm := getDB(c)
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		HandleNotFound(c)
+		return
+	}
+	patron, err := dm.GetPatronByID(id)
+	if err == sql.ErrNoRows {
+		HandleNotFound(c)
+		return
+	}
+	if err != nil {
+		log.Printf("HandlePatronLoginCredentials: GetPatronByID: %v", err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+	if patron.Username == "" {
+		setFlash(c, flashKindError, "temp_password_unavailable")
+		c.Redirect(http.StatusFound, "/patrons")
+		return
+	}
+	user, err := dm.GetUserByUsername(patron.Username)
+	if err != nil {
+		log.Printf("HandlePatronLoginCredentials: GetUserByUsername: %v", err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+	if user.TempPassword == nil {
+		setFlash(c, flashKindError, "temp_password_unavailable")
+		c.Redirect(http.StatusFound, "/patrons")
+		return
+	}
+
+	c.Header("Cache-Control", "no-store, no-cache, must-revalidate, private")
+	c.Header("Pragma", "no-cache")
+
+	renderTemplate(c, "patron_login_credentials", gin.H{
+		"Title":        "Login Setup",
+		"Patron":       patron,
+		"TempPassword": *user.TempPassword,
+		"Success":      readAndClearFlash(c, flashKindSuccess),
+	})
+}
+
+func HandlePatronDismissTemp(c *gin.Context) {
+	dm := getDB(c)
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		HandleNotFound(c)
+		return
+	}
+	patron, err := dm.GetPatronByID(id)
+	if err == sql.ErrNoRows {
+		HandleNotFound(c)
+		return
+	}
+	if err != nil {
+		log.Printf("HandlePatronDismissTemp: GetPatronByID: %v", err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+	if patron.Username == "" {
+		c.Redirect(http.StatusSeeOther, "/patrons")
+		return
+	}
+	user, err := dm.GetUserByUsername(patron.Username)
+	if err != nil {
+		log.Printf("HandlePatronDismissTemp: GetUserByUsername: %v", err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+	if err := dm.ClearTempPassword(user.ID); err != nil {
+		log.Printf("HandlePatronDismissTemp: ClearTempPassword: %v", err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+	setFlash(c, flashKindSuccess, "temp_password_dismissed")
+	setFlashDetail(c, patron.Name)
+	c.Redirect(http.StatusSeeOther, "/patrons")
+}
+
+func HandlePatronRegenerateTemp(c *gin.Context) {
+	dm := getDB(c)
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		HandleNotFound(c)
+		return
+	}
+	patron, err := dm.GetPatronByID(id)
+	if err == sql.ErrNoRows {
+		HandleNotFound(c)
+		return
+	}
+	if err != nil {
+		log.Printf("HandlePatronRegenerateTemp: GetPatronByID: %v", err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+	if patron.Username == "" {
+		setFlash(c, flashKindError, "temp_password_unavailable")
+		c.Redirect(http.StatusSeeOther, "/patrons")
+		return
+	}
+	user, err := dm.GetUserByUsername(patron.Username)
+	if err != nil {
+		log.Printf("HandlePatronRegenerateTemp: GetUserByUsername: %v", err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+	if _, err := dm.RegenerateTempPassword(user.ID); err != nil {
+		log.Printf("HandlePatronRegenerateTemp: RegenerateTempPassword: %v", err)
+		c.String(http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+	setFlash(c, flashKindSuccess, "temp_password_regenerated")
+	c.Redirect(http.StatusSeeOther, "/patrons/"+strconv.Itoa(id)+"/login-credentials")
 }

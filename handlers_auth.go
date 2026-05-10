@@ -126,6 +126,48 @@ func RequireStaff(c *gin.Context) {
 	c.Next()
 }
 
+func RequirePasswordCurrent(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.Next()
+		return
+	}
+	if user.(*User).MustChangePassword {
+		c.Redirect(http.StatusFound, "/account/change-password")
+		c.Abort()
+		return
+	}
+	c.Next()
+}
+
+func RequireStaffImportAccess(c *gin.Context) {
+	user, exists := c.Get("user")
+	if !exists {
+		c.Redirect(http.StatusFound, "/login")
+		c.Abort()
+		return
+	}
+	u := user.(*User)
+	if u.Role == "admin" {
+		c.Next()
+		return
+	}
+	if u.Role == "staff" {
+		dm := getDB(c)
+		if dm.GetSettingBool("staff_can_import_patrons", false) {
+			c.Next()
+			return
+		}
+	}
+	c.Status(http.StatusForbidden)
+	renderTemplate(c, "error", gin.H{
+		"Title":   "Forbidden",
+		"Status":  403,
+		"Message": "You don't have permission to access this page.",
+	})
+	c.Abort()
+}
+
 func renderLoginForm(c *gin.Context, errorMsg string) {
 	csrfToken, err := generateSessionToken()
 	if err != nil {

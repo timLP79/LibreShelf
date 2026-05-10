@@ -235,8 +235,9 @@ bd close <id>         # Complete work
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
 2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
+3. **Run security review** (if code changed and not test/docs-only) - Invoke the `security-review` skill on the branch diff before closing any beads issue that touched handlers, DB methods, middleware, auth/session logic, templates rendering user data, or anything related to credentials/permissions. Address findings before closing. Skip for docs-only, beads-only, or test-only changes.
+4. **Update issue status** - Close finished work, update in-progress items
+5. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
    bd dolt push

@@ -64,13 +64,16 @@ func main() {
 			}
 			return ""
 		},
+		"add": func(a, b int) int { return a + b },
 	}
 
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
 		"index", "catalog", "book_detail", "book_form",
 		"patrons", "admin", "staff", "loans", "my_loans",
-		"backup_admin",
+		"backup_admin", "admin_settings",
+		"admin_patrons_import", "admin_patrons_import_preview", "admin_patrons_import_result",
+		"patron_login_credentials",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -89,6 +92,10 @@ func main() {
 
 	templates["login"] = template.Must(template.ParseFiles(
 		"templates/login.html",
+	))
+
+	templates["account_change_password"] = template.Must(template.ParseFiles(
+		"templates/account_change_password.html",
 	))
 
 	templates["error"] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -128,24 +135,35 @@ func main() {
 
 	// Authenticated routes -- any logged in user
 	auth := router.Group("/")
-	auth.Use(RequireAuth, CSRFProtect, DBReadLock)
+	auth.Use(RequireAuth, RequirePasswordCurrent, CSRFProtect, DBReadLock)
 	auth.GET("/", HandleIndex)
 	auth.GET("/catalog", HandleCatalog)
 	auth.GET("/books/:id", HandleBookDetail)
-	auth.POST("/logout", HandleLogout)
+
+	// Account routes -- no RequirePasswordCurrent here so the change-
+	// password page and logout remain reachable while the flag is set,
+	// otherwise users with must_change_password=1 can't unstick themselves.
+	account := router.Group("/")
+	account.Use(RequireAuth, CSRFProtect, DBReadLock)
+	account.GET("/account/change-password", HandleChangePassword)
+	account.POST("/account/change-password", HandleChangePasswordPost)
+	account.POST("/logout", HandleLogout)
 
 	// Patron-only routes
 	patron := router.Group("/")
-	patron.Use(RequireAuth, RequirePatron, CSRFProtect, DBReadLock)
+	patron.Use(RequireAuth, RequirePasswordCurrent, RequirePatron, CSRFProtect, DBReadLock)
 	patron.GET("/my/loans", HandleMyLoans)
 
 	// Staff routes -- admin + staff
 	staff := router.Group("/")
-	staff.Use(RequireAuth, RequireStaff, CSRFProtect, DBReadLock)
+	staff.Use(RequireAuth, RequirePasswordCurrent, RequireStaff, CSRFProtect, DBReadLock)
 	staff.GET("/patrons", HandlePatronList)
 	staff.POST("/patrons", HandlePatronCreate)
 	staff.POST("/patrons/:id/edit", HandlePatronEdit)
 	staff.POST("/patrons/:id/delete", HandlePatronDelete)
+	staff.GET("/patrons/:id/login-credentials", HandlePatronLoginCredentials)
+	staff.POST("/patrons/:id/dismiss-temp", HandlePatronDismissTemp)
+	staff.POST("/patrons/:id/regenerate-temp", HandlePatronRegenerateTemp)
 	staff.GET("/api/openlibrary/isbn/:isbn", HandleOpenLibraryLookup)
 	staff.GET("/books/new", HandleBookNew)
 	staff.POST("/books", HandleBookCreate)
@@ -157,7 +175,7 @@ func main() {
 
 	// Admin-only routes (read-locked like everything else)
 	admin := router.Group("/")
-	admin.Use(RequireAuth, RequireAdmin, CSRFProtect, DBReadLock)
+	admin.Use(RequireAuth, RequirePasswordCurrent, RequireAdmin, CSRFProtect, DBReadLock)
 	admin.GET("/staff", HandleStaffList)
 	admin.POST("/staff", HandleStaffCreate)
 	admin.POST("/staff/:id/edit", HandleStaffEdit)
@@ -167,12 +185,23 @@ func main() {
 	admin.GET("/admin", HandleAdmin)
 	admin.GET("/admin/backup", HandleBackupAdmin)
 	admin.GET("/admin/backup/export", HandleBackupExport)
+	admin.GET("/admin/settings", HandleSettings)
+	admin.POST("/admin/settings", HandleSettingsPost)
+
+	// Patron import -- gated by RequireStaffImportAccess so admins
+	// always reach it, staff only when staff_can_import_patrons is on.
+	patronImport := router.Group("/")
+	patronImport.Use(RequireAuth, RequirePasswordCurrent, RequireStaffImportAccess, CSRFProtect, DBReadLock)
+	patronImport.GET("/admin/patrons/import", HandlePatronImportForm)
+	patronImport.POST("/admin/patrons/import", HandlePatronImportPreview)
+	patronImport.POST("/admin/patrons/import/confirm", HandlePatronImportCommit)
+	patronImport.GET("/admin/patrons/import/download/:token", HandleImportDownload)
 
 	// Admin write routes -- swap the DB out from under everyone else.
 	// No DBReadLock; the import handler takes dm.mu.Lock() directly,
 	// since Go's sync.RWMutex cannot upgrade a read lock to a write lock.
 	adminWrite := router.Group("/")
-	adminWrite.Use(RequireAuth, RequireAdmin, CSRFProtect)
+	adminWrite.Use(RequireAuth, RequirePasswordCurrent, RequireAdmin, CSRFProtect)
 	adminWrite.POST("/admin/backup/import", HandleBackupImport)
 
 	router.NoRoute(HandleNotFound)

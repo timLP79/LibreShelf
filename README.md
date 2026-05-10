@@ -14,6 +14,8 @@ without logging in. All checkout and return transactions are handled by staff.
 - Three-role access model: admin, staff, patron
 - Public kiosk for anonymous catalog browsing
 - ZIP backup export and import with Zip Slip protection and atomic `.bak` rollback
+- CSV patron import with column auto-mapping (IDOC / inmate / library card / student ID), records-only or with-logins mode, dedup, and per-row temp-password recovery on the patron list
+- Force-change-on-first-login enforced for any patron with a server-generated temp password
 - CSRF protection, session-bound tokens, bcrypt password hashing
 - Defensive HTTP headers (CSP, X-Frame-Options, HSTS gated on production)
 - Pure-Go SQLite via `modernc.org/sqlite` -- no CGo, no system libraries

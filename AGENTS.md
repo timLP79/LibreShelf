@@ -130,6 +130,28 @@ bd create --title="..." --description="..." --type=feature \
 If Go code lands without tests and isn't exempt, reopen the issue or create a follow-up for
 the missing coverage.
 
+## Security Review Requirements
+
+A beads issue that touches handlers, DB methods, middleware, auth/session logic, templates
+rendering user-controlled data, or anything related to credentials or permissions is NOT
+done until the `security-review` skill has been run on the branch diff and any findings have
+been addressed (or explicitly waived in the issue notes).
+
+```
+# After implementation + tests, before bd close
+Skill: security-review
+```
+
+**Review-exempt changes** (closeable without a security pass):
+
+- Pure documentation (DECISIONS.md, CLAUDE.md, docs/, README.md)
+- Beads-only updates (.beads/issues.jsonl, notes, descriptions)
+- Test-only changes
+- Trivial styling (CSS color tweaks, template padding fixes that don't touch user-rendered data)
+
+If a non-exempt change closes without a security pass, reopen the issue or file a follow-up
+specifically for the missed review.
+
 ## Memory and Task Tracking (HARD RULE)
 
 - **Memory:** `bd remember` only. Do NOT write to the per-device auto-memory system at

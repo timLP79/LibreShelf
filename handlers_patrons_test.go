@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -412,5 +413,119 @@ func TestPatronDeleteReturns404ForMissing(t *testing.T) {
 
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestPatronLoginCredentials_RendersTempPasswordPage(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin", "admin")
+	patronID, _, username, temp, err := dm.CreatePatronWithLogin("Alice Brown", "alice@example.com", "", "")
+	if err != nil {
+		t.Fatalf("CreatePatronWithLogin: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/patrons/"+strconv.Itoa(patronID)+"/login-credentials", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, username) {
+		t.Errorf("body should contain username %q", username)
+	}
+	if !strings.Contains(body, temp) {
+		t.Errorf("body should contain temp password")
+	}
+	if got := rr.Header().Get("Cache-Control"); !strings.Contains(got, "no-store") {
+		t.Errorf("Cache-Control = %q, want no-store", got)
+	}
+}
+
+func TestPatronLoginCredentials_RedirectsWhenNoTemp(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin", "admin")
+	patronID, userID, _, _, err := dm.CreatePatronWithLogin("Charlie Davis", "", "", "")
+	if err != nil {
+		t.Fatalf("CreatePatronWithLogin: %v", err)
+	}
+	if err := dm.ClearTempPassword(userID); err != nil {
+		t.Fatalf("ClearTempPassword: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/patrons/"+strconv.Itoa(patronID)+"/login-credentials", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302 redirect", rr.Code)
+	}
+	if got := rr.Header().Get("Location"); got != "/patrons" {
+		t.Errorf("Location = %q, want /patrons", got)
+	}
+}
+
+func TestPatronLoginCredentials_404ForUnknown(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin", "admin")
+
+	req := httptest.NewRequest("GET", "/patrons/99999/login-credentials", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("status = %d, want 404", rr.Code)
+	}
+}
+
+func TestPatronDismissTemp_ClearsTempAndRedirects(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+	patronID, userID, _, _, err := dm.CreatePatronWithLogin("Mark Delivered", "", "", "")
+	if err != nil {
+		t.Fatalf("CreatePatronWithLogin: %v", err)
+	}
+
+	rr := postStaffForm(t, router, "/patrons/"+strconv.Itoa(patronID)+"/dismiss-temp", sess, csrf, nil)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rr.Code)
+	}
+	if got := rr.Header().Get("Location"); got != "/patrons" {
+		t.Errorf("Location = %q, want /patrons", got)
+	}
+
+	user, _ := dm.GetUserByID(userID)
+	if user.TempPassword != nil {
+		t.Errorf("temp_password should be NULL after dismiss")
+	}
+}
+
+func TestPatronRegenerateTemp_GeneratesNewAndRedirectsToCredentials(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+	patronID, userID, _, originalTemp, err := dm.CreatePatronWithLogin("Bob Wilson", "", "", "")
+	if err != nil {
+		t.Fatalf("CreatePatronWithLogin: %v", err)
+	}
+
+	rr := postStaffForm(t, router, "/patrons/"+strconv.Itoa(patronID)+"/regenerate-temp", sess, csrf, nil)
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want 303", rr.Code)
+	}
+	wantLoc := "/patrons/" + strconv.Itoa(patronID) + "/login-credentials"
+	if got := rr.Header().Get("Location"); got != wantLoc {
+		t.Errorf("Location = %q, want %q", got, wantLoc)
+	}
+
+	user, _ := dm.GetUserByID(userID)
+	if user.TempPassword == nil || *user.TempPassword == originalTemp {
+		t.Errorf("temp_password should be new and non-empty, got %v", user.TempPassword)
+	}
+	if !user.MustChangePassword {
+		t.Errorf("must_change_password should be true after regenerate")
 	}
 }

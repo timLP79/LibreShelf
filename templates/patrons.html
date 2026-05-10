@@ -4,10 +4,15 @@
         <h1 class="mb-1">Patrons</h1>
         <p class="text-muted mb-0">Manage patron accounts and contact information</p>
     </div>
-    <button type="button" class="btn" style="background-color: #1e3a5f; color: #ffffff;"
-            data-bs-toggle="modal" data-bs-target="#addPatronModal">
-        + Add Patron
-    </button>
+    <div class="d-flex gap-2">
+        {{if .CanImport}}
+        <a href="/admin/patrons/import" class="btn btn-outline-secondary">Import CSV</a>
+        {{end}}
+        <button type="button" class="btn" style="background-color: #1e3a5f; color: #ffffff;"
+                data-bs-toggle="modal" data-bs-target="#addPatronModal">
+            + Add Patron
+        </button>
+    </div>
 </div>
 
 {{if .Error}}<div class="alert alert-danger alert-dismissible fade show" role="alert">
@@ -41,9 +46,14 @@
                         <td>{{.Name}}</td>
                         <td>{{if .Email}}{{deref .Email}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
                         <td>{{if .Phone}}{{deref .Phone}}{{else}}<span class="text-muted">&mdash;</span>{{end}}</td>
-                        <td><code>{{.Username}}</code></td>
+                        <td>{{if .Username}}<code>{{.Username}}</code>{{else}}<span class="text-muted small">no login</span>{{end}}</td>
                         <td class="text-muted">{{.JoinedDate}}</td>
                         <td class="text-end">
+                            {{if .HasTempPassword}}
+                            <a href="/patrons/{{.ID}}/login-credentials" class="btn btn-sm btn-warning">
+                                Login Setup
+                            </a>
+                            {{end}}
                             <button type="button" class="btn btn-sm btn-outline-secondary patron-edit-btn"
                                     data-bs-toggle="modal" data-bs-target="#editPatronModal"
                                     data-patron-id="{{.ID}}"

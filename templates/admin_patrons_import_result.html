@@ -1,0 +1,54 @@
+{{define "content"}}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1 class="mb-1">Patron Import: Done</h1>
+        <p class="text-muted mb-0">Import complete</p>
+    </div>
+    {{if eq .User.Role "admin"}}
+    <a href="/admin" class="btn btn-sm btn-outline-secondary">Back to Admin</a>
+    {{else}}
+    <a href="/patrons" class="btn btn-sm btn-outline-secondary">Back to Patrons</a>
+    {{end}}
+</div>
+
+<div class="alert alert-success">
+    <strong>{{.Inserted}}</strong> {{if eq .Inserted 1}}patron was{{else}}patrons were{{end}} imported.
+</div>
+
+{{if .CredentialsToken}}
+<div class="card border-warning mb-3">
+    <div class="card-body">
+        <h2 class="h6 mb-2">Credentials</h2>
+        <p class="small mb-3">
+            A credentials CSV containing each patron's username and temporary password is
+            available for one download. Once you click Download, the file is purged from
+            the server. Patrons will be required to change their password on first login.
+        </p>
+        <a href="/admin/patrons/import/download/{{.CredentialsToken}}" class="btn btn-warning">
+            Download credentials CSV (single use)
+        </a>
+        <p class="small text-muted mt-3 mb-0">
+            <strong>Tip:</strong> if you skip this download, each patron's temporary password
+            stays accessible from their row on the <a href="/patrons">Patrons page</a>
+            (look for the "Login Setup" button) until they log in or you mark it delivered.
+        </p>
+    </div>
+</div>
+{{end}}
+
+{{if .ErrorsToken}}
+<div class="card border-secondary mb-3">
+    <div class="card-body">
+        <h2 class="h6 mb-2">Skipped rows ({{.ErrorCount}})</h2>
+        <p class="small mb-3">
+            Some rows were skipped. Download the per-row report to fix and re-import.
+        </p>
+        <a href="/admin/patrons/import/download/{{.ErrorsToken}}" class="btn btn-outline-secondary">
+            Download error report
+        </a>
+    </div>
+</div>
+{{end}}
+
+<a href="/admin/patrons/import" class="btn btn-link p-0">Import another file</a>
+{{end}}

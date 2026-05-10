@@ -2,6 +2,11 @@
 <div class="text-center mt-5">
     <div class="fw-bold" style="font-size: 5rem; color: #1e3a5f;">{{.Status}}</div>
     <div class="fs-4 mb-3 text-muted">{{.Message}}</div>
+    {{if .User}}
     <a href="/" class="btn btn-sm" style="color: #1e3a5f; border-color: #1e3a5f;">Go back home</a>
+    {{else}}
+    <a href="/login" class="btn btn-sm" style="color: #1e3a5f; border-color: #1e3a5f;">Sign in</a>
+    <a href="/kiosk" class="btn btn-sm ms-2" style="color: #1e3a5f; border-color: #1e3a5f;">Browse the catalog</a>
+    {{end}}
 </div>
 {{end}}

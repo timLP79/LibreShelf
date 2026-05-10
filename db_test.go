@@ -361,3 +361,344 @@ func TestGetLoanHistoryStatuses(t *testing.T) {
 		t.Errorf("returned count = %d, want 1; statuses=%v", statuses["returned"], statuses)
 	}
 }
+
+func TestSetMustChangePassword(t *testing.T) {
+	dm := setupTestDB(t)
+	id := mustCreateUser(t, dm, "alice", "patron")
+
+	user, err := dm.GetUserByID(id)
+	if err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	if user.MustChangePassword {
+		t.Errorf("must_change_password should default to false")
+	}
+
+	if err := dm.SetMustChangePassword(id); err != nil {
+		t.Fatalf("SetMustChangePassword: %v", err)
+	}
+
+	user, err = dm.GetUserByID(id)
+	if err != nil {
+		t.Fatalf("GetUserByID after set: %v", err)
+	}
+	if !user.MustChangePassword {
+		t.Errorf("must_change_password should be true after Set")
+	}
+}
+
+func TestUpdateUserPasswordClearsMustChangeAndTempPassword(t *testing.T) {
+	dm := setupTestDB(t)
+	_, userID, _, tempPassword, err := dm.CreatePatronWithLogin("Charlie Brown", "", "", "")
+	if err != nil {
+		t.Fatalf("CreatePatronWithLogin: %v", err)
+	}
+	if tempPassword == "" {
+		t.Fatalf("expected non-empty temp password")
+	}
+
+	user, _ := dm.GetUserByID(userID)
+	if !user.MustChangePassword {
+		t.Fatalf("expected MustChangePassword=true after CreatePatronWithLogin")
+	}
+	if user.TempPassword == nil || *user.TempPassword != tempPassword {
+		t.Fatalf("expected temp_password column populated with %q, got %v", tempPassword, user.TempPassword)
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte("NewPass1!"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatalf("bcrypt: %v", err)
+	}
+	if err := dm.UpdateUserPassword(userID, string(newHash)); err != nil {
+		t.Fatalf("UpdateUserPassword: %v", err)
+	}
+
+	user, _ = dm.GetUserByID(userID)
+	if user.MustChangePassword {
+		t.Errorf("must_change_password should clear after UpdateUserPassword")
+	}
+	if user.TempPassword != nil {
+		t.Errorf("temp_password should clear after UpdateUserPassword, got %v", *user.TempPassword)
+	}
+}
+
+func TestCreatePatronWithLogin_SetsTempAndFlag(t *testing.T) {
+	dm := setupTestDB(t)
+	patronID, userID, username, tempPassword, err := dm.CreatePatronWithLogin("Alice Brown", "alice@example.com", "555-0101", `{"external_id":"LC-0001"}`)
+	if err != nil {
+		t.Fatalf("CreatePatronWithLogin: %v", err)
+	}
+	if patronID == 0 || userID == 0 {
+		t.Fatalf("expected non-zero IDs, got patronID=%d userID=%d", patronID, userID)
+	}
+	if username != "abrown" {
+		t.Errorf("username = %q, want %q", username, "abrown")
+	}
+	if err := ValidatePassword(tempPassword); err != nil {
+		t.Errorf("temp password fails ValidatePassword: %v", err)
+	}
+
+	user, _ := dm.GetUserByID(userID)
+	if !user.MustChangePassword {
+		t.Errorf("must_change_password should be true on import")
+	}
+	if user.TempPassword == nil || *user.TempPassword != tempPassword {
+		t.Errorf("temp_password column should equal returned plaintext")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(tempPassword)); err != nil {
+		t.Errorf("returned plaintext should match stored hash: %v", err)
+	}
+}
+
+func TestCreatePatronNoLogin_OnlyPatronRow(t *testing.T) {
+	dm := setupTestDB(t)
+	patronID, err := dm.CreatePatronNoLogin("John Smith", "", "", `{"external_id":"IDOC123"}`)
+	if err != nil {
+		t.Fatalf("CreatePatronNoLogin: %v", err)
+	}
+	if patronID == 0 {
+		t.Fatalf("expected non-zero patronID")
+	}
+
+	patron, err := dm.GetPatronByID(patronID)
+	if err != nil {
+		t.Fatalf("GetPatronByID: %v", err)
+	}
+	if patron.Username != "" {
+		t.Errorf("expected empty Username for no-login patron, got %q", patron.Username)
+	}
+	if patron.HasTempPassword {
+		t.Errorf("expected HasTempPassword=false for no-login patron")
+	}
+}
+
+func TestFindPatronByExternalID(t *testing.T) {
+	dm := setupTestDB(t)
+	wantID, err := dm.CreatePatronNoLogin("Jane Doe", "", "", `{"external_id":"IDOC234567"}`)
+	if err != nil {
+		t.Fatalf("CreatePatronNoLogin: %v", err)
+	}
+
+	hit, err := dm.FindPatronByExternalID("IDOC234567")
+	if err != nil {
+		t.Fatalf("FindPatronByExternalID hit: %v", err)
+	}
+	if hit == nil || hit.ID != wantID {
+		t.Errorf("expected hit ID=%d, got %v", wantID, hit)
+	}
+
+	miss, err := dm.FindPatronByExternalID("IDOC999999")
+	if err != nil {
+		t.Fatalf("FindPatronByExternalID miss: %v", err)
+	}
+	if miss != nil {
+		t.Errorf("expected nil for miss, got %v", miss)
+	}
+
+	empty, err := dm.FindPatronByExternalID("")
+	if err != nil {
+		t.Fatalf("FindPatronByExternalID empty: %v", err)
+	}
+	if empty != nil {
+		t.Errorf("expected nil for empty input, got %v", empty)
+	}
+}
+
+func TestFindPatronByEmail(t *testing.T) {
+	dm := setupTestDB(t)
+	wantID, err := dm.CreatePatronNoLogin("Bob Wilson", "bob@example.com", "", "")
+	if err != nil {
+		t.Fatalf("CreatePatronNoLogin: %v", err)
+	}
+
+	hit, err := dm.FindPatronByEmail("bob@example.com")
+	if err != nil {
+		t.Fatalf("FindPatronByEmail hit: %v", err)
+	}
+	if hit == nil || hit.ID != wantID {
+		t.Errorf("expected hit ID=%d, got %v", wantID, hit)
+	}
+
+	miss, err := dm.FindPatronByEmail("nobody@example.com")
+	if err != nil {
+		t.Fatalf("FindPatronByEmail miss: %v", err)
+	}
+	if miss != nil {
+		t.Errorf("expected nil for miss, got %v", miss)
+	}
+}
+
+func TestGetAllPatrons_IncludesNoLoginPatron(t *testing.T) {
+	dm := setupTestDB(t)
+	noLoginID, err := dm.CreatePatronNoLogin("Records Only", "", "", "")
+	if err != nil {
+		t.Fatalf("CreatePatronNoLogin: %v", err)
+	}
+	loginPatronID, _, _, _, err := dm.CreatePatronWithLogin("With Login", "", "", "")
+	if err != nil {
+		t.Fatalf("CreatePatronWithLogin: %v", err)
+	}
+
+	patrons, err := dm.GetAllPatrons()
+	if err != nil {
+		t.Fatalf("GetAllPatrons: %v", err)
+	}
+	if len(patrons) != 2 {
+		t.Fatalf("expected 2 patrons, got %d", len(patrons))
+	}
+
+	byID := map[int]Patron{}
+	for _, p := range patrons {
+		byID[p.ID] = p
+	}
+	noLogin, ok := byID[noLoginID]
+	if !ok {
+		t.Fatalf("no-login patron missing from list")
+	}
+	if noLogin.Username != "" {
+		t.Errorf("no-login Username = %q, want empty", noLogin.Username)
+	}
+	if noLogin.HasTempPassword {
+		t.Errorf("no-login HasTempPassword should be false")
+	}
+	withLogin := byID[loginPatronID]
+	if withLogin.Username == "" {
+		t.Errorf("with-login Username should be non-empty")
+	}
+	if !withLogin.HasTempPassword {
+		t.Errorf("with-login HasTempPassword should be true (just imported)")
+	}
+}
+
+func TestClearTempPassword(t *testing.T) {
+	dm := setupTestDB(t)
+	_, userID, _, _, err := dm.CreatePatronWithLogin("Mark Delivered", "", "", "")
+	if err != nil {
+		t.Fatalf("CreatePatronWithLogin: %v", err)
+	}
+
+	if err := dm.ClearTempPassword(userID); err != nil {
+		t.Fatalf("ClearTempPassword: %v", err)
+	}
+
+	user, _ := dm.GetUserByID(userID)
+	if user.TempPassword != nil {
+		t.Errorf("temp_password should be NULL after Clear, got %v", *user.TempPassword)
+	}
+	if !user.MustChangePassword {
+		t.Errorf("must_change_password should remain true after Clear (admin-dismissed != patron-changed)")
+	}
+}
+
+func TestRegenerateTempPassword_NewTempReplacesOldAndWipesSessions(t *testing.T) {
+	dm := setupTestDB(t)
+	_, userID, _, originalTemp, err := dm.CreatePatronWithLogin("Bob Wilson", "", "", "")
+	if err != nil {
+		t.Fatalf("CreatePatronWithLogin: %v", err)
+	}
+	if err := dm.CreateSession("session-pre-regen", userID, "csrf-pre", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	newTemp, err := dm.RegenerateTempPassword(userID)
+	if err != nil {
+		t.Fatalf("RegenerateTempPassword: %v", err)
+	}
+	if newTemp == "" || newTemp == originalTemp {
+		t.Errorf("expected new non-empty temp distinct from %q, got %q", originalTemp, newTemp)
+	}
+
+	user, _ := dm.GetUserByID(userID)
+	if user.TempPassword == nil || *user.TempPassword != newTemp {
+		t.Errorf("temp_password should equal newTemp, got %v", user.TempPassword)
+	}
+	if !user.MustChangePassword {
+		t.Errorf("must_change_password should be true after regenerate")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(originalTemp)); err == nil {
+		t.Errorf("original temp should NO LONGER match stored hash after regenerate")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(newTemp)); err != nil {
+		t.Errorf("new temp should match stored hash: %v", err)
+	}
+
+	if _, err := dm.GetSession("session-pre-regen"); err != sql.ErrNoRows {
+		t.Errorf("expected pre-regen session deleted, got %v", err)
+	}
+}
+
+func TestSettings_GetReturnsEmptyForUnset(t *testing.T) {
+	dm := setupTestDB(t)
+	v, err := dm.GetSetting("never_set")
+	if err != nil {
+		t.Fatalf("GetSetting on unset key: %v", err)
+	}
+	if v != "" {
+		t.Errorf("expected empty string for unset key, got %q", v)
+	}
+}
+
+func TestSettings_SetThenGetRoundtrip(t *testing.T) {
+	dm := setupTestDB(t)
+	adminID := mustCreateUser(t, dm, "admin1", "admin")
+
+	if err := dm.SetSetting("staff_can_import_patrons", "true", adminID); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+	v, err := dm.GetSetting("staff_can_import_patrons")
+	if err != nil {
+		t.Fatalf("GetSetting: %v", err)
+	}
+	if v != "true" {
+		t.Errorf("expected 'true', got %q", v)
+	}
+
+	if err := dm.SetSetting("staff_can_import_patrons", "false", adminID); err != nil {
+		t.Fatalf("SetSetting overwrite: %v", err)
+	}
+	v, _ = dm.GetSetting("staff_can_import_patrons")
+	if v != "false" {
+		t.Errorf("expected 'false' after overwrite, got %q", v)
+	}
+}
+
+func TestSettings_GetBoolDefaults(t *testing.T) {
+	dm := setupTestDB(t)
+	adminID := mustCreateUser(t, dm, "admin1", "admin")
+
+	if dm.GetSettingBool("nope", true) != true {
+		t.Errorf("expected default=true for unset key")
+	}
+	if dm.GetSettingBool("nope", false) != false {
+		t.Errorf("expected default=false for unset key")
+	}
+
+	_ = dm.SetSetting("on_key", "true", adminID)
+	if !dm.GetSettingBool("on_key", false) {
+		t.Errorf("expected true for 'true' value")
+	}
+	_ = dm.SetSetting("off_key", "false", adminID)
+	if dm.GetSettingBool("off_key", true) {
+		t.Errorf("expected false for 'false' value")
+	}
+	_ = dm.SetSetting("garbage_key", "yes", adminID)
+	if dm.GetSettingBool("garbage_key", true) {
+		t.Errorf("expected default(true) for malformed value 'yes' -- only 'true' (case-insensitive) returns true")
+	}
+}
+
+func TestGenerateTempPasswordSatisfiesPolicy(t *testing.T) {
+	for i := 0; i < 50; i++ {
+		pw, err := generateTempPassword()
+		if err != nil {
+			t.Fatalf("generateTempPassword: %v", err)
+		}
+		if err := ValidatePassword(pw); err != nil {
+			t.Errorf("generated %q failed ValidatePassword: %v", pw, err)
+		}
+		if strings.ContainsAny(pw, "0Oo1lI") {
+			t.Errorf("generated %q contains an excluded ambiguous character", pw)
+		}
+	}
+}
+
