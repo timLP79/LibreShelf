@@ -586,7 +586,8 @@ func (dm *DatabaseManager) createSchema() {
 		role                 TEXT NOT NULL CHECK(role IN('admin', 'staff', 'patron')),
 		patron_id            INTEGER REFERENCES patrons(id),
 		created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
-		must_change_password INTEGER NOT NULL DEFAULT 0
+		must_change_password INTEGER NOT NULL DEFAULT 0,
+		temp_password        TEXT
 	);
 
 	CREATE TABLE IF NOT EXISTS sessions (
@@ -622,14 +623,15 @@ type User struct {
 	Role               string
 	PatronID           *int
 	MustChangePassword bool
+	TempPassword       *string
 }
 
 func (dm *DatabaseManager) GetUserByUsername(username string) (*User, error) {
 	user := &User{}
 	err := dm.db.QueryRow(
-		"SELECT id, username, password_hash, role, patron_id, must_change_password FROM users WHERE username = ?",
+		"SELECT id, username, password_hash, role, patron_id, must_change_password, temp_password FROM users WHERE username = ?",
 		username,
-	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.PatronID, &user.MustChangePassword)
+	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.PatronID, &user.MustChangePassword, &user.TempPassword)
 	if err != nil {
 		return nil, err
 	}
@@ -639,8 +641,8 @@ func (dm *DatabaseManager) GetUserByUsername(username string) (*User, error) {
 func (dm *DatabaseManager) GetUserByID(id int) (*User, error) {
 	user := &User{}
 	err := dm.db.QueryRow(
-		"SELECT id, username, password_hash, role, patron_id, must_change_password FROM users where id = ?", id,
-	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.PatronID, &user.MustChangePassword)
+		"SELECT id, username, password_hash, role, patron_id, must_change_password, temp_password FROM users where id = ?", id,
+	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.PatronID, &user.MustChangePassword, &user.TempPassword)
 	if err != nil {
 		return nil, err
 	}
@@ -671,7 +673,7 @@ func (dm *DatabaseManager) UpdateUserPassword(id int, passwordHash string) error
 	defer tx.Rollback()
 
 	if _, err := tx.Exec(
-		"UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?",
+		"UPDATE users SET password_hash = ?, must_change_password = 0, temp_password = NULL WHERE id = ?",
 		passwordHash, id,
 	); err != nil {
 		return err
@@ -689,6 +691,48 @@ func (dm *DatabaseManager) SetMustChangePassword(userID int) error {
 		"UPDATE users SET must_change_password = 1 WHERE id = ?", userID,
 	)
 	return err
+}
+
+func (dm *DatabaseManager) ClearTempPassword(userID int) error {
+	_, err := dm.db.Exec(
+		"UPDATE users SET temp_password = NULL WHERE id = ?", userID,
+	)
+	return err
+}
+
+// RegenerateTempPassword generates a new temp, hashes it, swaps both the
+// hash and stored plaintext, sets must_change_password=1, and wipes the
+// user's existing sessions so any in-flight session under the old hash
+// is invalidated.
+func (dm *DatabaseManager) RegenerateTempPassword(userID int) (string, error) {
+	tempPassword, err := generateTempPassword()
+	if err != nil {
+		return "", fmt.Errorf("db: generate temp password: %w", err)
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(tempPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return "", fmt.Errorf("db: hash temp password: %w", err)
+	}
+
+	tx, err := dm.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(
+		`UPDATE users SET password_hash = ?, temp_password = ?, must_change_password = 1 WHERE id = ?`,
+		string(hash), tempPassword, userID,
+	); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec("DELETE FROM sessions WHERE user_id = ?", userID); err != nil {
+		return "", err
+	}
+	if err := tx.Commit(); err != nil {
+		return "", err
+	}
+	return tempPassword, nil
 }
 
 func (dm *DatabaseManager) DeleteUser(id int) error {
@@ -724,12 +768,12 @@ func (dm *DatabaseManager) CreateSession(token string, userID int, csrfToken str
 func (dm *DatabaseManager) GetSession(token string) (*Session, error) {
 	session := &Session{User: &User{}}
 	err := dm.db.QueryRow(`
-		SELECT u.id, u.username, u.password_hash, u.role, u.patron_id, u.must_change_password, s.csrf_token
+		SELECT u.id, u.username, u.password_hash, u.role, u.patron_id, u.must_change_password, u.temp_password, s.csrf_token
 		FROM sessions s
 		JOIN users u on s.user_id = u.id
 		WHERE s.token = ? AND datetime(s.expires_at) > datetime('now')`,
 		token,
-	).Scan(&session.User.ID, &session.User.Username, &session.User.PasswordHash, &session.User.Role, &session.User.PatronID, &session.User.MustChangePassword, &session.CSRFToken)
+	).Scan(&session.User.ID, &session.User.Username, &session.User.PasswordHash, &session.User.Role, &session.User.PatronID, &session.User.MustChangePassword, &session.User.TempPassword, &session.CSRFToken)
 	if err != nil {
 		return nil, err
 	}
@@ -2282,9 +2326,9 @@ func (dm *DatabaseManager) CreatePatronWithLogin(name, email, phone, metadataJSO
 	}
 
 	userRes, err := tx.Exec(
-		`INSERT INTO users (username, password_hash, role, patron_id, must_change_password)
-		 VALUES (?, ?, 'patron', ?, 1)`,
-		username, string(hash), patronID,
+		`INSERT INTO users (username, password_hash, role, patron_id, must_change_password, temp_password)
+		 VALUES (?, ?, 'patron', ?, 1, ?)`,
+		username, string(hash), patronID, tempPassword,
 	)
 	if err != nil {
 		return 0, 0, "", "", err
