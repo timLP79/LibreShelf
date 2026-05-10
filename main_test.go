@@ -55,13 +55,16 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 			}
 			return ""
 		},
+		"add": func(a, b int) int { return a + b },
 	}
 
 	templates = make(map[string]*template.Template)
 	templateNames := []string{
 		"index", "catalog", "book_detail", "book_form",
 		"patrons", "admin", "staff", "loans", "my_loans", "error",
-		"backup_admin",
+		"backup_admin", "admin_settings",
+		"admin_patrons_import", "admin_patrons_import_preview", "admin_patrons_import_result",
+		"patron_login_credentials",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -77,6 +80,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 		))
 	}
 	templates["login"] = template.Must(template.ParseFiles("templates/login.html"))
+	templates["account_change_password"] = template.Must(template.ParseFiles("templates/account_change_password.html"))
 
 	gin.SetMode(gin.TestMode)
 	router := gin.New()

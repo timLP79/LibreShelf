@@ -107,3 +107,117 @@ func TestLoginSuccessSetsSessionCookie(t *testing.T) {
 		t.Errorf("expected session cookie set, got %v", rr.Result().Cookies())
 	}
 }
+
+func TestRequirePasswordCurrent_RedirectsWhenFlagSet(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "alice", "patron")
+	user, _ := dm.GetUserByUsername("alice")
+	if err := dm.SetMustChangePassword(user.ID); err != nil {
+		t.Fatalf("SetMustChangePassword: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusFound {
+		t.Errorf("status = %d, want 302", rr.Code)
+	}
+	if got := rr.Header().Get("Location"); got != "/account/change-password" {
+		t.Errorf("Location = %q, want /account/change-password", got)
+	}
+}
+
+func TestRequirePasswordCurrent_AllowsWhenFlagClear(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin1", "admin")
+
+	req := httptest.NewRequest("GET", "/catalog", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code == http.StatusFound && rr.Header().Get("Location") == "/account/change-password" {
+		t.Errorf("middleware redirected when flag was clear")
+	}
+}
+
+func TestRequirePasswordCurrent_LogoutAllowedWhenFlagSet(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "alice", "patron")
+	user, _ := dm.GetUserByUsername("alice")
+	if err := dm.SetMustChangePassword(user.ID); err != nil {
+		t.Fatalf("SetMustChangePassword: %v", err)
+	}
+
+	rr := logoutHelper(t, router, sess, csrf)
+	if rr.Code != http.StatusFound {
+		t.Errorf("logout status = %d, want 302 (logout should work during forced change)", rr.Code)
+	}
+	if got := rr.Header().Get("Location"); got != "/login" {
+		t.Errorf("logout Location = %q, want /login", got)
+	}
+}
+
+func TestRequireStaffImportAccess_AdminAlwaysPasses(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin1", "admin")
+
+	req := httptest.NewRequest("GET", "/admin/patrons/import", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("admin status = %d, want 200", rr.Code)
+	}
+}
+
+func TestRequireStaffImportAccess_StaffBlockedWhenSettingOff(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "staff1", "staff")
+
+	req := httptest.NewRequest("GET", "/admin/patrons/import", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("staff w/ toggle off status = %d, want 403", rr.Code)
+	}
+}
+
+func TestRequireStaffImportAccess_StaffAllowedWhenSettingOn(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	adminID := mustCreateUser(t, dm, "admin1", "admin")
+	if err := dm.SetSetting("staff_can_import_patrons", "true", adminID); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+	sess, _ := loginAs(t, dm, "staff1", "staff")
+
+	req := httptest.NewRequest("GET", "/admin/patrons/import", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("staff w/ toggle on status = %d, want 200", rr.Code)
+	}
+}
+
+func TestRequireStaffImportAccess_PatronRejected(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	adminID := mustCreateUser(t, dm, "admin1", "admin")
+	_ = dm.SetSetting("staff_can_import_patrons", "true", adminID) // even with toggle on, patron must be rejected
+	sess, _ := loginAs(t, dm, "patron1", "patron")
+
+	req := httptest.NewRequest("GET", "/admin/patrons/import", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("patron status = %d, want 403", rr.Code)
+	}
+}
