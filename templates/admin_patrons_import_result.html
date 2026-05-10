@@ -27,6 +27,11 @@
         <a href="/admin/patrons/import/download/{{.CredentialsToken}}" class="btn btn-warning">
             Download credentials CSV (single use)
         </a>
+        <p class="small text-muted mt-3 mb-0">
+            <strong>Tip:</strong> if you skip this download, each patron's temporary password
+            stays accessible from their row on the <a href="/patrons">Patrons page</a>
+            (look for the "Login Setup" button) until they log in or you mark it delivered.
+        </p>
     </div>
 </div>
 {{end}}
