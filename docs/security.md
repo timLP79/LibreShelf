@@ -374,6 +374,52 @@ c.SetCookie(
 - 8-hour expiry — user must re-login after expiry
 - On logout: delete the session row from the DB immediately
 
+### Force-Change-on-First-Login (DEC-030)
+
+Patrons imported via CSV in "with logins" mode get a server-generated random
+temporary password (12 chars, crypto/rand, ambiguous chars excluded, satisfies
+`ValidatePassword`). The same flow applies to any future admin-initiated
+password reset.
+
+- `users.must_change_password` (default 0). Set to 1 by
+  `CreatePatronWithLogin` and `RegenerateTempPassword`. Cleared by
+  `UpdateUserPassword` in the same UPDATE that writes the new hash.
+- `RequirePasswordCurrent` middleware runs after `RequireAuth` on every route
+  group EXCEPT the `account` group (`/account/change-password` and `/logout`).
+  When the flag is set, every request redirects to the change-password page.
+  Logout is intentionally kept reachable so a stuck patron can sign out and
+  retry.
+- The change-password page validates against `ValidatePassword`, hashes with
+  bcrypt, calls `UpdateUserPassword` (which clears the flag, clears the
+  stored temp, and wipes all of the user's sessions), then clears the
+  session cookie and redirects to `/login` for re-authentication.
+
+### Temporary Password Storage (DEC-030)
+
+`users.temp_password TEXT` (nullable) stores the plaintext temp for per-row
+recovery on `/patrons`. This is a deliberate trade-off: the plaintext sits
+in the SQLite file until the patron successfully changes their password
+(via `UpdateUserPassword`, which NULLs the column) or until an admin clicks
+"Mark as Delivered" (`ClearTempPassword`).
+
+- The reveal page (`GET /patrons/:id/login-credentials`) sets
+  `Cache-Control: no-store, no-cache, must-revalidate, private` and
+  `Pragma: no-cache` so the response is not retained by the browser cache.
+- The credentials CSV download (`GET /admin/patrons/import/download/:token`)
+  sets the same headers and is single-use server-side (token is consumed
+  on first GET).
+- The downloaded credentials CSV and per-row error report defang
+  formula-prefix cells (`=`, `+`, `-`, `@`, `\t`, `\r`) by prepending a
+  single quote at write time. Prevents attacker-controlled patron names
+  from executing as `=HYPERLINK` / `=IMPORTXML` / `=WEBSERVICE` formulas
+  in Excel / LibreOffice / Sheets and exfiltrating the adjacent plaintext
+  temp password. The patron's true `name` is preserved verbatim in the DB.
+
+`RegenerateTempPassword` is the recovery action when a temp is lost or
+believed compromised. It generates a new temp, swaps both the hash and the
+stored plaintext, sets `must_change_password=1`, and deletes the user's
+existing sessions in a single transaction.
+
 ### CSRF Protection
 
 Every state-changing request is protected by a CSRF token. Two separate mechanisms handle

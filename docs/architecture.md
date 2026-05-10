@@ -59,6 +59,17 @@ For numbered design decisions see [`../DECISIONS.md`](../DECISIONS.md).
 | `GET /admin/backup` | Backup admin page (stats + export + restore modal) | Admin |
 | `GET /admin/backup/export` | ZIP backup download | Admin |
 | `POST /admin/backup/import` | ZIP backup restore (atomic swap with `.bak` rollback) | Admin |
+| `GET /admin/settings` | System-wide toggles | Admin |
+| `POST /admin/settings` | Update toggles | Admin |
+| `GET /admin/patrons/import` | CSV patron import form | Admin always; staff when `staff_can_import_patrons` is on |
+| `POST /admin/patrons/import` | Parse + dedup + preview the upload | Same |
+| `POST /admin/patrons/import/confirm` | Commit the import (token-keyed) | Same |
+| `GET /admin/patrons/import/download/:token` | Single-use credentials / errors CSV download | Same |
+| `GET /patrons/:id/login-credentials` | Reveal a patron's temp password for distribution | Staff + admin |
+| `POST /patrons/:id/dismiss-temp` | Clear the stored temp ("Mark as Delivered") | Staff + admin |
+| `POST /patrons/:id/regenerate-temp` | Regenerate temp + invalidate prior sessions | Staff + admin |
+| `GET /account/change-password` | Forced-change form for users with `must_change_password=1` | Any logged-in user |
+| `POST /account/change-password` | Set new password, clear flag, redirect to /login | Any logged-in user |
 
 ---
 
@@ -113,12 +124,14 @@ CREATE TABLE loans (
 --   returned_at IS NULL AND due_date < DATE('now')
 
 CREATE TABLE users (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    username      TEXT NOT NULL UNIQUE,
-    password_hash TEXT NOT NULL,                          -- bcrypt
-    role          TEXT NOT NULL CHECK(role IN ('admin', 'staff', 'patron')),
-    patron_id     INTEGER REFERENCES patrons(id),         -- NULL for admin and staff
-    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+    id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+    username             TEXT NOT NULL UNIQUE,
+    password_hash        TEXT NOT NULL,                       -- bcrypt
+    role                 TEXT NOT NULL CHECK(role IN ('admin', 'staff', 'patron')),
+    patron_id            INTEGER REFERENCES patrons(id),      -- NULL for admin and staff
+    created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+    must_change_password INTEGER NOT NULL DEFAULT 0,          -- 1 forces /account/change-password on next request (DEC-030)
+    temp_password        TEXT                                 -- plaintext temp for per-row reveal on /patrons; cleared on successful change or admin dismissal (DEC-030)
 );
 
 CREATE TABLE sessions (
@@ -126,6 +139,13 @@ CREATE TABLE sessions (
     user_id    INTEGER NOT NULL REFERENCES users(id),
     csrf_token TEXT NOT NULL,                             -- crypto/rand, bound to session (DEC-017)
     expires_at DATETIME NOT NULL                          -- canonical UTC "YYYY-MM-DD HH:MM:SS" (DEC-018)
+);
+
+CREATE TABLE settings (
+    key        TEXT PRIMARY KEY,                          -- key/value store for admin toggles (DEC-030)
+    value      TEXT NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_by INTEGER REFERENCES users(id)
 );
 ```
 

@@ -688,3 +688,163 @@ level, not just the template level. The card-vs-inline split is a
 judgment call per tool; the criterion ("does this need its own
 page?") is loose on purpose so future tools don't get force-fit
 into the wrong category.
+
+
+## DEC-030: CSV patron import + force-change-on-first-login
+
+**Date:** 2026-05-05 (design) through 2026-05-10 (implementation +
+manual verification, branch `csv-patron-import`).
+**Context:** Sales targets (Idaho Department of Corrections,
+mom-and-pop libraries) need bulk patron onboarding from existing
+records. Manual single-patron create scales to maybe 20-50; a
+corrections customer arrives with 500+ inmate records on day one.
+Eight inter-locked sub-decisions, captured together because the CSV
+import, the force-change flow, the settings infrastructure, and the
+per-row credential retrieval path are tightly coupled.
+
+**Decision:**
+
+1. **Standard columns + JSON catch-all, not a mapping UI.** The patron
+   schema has `name`, `email`, `phone` as columns and a single
+   `metadata TEXT` (JSON) catch-all (the column was introduced in
+   DEC-016 for exactly this case). CSV headers go through a
+   normalization pass (lowercase + strip non-alphanumeric) and then a
+   small alias table maps common variants -- "Email Address",
+   "E-mail", "mail" all collapse to `email`; "IDOC Number",
+   "inmate_id", "library card", "card number", "student_id",
+   "patron_id", "external_id" all collapse to the reserved JSON key
+   `metadata.external_id`. Everything else flows through to
+   `metadata.<original_header>` keyed verbatim. No interactive column
+   mapper -- the alias table covers the 90% case and metadata
+   absorbs the rest.
+
+2. **`metadata.external_id` is a reserved JSON key, not a dedicated
+   column.** Considered adding `external_id TEXT` to the `users` or
+   `patrons` table; rejected because:
+   - Future customers each have their own identifier name (IDOC #,
+     library card, student ID, employee ID). A generic `external_id`
+     column works for all but adds schema bloat.
+   - SQLite supports `json_extract(metadata, '$.external_id') = ?`
+     for dedup and indexing. Performance is fine at our scale (<50k
+     patrons).
+   - Application-layer dedup was already the plan, so we don't lose
+     a DB-enforced uniqueness constraint we were going to use.
+
+3. **Two-step preview-then-commit flow.** Upload posts to
+   `POST /admin/patrons/import`, which parses, dedupes, stashes the
+   parsed result in a process-local `sync.Map` keyed by a 16-byte
+   random token, and renders a preview page. The admin sees row
+   counts (insertable, duplicate, empty-name, malformed) plus a
+   first-10 sample. Confirming posts the token to
+   `POST /admin/patrons/import/confirm` which retrieves the parsed
+   data and runs the inserts. TTL sweep on each set keeps the map
+   bounded (30 min). Restart loses pending imports by design.
+
+4. **Account-mode radio: records-only OR with-logins.** Per-import
+   choice (not per-row CSV column). Records-only creates a
+   `patrons` row with no linked `users` row -- patron exists in the
+   system, staff can transact for them, but they cannot log in.
+   `GetAllPatrons` / `GetPatronByID` use `LEFT JOIN users` so
+   no-login patrons appear in the list; `patrons.html` renders the
+   empty Username column as a muted "no login" hint. With-logins
+   path inserts both rows in one transaction, generates a random
+   temp password server-side, sets `must_change_password=1`, and
+   returns the plaintext temp via the function return value.
+
+5. **Random temps with force-change-on-first-login.** Each
+   with-login import generates a 12-char temp via
+   `generateTempPassword` (crypto/rand, ambiguous chars 0/O/1/l/I
+   excluded, satisfies `ValidatePassword`). `must_change_password`
+   column added to `users` (default 0). `RequirePasswordCurrent`
+   middleware runs after `RequireAuth` on every route group except
+   the `account` group, which hosts `/account/change-password` and
+   `/logout` (escape hatch -- a user must always be able to bail
+   out). A flagged user is redirected to the change page on any
+   other request. `UpdateUserPassword` clears the flag and the
+   stored temp in the same UPDATE.
+
+6. **`temp_password` column persists plaintext until claimed.**
+   Initial implementation stored the temp only in an in-memory
+   token map for the single-use credentials CSV download. The
+   first manual test surfaced a hazard: clicking away from the
+   result page lost the temps with no recovery short of wiping the
+   DB or manually resetting each patron's password. Three
+   architectural options considered (`cs408-go-stack-fut`):
+   - Shape 1: persist plaintext `temp_password` column on `users`;
+     per-row reveal UI on `/patrons`; clear on first login OR
+     admin "Mark as Delivered".
+   - Shape 2: regenerate per-patron on demand; no plaintext stored;
+     painful at 500-row scale.
+   - Shape 3: Shape 1 + AES encryption with app-key; added
+     complexity for marginal real-world security gain (DB-file
+     access usually implies shell access).
+   - Picked Shape 1. Patron rows on `/patrons` show a yellow
+     "Login Setup" button when `temp_password IS NOT NULL`. Click
+     opens `/patrons/:id/login-credentials` with the patron name,
+     username, temp password, and three actions: copy-to-clipboard,
+     "Mark as Delivered" (`ClearTempPassword`), and "Regenerate
+     Temporary Password" (`RegenerateTempPassword`, which generates
+     a fresh temp, swaps the hash, sets the flag, wipes sessions).
+     The reveal page sets `Cache-Control: no-store, no-cache,
+     must-revalidate, private` + `Pragma: no-cache`.
+
+7. **Settings table for admin toggles.** New `settings (key, value,
+   updated_at, updated_by)` key/value table. First inhabitant:
+   `staff_can_import_patrons` (default false). When true, staff
+   gain access to the CSV import tool only -- other admin-only
+   features (backup, settings, staff management) stay locked.
+   `RequireStaffImportAccess` middleware (admin always, staff when
+   the setting is true) gates the import routes. Future toggles
+   add a row to `/admin/settings`, a key to `GetSettingBool`, and
+   their own gating middleware. The deferred `cs408-go-stack-o1x`
+   (patron self-registration toggle) is the canonical next use.
+
+8. **Patron import entry point lives on `/patrons`, not `/admin`.**
+   First implementation put the "Patron Import" card on the
+   `/admin` tools-index. Staff with the toggle on couldn't see it
+   (the `/admin` page is admin-only). Moved the entry point to
+   `/patrons` -> "Import CSV" button (visible to admin always,
+   staff when toggle on). Mirrors the same gating as the route's
+   middleware. The card was removed from `/admin` to avoid two
+   entry points to the same tool.
+
+**Security review findings addressed mid-implementation:**
+
+- **CSV formula injection** in the downloaded credentials CSV: an
+  attacker with import rights could embed `=HYPERLINK(...)`,
+  `=IMPORTXML(...)`, or `=WEBSERVICE(...)` in the patron Name
+  column, which would execute in Excel/LibreOffice/Sheets when a
+  different admin later opens the file -- exfiltrating the
+  plaintext temp password from the adjacent column. Fixed by
+  defanging every output cell whose first byte is in `=+-@\t\r`
+  with a leading single quote. Defang happens at CSV write time;
+  the patron's true `name` stays clean in the DB.
+
+- **Plaintext credentials CSV cached by the browser**: the
+  download endpoint shipped without `Cache-Control: no-store`,
+  meaning the response body sat in the browser's disk cache after
+  the single-use server-side token was consumed. Fixed by adding
+  `Cache-Control: no-store, no-cache, must-revalidate, private` +
+  `Pragma: no-cache` on `HandleImportDownload`, matching the
+  per-row reveal page that already had the same headers.
+
+Both findings were caught by running the `security-review` skill
+on the branch diff before merging. The process is now codified
+(see CLAUDE.md "Session Completion" step 3 and AGENTS.md "Security
+Review Requirements"): every non-test/docs/beads-only branch must
+pass a security review before a `bd close`.
+
+**Rationale:** The shape of the feature is driven by the
+asymmetric scale of the target customers. Corrections imports
+hundreds of inmates in a single shot, with no email and a hard
+external identifier (IDOC number). Mom-and-pop libraries import
+tens of patrons with emails and library card numbers. One CSV
+format serves both because the alias table absorbs naming
+differences and the JSON catch-all preserves whatever
+institution-specific fields each customer brings. Force-change is
+the right default for any temp-password flow; persisting the
+plaintext temp in the DB is the right trade-off vs. losing temps
+on a misclick or session boundary, given the DB is already
+trusted and the data is intentionally short-lived. The settings
+table avoids re-inventing the toggle pattern each time and
+provides an audit trail (`updated_by`).
