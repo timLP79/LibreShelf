@@ -21,6 +21,17 @@
         ],
         "matcher": ""
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": ".claude/hooks/context-warn.sh",
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
     ]
   }
 }
