@@ -6,6 +6,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -436,7 +437,9 @@ func TestPatronLoginCredentials_RendersTempPasswordPage(t *testing.T) {
 	if !strings.Contains(body, username) {
 		t.Errorf("body should contain username %q", username)
 	}
-	if !strings.Contains(body, temp) {
+	// The temp password is rendered into HTML, so '&' becomes '&amp;'.
+	// Compare against the escaped form to avoid a flaky substring check.
+	if !strings.Contains(body, html.EscapeString(temp)) {
 		t.Errorf("body should contain temp password")
 	}
 	if got := rr.Header().Get("Cache-Control"); !strings.Contains(got, "no-store") {
