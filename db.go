@@ -71,13 +71,14 @@ type StaffMember struct {
 }
 
 type Patron struct {
-	ID         int
-	Name       string
-	Email      *string
-	Phone      *string
-	JoinedDate string
-	Metadata   *string
-	Username   string
+	ID              int
+	Name            string
+	Email           *string
+	Phone           *string
+	JoinedDate      string
+	Metadata        *string
+	Username        string
+	HasTempPassword bool
 }
 
 func (dm *DatabaseManager) GetAllStaff() ([]StaffMember, error) {
@@ -2128,7 +2129,8 @@ var (
 
 func (dm *DatabaseManager) GetAllPatrons() ([]Patron, error) {
 	rows, err := dm.db.Query(`
-		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata, COALESCE(u.username, '')
+		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata,
+		       COALESCE(u.username, ''), (u.temp_password IS NOT NULL)
 		FROM patrons p
 		LEFT JOIN users u ON u.patron_id = p.id
 		ORDER BY p.name`)
@@ -2140,7 +2142,7 @@ func (dm *DatabaseManager) GetAllPatrons() ([]Patron, error) {
 	var patrons []Patron
 	for rows.Next() {
 		var p Patron
-		if err := rows.Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.JoinedDate, &p.Metadata, &p.Username); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.JoinedDate, &p.Metadata, &p.Username, &p.HasTempPassword); err != nil {
 			return nil, err
 		}
 		patrons = append(patrons, p)
@@ -2151,11 +2153,12 @@ func (dm *DatabaseManager) GetAllPatrons() ([]Patron, error) {
 func (dm *DatabaseManager) GetPatronByID(id int) (*Patron, error) {
 	p := &Patron{}
 	err := dm.db.QueryRow(`
-		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata, COALESCE(u.username, '')
+		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata,
+		       COALESCE(u.username, ''), (u.temp_password IS NOT NULL)
 		FROM patrons p
 		LEFT JOIN users u ON u.patron_id = p.id
 		WHERE p.id = ?`, id,
-	).Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.JoinedDate, &p.Metadata, &p.Username)
+	).Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.JoinedDate, &p.Metadata, &p.Username, &p.HasTempPassword)
 	if err != nil {
 		return nil, err
 	}

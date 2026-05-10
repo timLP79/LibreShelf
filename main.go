@@ -73,6 +73,7 @@ func main() {
 		"patrons", "admin", "staff", "loans", "my_loans",
 		"backup_admin", "admin_settings",
 		"admin_patrons_import", "admin_patrons_import_preview", "admin_patrons_import_result",
+		"patron_login_credentials",
 	}
 	for _, name := range templateNames {
 		templates[name] = template.Must(template.New("layout").Funcs(funcMap).ParseFiles(
@@ -160,6 +161,9 @@ func main() {
 	staff.POST("/patrons", HandlePatronCreate)
 	staff.POST("/patrons/:id/edit", HandlePatronEdit)
 	staff.POST("/patrons/:id/delete", HandlePatronDelete)
+	staff.GET("/patrons/:id/login-credentials", HandlePatronLoginCredentials)
+	staff.POST("/patrons/:id/dismiss-temp", HandlePatronDismissTemp)
+	staff.POST("/patrons/:id/regenerate-temp", HandlePatronRegenerateTemp)
 	staff.GET("/api/openlibrary/isbn/:isbn", HandleOpenLibraryLookup)
 	staff.GET("/books/new", HandleBookNew)
 	staff.POST("/books", HandleBookCreate)

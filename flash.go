@@ -58,6 +58,9 @@ var flashMessages = map[string]string{
 	"backup_imported":          "Backup restored. The previous database and covers are preserved as .bak files for one-step rollback.",
 	"settings_saved":           "Settings saved.",
 	"settings_save_failed":     "Could not save settings. Please try again.",
+	"temp_password_dismissed":  "Temporary password marked as delivered.",
+	"temp_password_regenerated": "New temporary password generated.",
+	"temp_password_unavailable": "No temporary password is set for that patron.",
 }
 
 func flashCookieName(kind string) string {
