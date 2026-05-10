@@ -53,6 +53,26 @@ pull/commit workflow.
 The reason this is a hard rule: the auto-memory is per-device and does not sync. `bd remember`
 travels with the repo.
 
+### GitHub Issues / Projects (HARD RULE)
+
+**bd is the single source of truth for tracking on this project. GitHub Issues is NOT used
+as a parallel tracker.**
+
+- **DO NOT** open issues on GitHub for design notes, backlog items, or internal task tracking.
+- **DO NOT** mirror bd issues to GitHub Issues for visibility. The audience for LibreShelf is
+  paying customers, not an open-source community; sales conversations happen over email, not
+  GitHub.
+- **DO** treat any inbound GitHub issue (e.g. a future customer-filed bug report) as an inbox
+  item: read it, transcribe the relevant content into bd via `bd create`, then close the
+  GitHub issue with a comment pointing at the bd ID. The GitHub issue stays as a closed-state
+  archive; bd carries the work forward.
+
+The CS408 GitHub Project Board (#11) is a historical artifact of the academic project. Do not
+add new cards to it; it tracks CP1-CP7 milestones that are all Done.
+
+This policy was established 2026-05-10 after the csv-patron-import PR surfaced sync drift
+between bd and GitHub Issues. See bd memory `single-tracker-bd-not-github`.
+
 ---
 
 ## Coding Collaboration

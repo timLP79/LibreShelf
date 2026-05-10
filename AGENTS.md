@@ -157,6 +157,11 @@ specifically for the missed review.
 - **Memory:** `bd remember` only. Do NOT write to the per-device auto-memory system at
   `/home/tim/.claude/projects/.../memory/`. That directory must remain empty.
 - **Tasks:** `bd` issues only. Do NOT use `TodoWrite`, `TaskCreate`, or markdown TODO lists.
+- **GitHub Issues / Projects:** NOT used as a parallel tracker. Do not open issues on GitHub
+  for design notes or internal task tracking. If a GitHub issue arrives via an external
+  channel (e.g. customer bug report on a public repo), triage it into bd via `bd create`,
+  then close the GitHub issue with a pointer to the bd ID. The GitHub Issues feature stays
+  enabled as an inbox; bd is the canonical tracker.
 
 See the Persistence and Memory section of `CLAUDE.md` for the full reasoning.
 
