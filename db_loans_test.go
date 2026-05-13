@@ -400,6 +400,68 @@ func TestCountOutOfStockReflectsBooks(t *testing.T) {
 	}
 }
 
+// TestGetOutOfStockBooksReturnsOnlyZeroAvailable pins that the catalog
+// filter feeding /catalog?filter=out returns ONLY books with
+// quantity_available=0, regardless of quantity_total. In-stock books
+// with one or more copies free must not leak into the result.
+func TestGetOutOfStockBooksReturnsOnlyZeroAvailable(t *testing.T) {
+	dm := setupTestDB(t)
+
+	outA := &Book{Title: "OOS Apple", QuantityTotal: 1, QuantityAvailable: 0}
+	if _, err := dm.CreateBook(outA, []string{"X"}); err != nil {
+		t.Fatalf("CreateBook outA: %v", err)
+	}
+	outB := &Book{Title: "OOS Banana", QuantityTotal: 2, QuantityAvailable: 0}
+	if _, err := dm.CreateBook(outB, []string{"Y"}); err != nil {
+		t.Fatalf("CreateBook outB: %v", err)
+	}
+	inStock := &Book{Title: "Has Stock", QuantityTotal: 3, QuantityAvailable: 3}
+	if _, err := dm.CreateBook(inStock, []string{"Z"}); err != nil {
+		t.Fatalf("CreateBook inStock: %v", err)
+	}
+	partial := &Book{Title: "Partial Stock", QuantityTotal: 3, QuantityAvailable: 1}
+	if _, err := dm.CreateBook(partial, []string{"W"}); err != nil {
+		t.Fatalf("CreateBook partial: %v", err)
+	}
+
+	got, err := dm.GetOutOfStockBooks()
+	if err != nil {
+		t.Fatalf("GetOutOfStockBooks: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len(books) = %d, want 2", len(got))
+	}
+	// ORDER BY title -> Apple, Banana
+	if got[0].Title != "OOS Apple" || got[1].Title != "OOS Banana" {
+		t.Errorf("unexpected titles %q, %q", got[0].Title, got[1].Title)
+	}
+	for _, b := range got {
+		if b.QuantityAvailable != 0 {
+			t.Errorf("book %q leaked into out-of-stock results with quantity_available=%d",
+				b.Title, b.QuantityAvailable)
+		}
+	}
+}
+
+// TestGetOutOfStockBooksEmptyResult pins the zero-row path: when every
+// book has at least one copy free, the method returns a nil/empty
+// slice and no error (not a sql.ErrNoRows wrapper).
+func TestGetOutOfStockBooksEmptyResult(t *testing.T) {
+	dm := setupTestDB(t)
+	b := &Book{Title: "Always Available", QuantityTotal: 1, QuantityAvailable: 1}
+	if _, err := dm.CreateBook(b, []string{"A"}); err != nil {
+		t.Fatalf("CreateBook: %v", err)
+	}
+
+	got, err := dm.GetOutOfStockBooks()
+	if err != nil {
+		t.Fatalf("GetOutOfStockBooks: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("len(books) = %d, want 0", len(got))
+	}
+}
+
 // TestCheckoutBookConcurrentRace proves the TOCTOU safety of CheckoutBook
 // under contention. With quantity_available=1 and N goroutines racing to
 // check out the same book on behalf of N distinct patrons, exactly one

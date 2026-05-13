@@ -19,6 +19,13 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
 </div>{{end}}
 
+{{if eq .Filter "out"}}
+<div class="alert alert-info d-flex justify-content-between align-items-center" role="alert">
+    <span>Showing <strong>out of stock</strong> only ({{len .Books}}{{if eq (len .Books) 1}} book{{else}} books{{end}}).</span>
+    <a href="/catalog" class="btn btn-sm btn-outline-secondary">Show all books</a>
+</div>
+{{end}}
+
 <!-- Search and Filter Bar -->
 <div class="card mb-4">
     <div class="card-body">

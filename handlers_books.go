@@ -19,7 +19,23 @@ import (
 
 func HandleCatalog(c *gin.Context) {
 	dm := getDB(c)
-	books, err := dm.GetAllBooks()
+
+	// ?filter=out shows only books with quantity_available = 0.
+	// Any other (or missing) value falls through to the full catalog.
+	// Matches the /loans?filter=overdue|active pattern.
+	filter := c.Query("filter")
+
+	var (
+		books []Book
+		err   error
+	)
+	switch filter {
+	case "out":
+		books, err = dm.GetOutOfStockBooks()
+	default:
+		filter = ""
+		books, err = dm.GetAllBooks()
+	}
 	if err != nil {
 		log.Printf("Failed to fetch books: %v", err)
 		c.Status(http.StatusInternalServerError)
@@ -34,6 +50,7 @@ func HandleCatalog(c *gin.Context) {
 	renderTemplate(c, "catalog", gin.H{
 		"Title":         "Catalog",
 		"Books":         books,
+		"Filter":        filter,
 		"Success":       readAndClearFlash(c, flashKindSuccess),
 		"SuccessDetail": readAndClearFlashDetail(c),
 		"Error":         readAndClearFlash(c, flashKindError),

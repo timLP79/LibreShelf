@@ -136,6 +136,44 @@ func (dm *DatabaseManager) GetAllBooks() ([]Book, error) {
 	return books, rows.Err()
 }
 
+// GetOutOfStockBooks returns books whose quantity_available is 0
+// (every copy is checked out). Used by HandleCatalog when invoked
+// with ?filter=out so the dashboard's Out-of-Stock card can deep-link
+// into a filtered catalog view. The shape matches GetAllBooks so the
+// same template renders the result.
+func (dm *DatabaseManager) GetOutOfStockBooks() ([]Book, error) {
+	rows, err := dm.db.Query(`
+		SELECT b.id, b.title, b.isbn, b.cover_filename, b.year, b.publisher,
+		       b.description, b.genre, b.quantity_total, b.quantity_available,
+		       GROUP_CONCAT(a.name, ', ') AS authors
+		FROM books b
+		LEFT JOIN book_authors ba ON b.id = ba.book_id
+		LEFT JOIN authors a ON ba.author_id = a.id
+		WHERE b.quantity_available = 0
+		GROUP BY b.id
+		ORDER BY b.title`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var books []Book
+	for rows.Next() {
+		var book Book
+		var authors *string
+		if err := rows.Scan(&book.ID, &book.Title, &book.ISBN, &book.CoverFilename,
+			&book.Year, &book.Publisher, &book.Description, &book.Genre,
+			&book.QuantityTotal, &book.QuantityAvailable, &authors); err != nil {
+			return nil, err
+		}
+		if authors != nil {
+			book.Authors = *authors
+		}
+		books = append(books, book)
+	}
+	return books, rows.Err()
+}
+
 func (dm *DatabaseManager) GetBookByID(id int) (*Book, error) {
 	book := &Book{}
 	err := dm.db.QueryRow(`         

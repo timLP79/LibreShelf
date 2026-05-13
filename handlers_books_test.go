@@ -1100,6 +1100,75 @@ func TestCatalogRendersForStaff(t *testing.T) {
 	}
 }
 
+// TestCatalogFilterOutShowsOnlyOutOfStock pins the ?filter=out branch
+// of HandleCatalog. With one out-of-stock book and one in-stock book,
+// the filtered view must contain the out-of-stock title and NOT the
+// in-stock one, plus the "Showing out of stock only" banner.
+func TestCatalogFilterOutShowsOnlyOutOfStock(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "filter_staff", "staff")
+
+	outBook := &Book{Title: "OOS-Title-XYZZY", QuantityTotal: 1, QuantityAvailable: 0}
+	if _, err := dm.CreateBook(outBook, []string{"A"}); err != nil {
+		t.Fatalf("CreateBook outBook: %v", err)
+	}
+	inBook := &Book{Title: "InStock-Title-PLUGH", QuantityTotal: 1, QuantityAvailable: 1}
+	if _, err := dm.CreateBook(inBook, []string{"B"}); err != nil {
+		t.Fatalf("CreateBook inBook: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", "/catalog?filter=out", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "OOS-Title-XYZZY") {
+		t.Errorf("body should contain out-of-stock title")
+	}
+	if strings.Contains(body, "InStock-Title-PLUGH") {
+		t.Errorf("body should NOT contain in-stock title under ?filter=out")
+	}
+	if !strings.Contains(body, "out of stock") {
+		t.Errorf("body should contain the filter banner text")
+	}
+}
+
+// TestCatalogNoFilterShowsAllBooks confirms the default (no filter)
+// branch still returns every book. Companion to the filter-out test.
+func TestCatalogNoFilterShowsAllBooks(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "noflt_staff", "staff")
+
+	outBook := &Book{Title: "OOS-AllView-XYZZY", QuantityTotal: 1, QuantityAvailable: 0}
+	if _, err := dm.CreateBook(outBook, []string{"A"}); err != nil {
+		t.Fatalf("CreateBook outBook: %v", err)
+	}
+	inBook := &Book{Title: "InStock-AllView-PLUGH", QuantityTotal: 1, QuantityAvailable: 1}
+	if _, err := dm.CreateBook(inBook, []string{"B"}); err != nil {
+		t.Fatalf("CreateBook inBook: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", "/catalog", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "OOS-AllView-XYZZY") {
+		t.Errorf("body should contain out-of-stock title in unfiltered view")
+	}
+	if !strings.Contains(body, "InStock-AllView-PLUGH") {
+		t.Errorf("body should contain in-stock title in unfiltered view")
+	}
+}
+
 func TestDashboardRendersForStaff(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, _ := loginAs(t, dm, "staff_dash", "staff")
