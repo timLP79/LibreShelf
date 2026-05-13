@@ -41,6 +41,23 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	dm := NewDatabaseManager(tmpDir + "/test.sqlite")
 	dm.SeedBooks()
 
+	// brokenDM is a second DatabaseManager whose *sql.DB has been closed.
+	// Tests that need to drive a handler's generic DB-error branch send
+	// the X-Test-Break-Handler-DB: 1 header; a middleware appended after
+	// the auth/CSRF/DBReadLock chain swaps the request-scoped "db" key
+	// to point at brokenDM. The handler's first DB call then returns
+	// "sql: database is closed" and the err != nil branch fires.
+	brokenDM := NewDatabaseManager(tmpDir + "/broken.sqlite")
+	if err := brokenDM.db.Close(); err != nil {
+		t.Fatalf("close brokenDM: %v", err)
+	}
+	breakDBIfHeaderSet := func(c *gin.Context) {
+		if c.GetHeader("X-Test-Break-Handler-DB") == "1" {
+			c.Set("db", brokenDM)
+		}
+		c.Next()
+	}
+
 	funcMap := template.FuncMap{
 		"deref": func(v interface{}) interface{} {
 			switch p := v.(type) {
@@ -90,15 +107,18 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	router.Use(SecurityHeaders)
 	router.Use(DatabaseMiddleware(dm))
 
-	// Public routes
-	router.GET("/login", HandleLogin)
-	router.POST("/login", LoginCSRFProtect, HandleLoginPost)
-	router.GET("/kiosk", HandleKiosk)
-	router.GET("/kiosk/books/:id", HandleKioskBookDetail)
+	// Public routes (also covered by the header-gated swap so coverage
+	// tests can exercise their DB-error branches).
+	public := router.Group("/")
+	public.Use(breakDBIfHeaderSet)
+	public.GET("/login", HandleLogin)
+	public.POST("/login", LoginCSRFProtect, HandleLoginPost)
+	public.GET("/kiosk", HandleKiosk)
+	public.GET("/kiosk/books/:id", HandleKioskBookDetail)
 
 	// Authenticated routes -- any logged in user
 	auth := router.Group("/")
-	auth.Use(RequireAuth, RequirePasswordCurrent, CSRFProtect, DBReadLock)
+	auth.Use(RequireAuth, RequirePasswordCurrent, CSRFProtect, DBReadLock, breakDBIfHeaderSet)
 	auth.GET("/", HandleIndex)
 	auth.GET("/catalog", HandleCatalog)
 	auth.GET("/books/:id", HandleBookDetail)
@@ -106,19 +126,19 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 	// Account routes -- no RequirePasswordCurrent; must stay reachable
 	// while the flag is set.
 	account := router.Group("/")
-	account.Use(RequireAuth, CSRFProtect, DBReadLock)
+	account.Use(RequireAuth, CSRFProtect, DBReadLock, breakDBIfHeaderSet)
 	account.GET("/account/change-password", HandleChangePassword)
 	account.POST("/account/change-password", HandleChangePasswordPost)
 	account.POST("/logout", HandleLogout)
 
 	// Patron-only routes
 	patron := router.Group("/")
-	patron.Use(RequireAuth, RequirePasswordCurrent, RequirePatron, CSRFProtect, DBReadLock)
+	patron.Use(RequireAuth, RequirePasswordCurrent, RequirePatron, CSRFProtect, DBReadLock, breakDBIfHeaderSet)
 	patron.GET("/my/loans", HandleMyLoans)
 
 	// Staff routes -- admin + staff
 	staff := router.Group("/")
-	staff.Use(RequireAuth, RequirePasswordCurrent, RequireStaff, CSRFProtect, DBReadLock)
+	staff.Use(RequireAuth, RequirePasswordCurrent, RequireStaff, CSRFProtect, DBReadLock, breakDBIfHeaderSet)
 	staff.GET("/patrons", HandlePatronList)
 	staff.POST("/patrons", HandlePatronCreate)
 	staff.POST("/patrons/:id/edit", HandlePatronEdit)
@@ -137,7 +157,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 
 	// Admin-only routes (read-locked)
 	admin := router.Group("/")
-	admin.Use(RequireAuth, RequirePasswordCurrent, RequireAdmin, CSRFProtect, DBReadLock)
+	admin.Use(RequireAuth, RequirePasswordCurrent, RequireAdmin, CSRFProtect, DBReadLock, breakDBIfHeaderSet)
 	admin.GET("/staff", HandleStaffList)
 	admin.POST("/staff", HandleStaffCreate)
 	admin.POST("/staff/:id/edit", HandleStaffEdit)
@@ -152,7 +172,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 
 	// Patron import (mirror)
 	patronImport := router.Group("/")
-	patronImport.Use(RequireAuth, RequirePasswordCurrent, RequireStaffImportAccess, CSRFProtect, DBReadLock)
+	patronImport.Use(RequireAuth, RequirePasswordCurrent, RequireStaffImportAccess, CSRFProtect, DBReadLock, breakDBIfHeaderSet)
 	patronImport.GET("/admin/patrons/import", HandlePatronImportForm)
 	patronImport.POST("/admin/patrons/import", HandlePatronImportPreview)
 	patronImport.POST("/admin/patrons/import/confirm", HandlePatronImportCommit)
@@ -160,7 +180,7 @@ func setupTestRouter(t *testing.T) (*gin.Engine, *DatabaseManager) {
 
 	// Admin write routes -- no DBReadLock; takes write lock directly.
 	adminWrite := router.Group("/")
-	adminWrite.Use(RequireAuth, RequirePasswordCurrent, RequireAdmin, CSRFProtect)
+	adminWrite.Use(RequireAuth, RequirePasswordCurrent, RequireAdmin, CSRFProtect, breakDBIfHeaderSet)
 	adminWrite.POST("/admin/backup/import", HandleBackupImport)
 
 	router.NoRoute(HandleNotFound)

@@ -136,7 +136,7 @@ Deploy guide: `docs/deployment.md` (build, scp, systemctl).
 
 ## Current State
 
-All checkpoints complete. CP1-CP4 shipped over weeks 3-5. CP5 closed 2026-04-18 (6 days early). CP6 closed 2026-04-25 (PR #42, 169 tests). CP7 closed 2026-05-01 across PRs #74 / #75 / #76, deployed to EC2 the same day. Final test coverage 67.6% on `libreshelf`, 87.5% on `internal/safezip`.
+All checkpoints complete. CP1-CP4 shipped over weeks 3-5. CP5 closed 2026-04-18 (6 days early). CP6 closed 2026-04-25 (PR #42, 169 tests). CP7 closed 2026-05-01 across PRs #74 / #75 / #76, deployed to EC2 the same day. Test coverage 74.9% on `libreshelf`, 87.5% on `internal/safezip`, 75.2% overall after the al3 follow-up landed 2026-05-12 (header-gated handler DB-fault scaffolding in `setupTestRouter`).
 
 For per-checkpoint detail:
 - `bd memories cp5-architecture` -- staff / book / patron CRUD, OL integration, cover validation
@@ -190,7 +190,7 @@ CP1-CP7 closed; LibreShelf is feature-complete for CS408 submission. See `bd mem
 
 - [x] #23 -- Admin panel: ZIP export and import (DEC-027). Shipped via PR #74. `internal/safezip` package handles Zip Slip / symlink / absolute-path / size limits with two-pass validation. Export uses `VACUUM INTO`; import uses an in-process swap under a global `sync.RWMutex` with `.bak` rollback and live-session preservation.
 - [x] #24 -- Testing, polish, and deploy. Shipped via PR #75 + follow-up `af31e3d`. `SecurityHeaders` middleware (X-Frame-Options DENY, CSP locked to local assets, X-Content-Type-Options nosniff, Referrer-Policy same-origin, HSTS gated on APP_ENV=production), `SetTrustedProxies([]string{"127.0.0.1"})`, Go 1.25.0 -> 1.25.9 toolchain bump (cleared 19 stdlib CVEs flagged by `govulncheck`), nginx `client_max_body_size 100M` for backup imports, EC2 redeployed and verified end-to-end.
-- [x] #62 (cs408-go-stack-al3) -- Test coverage push, partial. Shipped via PR #76. 61.2% baseline -> 67.6% (+6.4%); `internal/safezip` held at 87.5%. 75% headline target NOT reached; reaching it requires fault-injection scaffolding for handler error paths and was deferred. Mandatory items shipped: Zip Slip rejection test, `httptest.NewServer` for OL paths, `httptest.NewServer` for cover-URL paths.
+- [x] #62 (cs408-go-stack-al3) -- Test coverage push. Shipped via PR #76 (initial 67.6%) and follow-up 2026-05-12 reaching 75.2% overall. Header-gated handler DB-fault middleware added to `setupTestRouter`: requests with `X-Test-Break-Handler-DB: 1` get a closed `*DatabaseManager` injected after auth/CSRF/DBReadLock, so the handler's first DB call hits its `err != nil` branch while middleware sees a healthy DB. Mandatory items shipped: Zip Slip rejection test, `httptest.NewServer` for OL paths, `httptest.NewServer` for cover-URL paths. No 0% in `handlers_auth.go`, `validators.go`, `openlibrary.go`, `covers.go`.
 
 ### Deferred post-submission backlog
 
