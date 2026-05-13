@@ -5,6 +5,9 @@ package main
 
 import (
 	"database/sql"
+	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -394,5 +397,101 @@ func TestCountOutOfStockReflectsBooks(t *testing.T) {
 	}
 	if count != 2 {
 		t.Errorf("expected 2 out-of-stock books, got %d", count)
+	}
+}
+
+// TestCheckoutBookConcurrentRace proves the TOCTOU safety of CheckoutBook
+// under contention. With quantity_available=1 and N goroutines racing to
+// check out the same book on behalf of N distinct patrons, exactly one
+// must succeed and the rest must see ErrNoCopiesAvailable -- nothing else.
+//
+// The design that makes this safe: the availability read and the row
+// update happen inside one transaction, and SQLite serializes writers via
+// the journal/WAL lock (with PRAGMA busy_timeout the loser queues on the
+// lock instead of returning SQLITE_BUSY). If a future refactor moves the
+// "available <= 0" guard outside the transaction, this test catches it
+// because quantity_available would go negative and the success count
+// would exceed 1.
+//
+// The N=10 goroutines use 10 distinct patrons so the MaxActiveLoansPerPatron
+// guard is not in play; if all 10 used the same patron, the loan-limit
+// guard would mask the availability race.
+func TestCheckoutBookConcurrentRace(t *testing.T) {
+	dm := setupTestDB(t)
+	bookID := mustCreateBook(t, dm, "Race Target", 1)
+
+	const N = 10
+	patronIDs := make([]int, N)
+	for i := 0; i < N; i++ {
+		patronIDs[i] = mustCreatePatron(t, dm, "Racer "+string(rune('A'+i)))
+	}
+
+	dueDate := time.Now().AddDate(0, 0, DefaultLoanTermDays)
+
+	var (
+		successCount  atomic.Int32
+		noCopiesCount atomic.Int32
+		otherErrCount atomic.Int32
+
+		otherMu        sync.Mutex
+		otherErrSample error // first non-nil non-ErrNoCopiesAvailable for diagnostics
+	)
+
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(N)
+	for i := 0; i < N; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			<-start // line all goroutines up before firing
+			err := dm.CheckoutBook(bookID, patronIDs[i], dueDate)
+			switch {
+			case err == nil:
+				successCount.Add(1)
+			case errors.Is(err, ErrNoCopiesAvailable):
+				noCopiesCount.Add(1)
+			default:
+				otherErrCount.Add(1)
+				otherMu.Lock()
+				if otherErrSample == nil {
+					otherErrSample = err
+				}
+				otherMu.Unlock()
+			}
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	if got := successCount.Load(); got != 1 {
+		t.Errorf("success count = %d, want 1", got)
+	}
+	if got := noCopiesCount.Load(); got != N-1 {
+		t.Errorf("ErrNoCopiesAvailable count = %d, want %d", got, N-1)
+	}
+	if got := otherErrCount.Load(); got != 0 {
+		otherMu.Lock()
+		sample := otherErrSample
+		otherMu.Unlock()
+		t.Errorf("unexpected non-nil non-ErrNoCopiesAvailable count = %d (first: %v)", got, sample)
+	}
+
+	// Final state: quantity_available must be 0 (NOT negative -- the
+	// regression we are guarding against). And exactly one loan row.
+	var available int
+	if err := dm.db.QueryRow(`SELECT quantity_available FROM books WHERE id = ?`, bookID).Scan(&available); err != nil {
+		t.Fatalf("query quantity_available: %v", err)
+	}
+	if available != 0 {
+		t.Errorf("quantity_available = %d, want 0 (negative means TOCTOU broke)", available)
+	}
+
+	var loanCount int
+	if err := dm.db.QueryRow(`SELECT COUNT(*) FROM loans WHERE book_id = ?`, bookID).Scan(&loanCount); err != nil {
+		t.Fatalf("query loan count: %v", err)
+	}
+	if loanCount != 1 {
+		t.Errorf("loans count = %d, want 1", loanCount)
 	}
 }

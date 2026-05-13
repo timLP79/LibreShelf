@@ -481,6 +481,19 @@ func openDB(dbPath string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("WAL: %w", err)
 	}
+	// Wait up to 5s for the write lock instead of returning SQLITE_BUSY
+	// immediately. SQLite serializes writers; without a busy timeout,
+	// concurrent writes (e.g. two staff checking out books simultaneously)
+	// would return SQLITE_BUSY to the loser even though the winner is
+	// only milliseconds from releasing the lock. 5s is well above any
+	// real LibreShelf transaction time and below any user-perceptible
+	// timeout. Verified load-bearing by the concurrent-checkout test
+	// (cs408-go-stack-7an): without this PRAGMA, that test fails with
+	// "database is locked (5) (SQLITE_BUSY)" on the losing goroutines.
+	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("busy_timeout: %w", err)
+	}
 	return db, nil
 }
 
