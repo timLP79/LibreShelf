@@ -851,9 +851,9 @@ provides an audit trail (`updated_by`).
 
 ---
 
-## DEC-031: SQLite `busy_timeout = 5000` to make WAL-mode writers queue cleanly
+## DEC-031: SQLite `busy_timeout = 5000` (set per-connection via DSN) to make WAL-mode writers queue cleanly
 
-**Date:** 2026-05-12 (cs408-go-stack-7an, commit `ac06305`).
+**Date:** 2026-05-12 (cs408-go-stack-7an, commits `ac06305` + follow-up).
 
 **Context:** `openDB` already set `journal_mode=WAL` (DEC-002 era),
 which lets readers and writers proceed without blocking each other in
@@ -872,11 +872,37 @@ of milliseconds. The fix is one of those SQLite settings that every
 other client (the `sqlite3` CLI, the mattn driver) sets by default;
 `modernc.org/sqlite` does not.
 
-**Decision:** Add `PRAGMA busy_timeout = 5000` to `openDB` after the
-WAL PRAGMA. Five seconds is the wait budget for the journal lock: well
-above any real LibreShelf transaction (the slowest one writes a single
-loan row and decrements a count, sub-millisecond) and below any
-user-perceptible request timeout.
+**Decision:** Set `busy_timeout=5000` (along with `foreign_keys=on`
+and `journal_mode=WAL`) in the *DSN* passed to `sql.Open`, not via a
+post-Open `db.Exec("PRAGMA ...")` call. The modernc.org/sqlite driver
+reads the DSN's `_pragma=...` query parameters and applies each
+PRAGMA on **every new connection** it opens. The DSN form is:
+
+    file.sqlite?_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)
+
+Five seconds is the wait budget for the journal lock: well above any
+real LibreShelf transaction (the slowest one writes a single loan row
+and decrements a count, sub-millisecond) and below any user-perceptible
+request timeout.
+
+**Why per-connection matters.** `database/sql` is a connection *pool*.
+When you call `db.Exec("PRAGMA busy_timeout = 5000")`, the pool hands
+out one connection, runs the statement on it, and returns it to the
+pool. Other connections opened later -- e.g. when goroutines race for
+checkout -- start with `busy_timeout=0`. The first version of this
+change used the post-Open `db.Exec` form and passed locally because my
+machine reused a single connection often enough to avoid the issue;
+CI's scheduler opened multiple connections under contention and the
+losing goroutines bounced off the journal lock with `SQLITE_BUSY`.
+The DSN form fixes this because the driver runs `applyQueryParams` in
+`newConn` for every connection it opens (see
+`modernc.org/sqlite/conn.go`).
+
+`foreign_keys` is also per-connection in SQLite and was subject to the
+same bug pre-fix; this change closes that hole too. `journal_mode=WAL`
+is persisted in the database file once set, so it survived the
+single-connection misconfiguration, but it's still cleaner to assert
+it on every connection.
 
 **Effect on the checkout TOCTOU claim.** `CheckoutBook` already did
 the right thing structurally: the availability read and the decrement

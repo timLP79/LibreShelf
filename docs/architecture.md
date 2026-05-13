@@ -316,13 +316,14 @@ template edit takes effect only after a process restart.
 `modernc.org/sqlite` registers as `"sqlite"`, not `"sqlite3"`. Pure Go -- no CGo, no system
 library dependency. This means a single static binary for any GOOS/GOARCH target.
 
-`openDB` sets three PRAGMAs on every connection: `foreign_keys=ON`, `journal_mode=WAL`, and
-`busy_timeout=5000`. WAL lets readers and writers proceed without blocking each other, and
-the 5s busy timeout makes a losing concurrent writer queue on the journal lock instead of
-returning `SQLITE_BUSY`. Together they let two staff members hit checkout simultaneously
-without spurious errors, and they make the in-transaction availability guard in
-`CheckoutBook` provably TOCTOU-safe under contention (see `TestCheckoutBookConcurrentRace`
-in `db_loans_test.go` and DEC-031).
+`openDB` passes three PRAGMAs in the DSN -- `foreign_keys=on`, `journal_mode=WAL`, and
+`busy_timeout=5000` -- so the driver applies them to every connection it opens, not just
+the first one a `db.Exec("PRAGMA ...")` call would grab from the pool. WAL lets readers and
+writers proceed without blocking each other, and the 5s busy timeout makes a losing
+concurrent writer queue on the journal lock instead of returning `SQLITE_BUSY`. Together
+they let two staff members hit checkout simultaneously without spurious errors, and they
+make the in-transaction availability guard in `CheckoutBook` provably TOCTOU-safe under
+contention (see `TestCheckoutBookConcurrentRace` in `db_loans_test.go` and DEC-031).
 
 ### Loan state via columns, not a status field
 

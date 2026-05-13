@@ -469,30 +469,37 @@ func NewDatabaseManager(dbPath string) *DatabaseManager {
 // when reopening after a swap, where a non-fatal failure must be
 // recoverable rather than killing the server.
 func openDB(dbPath string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite", dbPath)
+	// PRAGMAs are passed in the DSN so the modernc.org/sqlite driver
+	// applies them to *every* connection it opens, not just the first
+	// one a `db.Exec("PRAGMA ...")` call happens to grab from the pool.
+	//
+	//   foreign_keys   per-connection. Default off; must be set on each
+	//                  new connection.
+	//   journal_mode   database-level (persisted in the file once set),
+	//                  but harmless to assert per-connection.
+	//   busy_timeout   per-connection. Default 0 -- a losing concurrent
+	//                  writer returns SQLITE_BUSY immediately. With 5s,
+	//                  the loser queues on the journal/WAL lock and then
+	//                  re-evaluates its guards inside its own transaction.
+	//                  Verified load-bearing by TestCheckoutBookConcurrentRace
+	//                  in db_loans_test.go (cs408-go-stack-7an, DEC-031).
+	//
+	// Earlier this code used `db.Exec("PRAGMA ...")` after Open, which
+	// only set the PRAGMA on the single connection borrowed by that
+	// Exec call. CI exposed this on the TOCTOU test: goroutines that
+	// got fresh pool connections saw busy_timeout=0 and bounced with
+	// SQLITE_BUSY.
+	dsn := dbPath + "?_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)"
+	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)
 	}
-	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+	// Touch the DB so the driver opens a connection and surfaces any
+	// PRAGMA failure (bad path, permissions) here rather than at first
+	// query time.
+	if err := db.Ping(); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("foreign_keys: %w", err)
-	}
-	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("WAL: %w", err)
-	}
-	// Wait up to 5s for the write lock instead of returning SQLITE_BUSY
-	// immediately. SQLite serializes writers; without a busy timeout,
-	// concurrent writes (e.g. two staff checking out books simultaneously)
-	// would return SQLITE_BUSY to the loser even though the winner is
-	// only milliseconds from releasing the lock. 5s is well above any
-	// real LibreShelf transaction time and below any user-perceptible
-	// timeout. Verified load-bearing by the concurrent-checkout test
-	// (cs408-go-stack-7an): without this PRAGMA, that test fails with
-	// "database is locked (5) (SQLITE_BUSY)" on the losing goroutines.
-	if _, err := db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("busy_timeout: %w", err)
+		return nil, fmt.Errorf("ping: %w", err)
 	}
 	return db, nil
 }
