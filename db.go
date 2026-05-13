@@ -469,9 +469,10 @@ func NewDatabaseManager(dbPath string) *DatabaseManager {
 // when reopening after a swap, where a non-fatal failure must be
 // recoverable rather than killing the server.
 func openDB(dbPath string) (*sql.DB, error) {
-	// PRAGMAs are passed in the DSN so the modernc.org/sqlite driver
-	// applies them to *every* connection it opens, not just the first
-	// one a `db.Exec("PRAGMA ...")` call happens to grab from the pool.
+	// PRAGMAs and txlock are passed in the DSN so the modernc.org/sqlite
+	// driver applies them to *every* connection it opens, not just the
+	// first one a `db.Exec("PRAGMA ...")` call happens to grab from the
+	// pool.
 	//
 	//   foreign_keys   per-connection. Default off; must be set on each
 	//                  new connection.
@@ -481,15 +482,23 @@ func openDB(dbPath string) (*sql.DB, error) {
 	//                  writer returns SQLITE_BUSY immediately. With 5s,
 	//                  the loser queues on the journal/WAL lock and then
 	//                  re-evaluates its guards inside its own transaction.
-	//                  Verified load-bearing by TestCheckoutBookConcurrentRace
-	//                  in db_loans_test.go (cs408-go-stack-7an, DEC-031).
+	//   _txlock        every non-readonly Begin() issues "BEGIN IMMEDIATE"
+	//                  rather than "BEGIN DEFERRED". DEFERRED starts as a
+	//                  reader, reads a snapshot, then tries to upgrade to
+	//                  writer on the first write -- if another tx
+	//                  committed in between, the upgrade fails with
+	//                  SQLITE_BUSY_SNAPSHOT (code 517). IMMEDIATE takes
+	//                  the write lock at BEGIN time, so other writers
+	//                  queue on the lock (with busy_timeout) instead of
+	//                  racing for the snapshot. Every dm.db.Begin() call
+	//                  in this file is a write transaction.
 	//
-	// Earlier this code used `db.Exec("PRAGMA ...")` after Open, which
-	// only set the PRAGMA on the single connection borrowed by that
-	// Exec call. CI exposed this on the TOCTOU test: goroutines that
-	// got fresh pool connections saw busy_timeout=0 and bounced with
-	// SQLITE_BUSY.
-	dsn := dbPath + "?_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)"
+	// Verified load-bearing by TestCheckoutBookConcurrentRace in
+	// db_loans_test.go (cs408-go-stack-7an, DEC-031). CI initially
+	// surfaced SQLITE_BUSY (5) on db.Exec-style PRAGMAs (only one
+	// connection got them); then SQLITE_BUSY_SNAPSHOT (517) on
+	// BEGIN DEFERRED. _txlock=immediate is what closes both classes.
+	dsn := dbPath + "?_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)&_txlock=immediate"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open: %w", err)

@@ -851,9 +851,9 @@ provides an audit trail (`updated_by`).
 
 ---
 
-## DEC-031: SQLite `busy_timeout = 5000` (set per-connection via DSN) to make WAL-mode writers queue cleanly
+## DEC-031: SQLite `busy_timeout=5000` + `_txlock=immediate` (set per-connection via DSN) to make WAL-mode writers queue cleanly
 
-**Date:** 2026-05-12 (cs408-go-stack-7an, commits `ac06305` + follow-up).
+**Date:** 2026-05-12 (cs408-go-stack-7an, commits `ac06305` and two follow-ups).
 
 **Context:** `openDB` already set `journal_mode=WAL` (DEC-002 era),
 which lets readers and writers proceed without blocking each other in
@@ -903,6 +903,47 @@ same bug pre-fix; this change closes that hole too. `journal_mode=WAL`
 is persisted in the database file once set, so it survived the
 single-connection misconfiguration, but it's still cleaner to assert
 it on every connection.
+
+**`_txlock=immediate` -- the second-layer fix.** With the PRAGMAs
+landed via DSN, the next CI run failed again -- this time with
+`database is locked (517)`, SQLite error code `SQLITE_BUSY_SNAPSHOT`.
+That is a different race:
+
+1. Two goroutines call `db.Begin()`. Go's `database/sql` does not
+   surface SQLite's BEGIN modes directly; the driver default is
+   `BEGIN DEFERRED`, which starts each transaction as a reader.
+2. Both goroutines read from the same snapshot.
+3. The first goroutine writes (`INSERT`/`UPDATE`), upgrading its
+   transaction to a writer, and commits. The DB advances to a new
+   snapshot.
+4. The second goroutine tries to write, but its read snapshot is now
+   stale. SQLite aborts that transaction with `SQLITE_BUSY_SNAPSHOT`
+   rather than serving a write against an out-of-date view.
+
+`busy_timeout` does not help here -- the loser isn't waiting for a
+lock; it has a stale snapshot. The fix is `BEGIN IMMEDIATE`, which
+takes the database's RESERVED (write-intent) lock at BEGIN time. With
+IMMEDIATE, concurrent writers queue on that lock via `busy_timeout`
+and then re-evaluate their guards inside their own fresh transaction.
+No snapshot staleness.
+
+The modernc.org/sqlite driver supports `_txlock=immediate` as a DSN
+parameter (see `applyQueryParams` in `sqlite.go` and `newTx` in
+`tx.go`): every non-readonly `Begin()` becomes `BEGIN IMMEDIATE`.
+Every `dm.db.Begin()` in `db.go` is a write transaction (13 sites at
+time of writing -- CheckoutBook, ReturnBook, UpdateUserPassword,
+CreatePatron, CreateBook, etc.), so this is the right global default.
+
+**Performance trade-off.** `BEGIN IMMEDIATE` serializes all write
+transactions, even if they touch different tables. For LibreShelf's
+scale (single Go process, small library, a few staff writing at most
+once every few seconds), this is the right call: correctness over
+micro-throughput. Concurrent *readers* are unaffected -- they still
+take only a shared lock under WAL.
+
+**Final DSN form:**
+
+    dbPath?_pragma=busy_timeout(5000)&_pragma=foreign_keys(on)&_pragma=journal_mode(WAL)&_txlock=immediate
 
 **Effect on the checkout TOCTOU claim.** `CheckoutBook` already did
 the right thing structurally: the availability read and the decrement
