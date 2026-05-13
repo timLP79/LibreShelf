@@ -56,6 +56,34 @@ This rule applies to every query in `db.go` without exception.
 
 ---
 
+### Transactional Integrity Under Concurrency
+
+The checkout flow is the only place in the system where two staff actions
+could race on the same row (the last copy of a book). The design that makes
+this safe:
+
+1. `CheckoutBook` reads `quantity_available` and writes the decrement
+   inside a single transaction. No "check now, write later" gap.
+2. SQLite serializes writers via the journal/WAL lock. With
+   `PRAGMA busy_timeout = 5000` (set in `openDB`), a losing concurrent
+   writer queues on the lock until the winner commits, then re-evaluates
+   the availability guard inside its own transaction and returns
+   `ErrNoCopiesAvailable`.
+
+`TestCheckoutBookConcurrentRace` in `db_loans_test.go` pins this with
+N=10 goroutines racing to check out a single-copy book on behalf of 10
+distinct patrons. The assertion is "exactly one success, exactly nine
+`ErrNoCopiesAvailable`, zero other errors, and `quantity_available`
+ends at 0 (not negative)." The test passes 100x in a row under
+`go test -race -count=100`. If a future refactor moves the
+"available <= 0" guard outside the transaction, this test catches it
+because the success count would exceed one and `quantity_available`
+would go negative.
+
+See DEC-031 for the busy-timeout design choice.
+
+---
+
 ### CDN Supply Chain
 Bootstrap CSS and JS are served from `static/` — not from a CDN. A compromised
 CDN cannot inject malicious scripts into LibreShelf pages.

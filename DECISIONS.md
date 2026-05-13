@@ -848,3 +848,83 @@ on a misclick or session boundary, given the DB is already
 trusted and the data is intentionally short-lived. The settings
 table avoids re-inventing the toggle pattern each time and
 provides an audit trail (`updated_by`).
+
+---
+
+## DEC-031: SQLite `busy_timeout = 5000` to make WAL-mode writers queue cleanly
+
+**Date:** 2026-05-12 (cs408-go-stack-7an, commit `ac06305`).
+
+**Context:** `openDB` already set `journal_mode=WAL` (DEC-002 era),
+which lets readers and writers proceed without blocking each other in
+the common case. But WAL still serializes *writers* via the journal
+lock: when two writers race, the loser sees `SQLITE_BUSY` immediately
+because SQLite's default `busy_timeout` is `0`. The
+`TestCheckoutBookConcurrentRace` test (added in the same commit) made
+this concrete -- with 10 goroutines racing to check out the last copy
+of a book, the losers came back with `database is locked (5)
+(SQLITE_BUSY)` instead of the in-transaction
+`ErrNoCopiesAvailable` we want.
+
+In production this would have shown up as flaky "could not check out
+book" errors any time two staff hit checkout within the same handful
+of milliseconds. The fix is one of those SQLite settings that every
+other client (the `sqlite3` CLI, the mattn driver) sets by default;
+`modernc.org/sqlite` does not.
+
+**Decision:** Add `PRAGMA busy_timeout = 5000` to `openDB` after the
+WAL PRAGMA. Five seconds is the wait budget for the journal lock: well
+above any real LibreShelf transaction (the slowest one writes a single
+loan row and decrements a count, sub-millisecond) and below any
+user-perceptible request timeout.
+
+**Effect on the checkout TOCTOU claim.** `CheckoutBook` already did
+the right thing structurally: the availability read and the decrement
+ran inside one transaction (DEC-022's rule). What was missing was a
+test that proved the structure held under contention. With WAL +
+busy_timeout the losing goroutine queues on the journal lock, waits
+for the winner to commit, then re-evaluates the availability guard
+inside its own transaction and returns `ErrNoCopiesAvailable`. The
+test asserts exactly one success and `N-1` `ErrNoCopiesAvailable`
+results -- if a future refactor moved the guard outside the
+transaction, `quantity_available` would go negative and the test
+would fail. Passes 100x in a row under `go test -race -count=100`.
+
+**Verified load-bearing.** During implementation we temporarily
+removed the PRAGMA and re-ran the test; it failed with multiple
+goroutines reporting `database is locked (5) (SQLITE_BUSY)`. So the
+PRAGMA is the actual fix, not cosmetic.
+
+**Why 5000 ms (not 1000, not 30000).** Five seconds is the conventional
+default that the SQLite shell uses. One second is too short under
+sustained write contention (the WAL can grow large and slow writers).
+Thirty seconds is long enough that the front end would have already
+given up; pinning it lower forces us to see the contention as an
+error rather than mask it as a slow response. Five seconds is the
+sweet spot.
+
+**Single-process app.** LibreShelf runs in one Go process per
+deployment; concurrent writes only originate from concurrent staff
+HTTP requests handled by Gin goroutines. There is no second process
+or replica that could starve the timeout, and no cron/external writer
+to compete with. The 5s budget is for in-process goroutine races
+only.
+
+**Security implications:** None new. The PRAGMA strengthens
+transactional integrity under concurrent load (a positive). It is
+not a path from user input to SQL and does not change any auth/authz
+boundary. The security review on `ac06305` confirmed this.
+
+**Alternatives considered:**
+
+- `db.SetMaxOpenConns(1)` -- serialize at the connection-pool layer.
+  This would have hidden the race entirely (one goroutine at a time
+  ever talks to SQLite), so the test would not have proved anything
+  about the in-transaction guard. Rejected.
+- Adding a `_pragma=busy_timeout=5000` DSN parameter -- works for
+  some drivers but `modernc.org/sqlite` syntax is awkward and harder
+  to read than an explicit `db.Exec("PRAGMA ...")` next to the
+  existing PRAGMAs. Rejected for legibility.
+- Larger timeout (e.g. 30s) -- only meaningful if we expected a
+  long-running writer to hold the lock for many seconds, which would
+  itself be a bug in LibreShelf. Rejected.

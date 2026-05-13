@@ -141,7 +141,7 @@ All checkpoints complete. CP1-CP4 shipped over weeks 3-5. CP5 closed 2026-04-18 
 For per-checkpoint detail:
 - `bd memories cp5-architecture` -- staff / book / patron CRUD, OL integration, cover validation
 - `bd memories cp6-architecture` -- loans + dashboard + kiosk + role-differentiated routing
-- `DECISIONS.md` -- DEC-001 through DEC-029 (DEC-027: backup design; DEC-028: security hardening; DEC-029: admin tools-index pattern)
+- `DECISIONS.md` -- DEC-001 through DEC-031 (DEC-027: backup design; DEC-028: security hardening; DEC-029: admin tools-index pattern; DEC-030: CSV patron import; DEC-031: SQLite busy_timeout + provable TOCTOU safety)
 - `git log` -- implementation history
 
 ---
