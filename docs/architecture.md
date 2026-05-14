@@ -291,11 +291,28 @@ All `.go` files in `package main` at the repo root, split by concern via filenam
 without benefit at this scale. The one exception is `internal/safezip`, pulled out because
 it is reusable, has its own boundary, and merits isolated tests.
 
-### Open Library API: server-side proxy
+### Open Library API: server-side proxy with multi-endpoint enrichment chain
 
 ISBN metadata is fetched server-side at `GET /api/openlibrary/isbn/:isbn` to avoid CORS,
 keep client JS simple, and allow server-side validation (`IsValidISBN`) before any outbound
 request. The handler returns clean JSON to the form for prefill.
+
+`FetchOpenLibraryBook` (in `openlibrary.go`) chains across multiple OL endpoints because
+OL splits metadata across edition records (per printing) and work records (per abstract
+book), and the splits are inconsistent. The chain in priority order:
+
+| Layer | Endpoint | Provides |
+|---|---|---|
+| 1. Edition | `/api/books?jscmd=details` | description (sometimes), structured authors (sometimes), cover IDs (sometimes), publisher, year |
+| 2. Work | `/works/<key>.json` | description fallback + cover-ID fallback (single call covers both) |
+| 3. ISBN-cover probe | `HEAD /b/isbn/<isbn>-L.jpg?default=false` on `covers.openlibrary.org` | cover URL when edition+work both empty -- abstracts over OL's duplicate-work indexing |
+| 4. jscmd=data | `/api/books?jscmd=data` | resolved author names when neither edition shape carried them |
+
+All fallbacks are non-fatal: a failed secondary call logs and the function returns
+whatever the primary call yielded. The cover URLs are transient -- `SaveCoverFromURL`
+downloads to `data/covers/<hash>.jpg` and stores only the local filename, so the app works
+offline post-ingest. See DEC-032 for the full design including why Wikipedia was tried
+and reverted.
 
 ### ZIP backup using the standard library
 

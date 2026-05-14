@@ -141,7 +141,7 @@ All checkpoints complete. CP1-CP4 shipped over weeks 3-5. CP5 closed 2026-04-18 
 For per-checkpoint detail:
 - `bd memories cp5-architecture` -- staff / book / patron CRUD, OL integration, cover validation
 - `bd memories cp6-architecture` -- loans + dashboard + kiosk + role-differentiated routing
-- `DECISIONS.md` -- DEC-001 through DEC-031 (DEC-027: backup design; DEC-028: security hardening; DEC-029: admin tools-index pattern; DEC-030: CSV patron import; DEC-031: SQLite busy_timeout + provable TOCTOU safety)
+- `DECISIONS.md` -- DEC-001 through DEC-032 (DEC-027: backup design; DEC-028: security hardening; DEC-029: admin tools-index pattern; DEC-030: CSV patron import; DEC-031: SQLite busy_timeout + provable TOCTOU safety; DEC-032: Open Library metadata enrichment chain -- no Wikipedia)
 - `git log` -- implementation history
 
 ---
@@ -217,7 +217,14 @@ Cut from CP6 v2 trim or raised post-CP6:
 - Fuller dashboard redesign with mini-lists (cs408-go-stack-ak6, also covers patron richer view)
 - Overdue notice print system (cs408-go-stack-wdy)
 - Patron address field for printed notices (cs408-go-stack-ygu)
-- Out-of-stock catalog filter (cs408-go-stack-zmi)
+
+OL metadata enrichment chain (post-DEC-032; mostly obviated by the 2026-05-13 OL-only chain that recovers 100/100 seed covers and jacket descriptions for every book OL catalogs):
+- Google Books API as fallback for books OL doesn't catalog at all (cs408-go-stack-8gj) -- still useful, OL has gaps for new releases.
+- OL OLID/LCCN/OCLC cover endpoint exhaustion (cs408-go-stack-069) -- partially obviated by the ISBN-cover probe; small marginal value left.
+- Internet Archive cover fallback (cs408-go-stack-l2h) -- IA and OL share infrastructure; uncertain marginal value.
+- Placeholder cover generator (cs408-go-stack-fcb) -- last-resort SVG when no upstream has anything.
+- Bulk cover upload + needs-cover report (cs408-go-stack-iqr) -- operations tool for fixing the long tail manually.
+- Thin-description report + bulk description edit UI (cs408-go-stack-uf3) -- companion to bulk cover for descriptions.
 
 Restricted-network deployments:
 - Patron self-registration toggle, admin-controlled (cs408-go-stack-o1x, #61)

@@ -995,3 +995,163 @@ boundary. The security review on `ac06305` confirmed this.
 - Larger timeout (e.g. 30s) -- only meaningful if we expected a
   long-running writer to hold the lock for many seconds, which would
   itself be a bug in LibreShelf. Rejected.
+
+---
+
+## DEC-032: Open Library metadata enrichment chain (no Wikipedia)
+
+**Date:** 2026-05-13 (cs408-go-stack-4xq, dy3, 7iu, m5y, 2a8 -- single
+session, commits `a1b33b7` through `de3ef64`).
+
+**Context:** The OL Lookup endpoint was returning very thin prefill
+payloads for the staff "Add Book" / "Edit Book" form. Most books got
+title and cover but no description; some got no authors either. The
+seed-cover backfill could only recover about half of the 100 seed
+books' covers from OL, even though OL clearly *had* covers for many
+of the missing ones when you looked at openlibrary.org in a browser.
+
+The root cause turned out to be OL's record sharding. Each book has
+two record layers: an **edition** (one specific printing, queried by
+ISBN) and a **work** (the abstract book; one work has many editions).
+Different fields live on different layers depending on which OL
+editor added what when:
+
+- Edition records sometimes carry full back-cover descriptions
+  (Penguin Classics' P&P has one) but sometimes don't (Dell's
+  Rule of Four has none).
+- Edition records sometimes carry an `authors: [{name}]` array,
+  sometimes a `author: ["Last, First, year-year."]` catalog-card
+  string array, sometimes neither -- the latter case requires the
+  caller to resolve refs on the linked work record.
+- OL frequently has **duplicate work records** for the same book
+  (Charlotte's Web has at least three, with covers spread across
+  some of them). An edition can link to a sibling work that happens
+  to be missing what we want.
+
+The first pass at this used the OL primary API plus a Wikipedia
+synopsis fallback (`cs408-go-stack-g5x`). It worked technically but
+the Wikipedia REST `/api/rest_v1/page/summary/{title}` endpoint
+returns the article's *lead section*, which for most book articles
+is meta-content ("X is a 1965 novel by Y") rather than jacket
+synopsis. Tim's example "The Rule of Four" returned a paragraph
+about Caldwell and Thomason's biographies. That work got reverted in
+the same session.
+
+**Decision:** Stay entirely within OL for descriptions, authors, and
+covers; chain across OL's record layers to compensate for the
+sharding.
+
+### The fetch chain (`FetchOpenLibraryBook` in `openlibrary.go`)
+
+Primary call: `GET /api/books?bibkeys=ISBN:<isbn>&jscmd=details&format=json`.
+This returns the edition record, which carries description, authors
+(in either of two shapes), publisher, publish date, and cover IDs.
+
+**Description fallbacks** in priority order:
+
+1. Edition's `description` field (string or `{type, value}` object;
+   handled by a custom `olDescription.UnmarshalJSON` that tolerates
+   either shape and ignores junk).
+2. Work record's `description` field. Fetched via a second call to
+   `<host>/<works[0].key>.json`. Combined with the cover fallback
+   below into a single HTTP call (`fetchOLWork`).
+
+**Author fallbacks** in priority order:
+
+1. Edition's `authors: [{key, name}]` structured array (canonical
+   "First Last" form).
+2. Edition's `author: ["Last, First, year-year."]` catalog-card
+   form, flipped to "First Last" by `normalizeOLAuthorString`. The
+   trailing period is dropped only if preceded by a digit (so
+   "Tolkien, J. R. R." keeps its final initial).
+3. A third call to `/api/books?...&jscmd=data`, which OL transforms
+   to resolve work-record author refs into `[{name, url}]` pairs.
+   Fires only when both edition shapes were empty.
+
+**Cover fallbacks** in priority order:
+
+1. Edition's `covers: [int]` array, first non-zero entry, formatted
+   into `https://covers.openlibrary.org/b/id/<id>-L.jpg`.
+2. Work record's `covers: [int]` array (combined into the same
+   `fetchOLWork` call as the description fallback).
+3. HEAD-probe `https://covers.openlibrary.org/b/isbn/<isbn>-L.jpg
+   ?default=false`. OL's ISBN-based covers endpoint resolves a cover
+   whenever *any* work or edition has one indexed under that ISBN,
+   abstracting over the duplicate-work problem. The `?default=false`
+   query is essential -- without it the endpoint returns a 1x1
+   placeholder image rather than 404, and we'd save placeholders as
+   real covers. The probe is HEAD-only (not GET) so it doesn't
+   stream the image just to check resolvability; this also keeps
+   broken-image URLs out of the form preview.
+
+All fallbacks are **non-fatal**: if a secondary call fails, the
+function logs and continues with whatever the primary call yielded.
+
+### Storage and offline behavior
+
+Cover URLs returned by the chain are *transient*. `SaveCoverFromURL`
+downloads to `data/covers/<hash>.jpg` (filename is a content hash)
+and persists only the filename in the books row. The catalog and
+book-detail pages serve covers from local disk via Gin's static
+handler -- no upstream call at render time, so the app works fully
+offline once a book has been ingested. The OL endpoints are only
+touched during the OL Lookup admin action and during the one-shot
+seed-cover backfill at first startup.
+
+### Why no Wikipedia, Google Books, etc.
+
+The cover-fallback chain backlog (`cs408-go-stack-069`, `l2h`, `fcb`,
+`8gj`) was originally scoped to extend coverage with Wikipedia /
+Internet Archive / Google Books. After this session's OL-only chain
+shipped, the seed backfill recovers 100/100 covers (was 98/100 with
+just the work fallback; was somewhat lower before the chain) and the
+manual OL Lookup returns jacket-style descriptions for every book OL
+catalogs. Google Books (`8gj`) is still useful for the small minority
+of books OL doesn't catalog at all -- it remains open. Wikipedia
+specifically (`g5x`) is closed as "tried, wrong content shape." The
+OLID/LCCN/OCLC endpoint exhaustion (`069`) is partially obviated by
+the ISBN-cover probe; it remains open but probably yields little.
+
+### Observability
+
+The handler logs upstream errors with `log.Printf` lines tagged with
+the function name and the ISBN or work key. Successful fallback
+firings are not logged (the result tells the staff member via the
+"Prefilled from Open Library" status banner, and the seed backfill
+emits a final tally `saved N/M cover(s)` regardless of which layer
+each came from).
+
+### Tests
+
+`openlibrary_test.go` covers:
+
+- Edition shapes: structured authors, catalog-card authors, cover-IDs
+  vs no covers, string-vs-object description.
+- Work fallback: description-only, covers-only, both, skipped when
+  edition is already complete, silent on 404.
+- `jscmd=data` author fallback: happy path, silent on 404.
+- ISBN-cover probe: happy path (200 after redirect), missing (404)
+  stays empty, skipped when edition cover already present.
+- Author-string normalizer table tests, including the
+  "Tolkien, J. R. R." trailing-period edge case.
+
+The fake server router (`startFakeOLRouter`) dispatches by path and
+`jscmd` query so a single httptest.Server stands in for all four OL
+endpoints in one test.
+
+### Live verification snapshot (2026-05-13, against real OL)
+
+- ISBN 9780141439518 (Pride and Prejudice, Penguin Classics ed.):
+  edition has all three fields; no fallbacks fire. Description is
+  the publisher's back-cover blurb ending in `--back cover`.
+- ISBN 9780441013593 (Dune, Ace ed.): edition description empty,
+  work fallback supplies the full novel synopsis.
+- ISBN 9780440241355 (Rule of Four, Dell ed.): edition has nothing;
+  work supplies description, `jscmd=data` supplies authors
+  (Ian Caldwell, Dustin Thomason, Eiko Kakinuma).
+- ISBN 9780064400558 (Charlotte's Web): edition+work covers both
+  empty due to duplicate-work indexing; ISBN-cover probe resolves.
+- ISBN 9780735211292 (Atomic Habits): same shape as Charlotte's Web,
+  recovered by the ISBN probe.
+
+Full seed backfill on a fresh install: 100/100 covers, ~70s total.
