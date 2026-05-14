@@ -64,15 +64,17 @@ func TestNormalizeOpenLibraryBook(t *testing.T) {
 			Title:       "Pride and Prejudice",
 			PublishDate: "January 1813",
 			Authors:     []olAuthor{{Name: "Jane Austen"}, {Name: "Editor"}},
-			Publishers:  []olPublisher{{Name: "Penguin"}, {Name: "Other"}},
-			Cover:       olCover{Small: "s.jpg", Medium: "m.jpg", Large: "l.jpg"},
+			Publishers:  []string{"Penguin", "Other"},
+			Covers:      []int{1234567, 999},
+			Description: olDescription{Value: "A romance."},
 		}
 		want := &OpenLibraryBook{
 			Title:       "Pride and Prejudice",
 			Authors:     []string{"Jane Austen", "Editor"},
 			PublishYear: 1813,
 			Publisher:   "Penguin", // first publisher wins
-			CoverURL:    "l.jpg",   // large preferred
+			CoverURL:    "https://covers.openlibrary.org/b/id/1234567-L.jpg",
+			Description: "A romance.",
 		}
 		got := normalizeOpenLibraryBook(in)
 		if !reflect.DeepEqual(got, want) {
@@ -80,17 +82,29 @@ func TestNormalizeOpenLibraryBook(t *testing.T) {
 		}
 	})
 
-	t.Run("cover prefers medium when no large", func(t *testing.T) {
-		got := normalizeOpenLibraryBook(olBook{Cover: olCover{Small: "s", Medium: "m"}})
-		if got.CoverURL != "m" {
-			t.Errorf("CoverURL = %q, want %q", got.CoverURL, "m")
+	t.Run("first cover id wins", func(t *testing.T) {
+		got := normalizeOpenLibraryBook(olBook{Covers: []int{42, 99}})
+		want := "https://covers.openlibrary.org/b/id/42-L.jpg"
+		if got.CoverURL != want {
+			t.Errorf("CoverURL = %q, want %q", got.CoverURL, want)
 		}
 	})
 
-	t.Run("cover falls back to small", func(t *testing.T) {
-		got := normalizeOpenLibraryBook(olBook{Cover: olCover{Small: "s"}})
-		if got.CoverURL != "s" {
-			t.Errorf("CoverURL = %q, want %q", got.CoverURL, "s")
+	t.Run("zero or empty covers produce no URL", func(t *testing.T) {
+		got := normalizeOpenLibraryBook(olBook{Covers: []int{0}})
+		if got.CoverURL != "" {
+			t.Errorf("CoverURL = %q for zero cover ID, want empty", got.CoverURL)
+		}
+		got = normalizeOpenLibraryBook(olBook{Covers: nil})
+		if got.CoverURL != "" {
+			t.Errorf("CoverURL = %q for nil covers, want empty", got.CoverURL)
+		}
+	})
+
+	t.Run("description whitespace trimmed", func(t *testing.T) {
+		got := normalizeOpenLibraryBook(olBook{Description: olDescription{Value: "  \n  A blurb.\n  "}})
+		if got.Description != "A blurb." {
+			t.Errorf("Description = %q, want %q", got.Description, "A blurb.")
 		}
 	})
 
@@ -104,10 +118,42 @@ func TestNormalizeOpenLibraryBook(t *testing.T) {
 
 	t.Run("missing fields default cleanly", func(t *testing.T) {
 		got := normalizeOpenLibraryBook(olBook{})
-		if got.Title != "" || got.PublishYear != 0 || got.Publisher != "" || got.CoverURL != "" {
+		if got.Title != "" || got.PublishYear != 0 || got.Publisher != "" ||
+			got.CoverURL != "" || got.Description != "" {
 			t.Errorf("zero-value olBook should normalize to zero-value, got %+v", got)
 		}
 	})
+}
+
+// TestOLDescriptionUnmarshal pins the two real-world JSON shapes
+// OL uses for the description field: bare string (older records) and
+// typed-text object {type, value} (newer records). Anything else
+// (null, number, malformed) must yield an empty string, not an error,
+// so a single stray record can't block the whole lookup.
+func TestOLDescriptionUnmarshal(t *testing.T) {
+	cases := []struct {
+		name string
+		json string
+		want string
+	}{
+		{"bare string", `"A blurb."`, "A blurb."},
+		{"typed-text object", `{"type":"/type/text","value":"A typed blurb."}`, "A typed blurb."},
+		{"empty string", `""`, ""},
+		{"object with empty value falls through to string parse", `{"type":"/type/text","value":""}`, ""},
+		{"null is empty, not an error", `null`, ""},
+		{"number is empty, not an error", `42`, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var d olDescription
+			if err := d.UnmarshalJSON([]byte(tc.json)); err != nil {
+				t.Fatalf("UnmarshalJSON(%q): unexpected error %v", tc.json, err)
+			}
+			if d.Value != tc.want {
+				t.Errorf("got %q, want %q", d.Value, tc.want)
+			}
+		})
+	}
 }
 
 // fakeOLServer returns an httptest.Server that responds with the given
@@ -128,11 +174,15 @@ func fakeOLServer(t *testing.T, status int, body string) *httptest.Server {
 func TestFetchOpenLibraryBook_Success(t *testing.T) {
 	body := `{
 		"ISBN:9780141439518": {
-			"title": "Pride and Prejudice",
-			"authors": [{"name": "Jane Austen"}],
-			"publishers": [{"name": "Penguin Classics"}],
-			"publish_date": "1813",
-			"cover": {"large": "https://example.com/cover.jpg"}
+			"bib_key": "ISBN:9780141439518",
+			"details": {
+				"title": "Pride and Prejudice",
+				"authors": [{"name": "Jane Austen"}],
+				"publishers": ["Penguin Classics"],
+				"publish_date": "1813",
+				"covers": [1234567],
+				"description": {"type": "/type/text", "value": "A romance about Elizabeth Bennet."}
+			}
 		}
 	}`
 	fakeOLServer(t, http.StatusOK, body)
@@ -149,8 +199,35 @@ func TestFetchOpenLibraryBook_Success(t *testing.T) {
 	if got.PublishYear != 1813 {
 		t.Errorf("PublishYear = %d", got.PublishYear)
 	}
-	if got.CoverURL != "https://example.com/cover.jpg" {
+	if got.CoverURL != "https://covers.openlibrary.org/b/id/1234567-L.jpg" {
 		t.Errorf("CoverURL = %q", got.CoverURL)
+	}
+	if got.Description != "A romance about Elizabeth Bennet." {
+		t.Errorf("Description = %q", got.Description)
+	}
+}
+
+// TestFetchOpenLibraryBook_DescriptionAsBareString pins that the older
+// OL record shape (description as a plain string) still parses.
+func TestFetchOpenLibraryBook_DescriptionAsBareString(t *testing.T) {
+	body := `{
+		"ISBN:9780141439518": {
+			"details": {
+				"title": "Old Record",
+				"description": "Plain string description."
+			}
+		}
+	}`
+	fakeOLServer(t, http.StatusOK, body)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	got, err := FetchOpenLibraryBook(ctx, "9780141439518")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook: %v", err)
+	}
+	if got.Description != "Plain string description." {
+		t.Errorf("Description = %q", got.Description)
 	}
 }
 

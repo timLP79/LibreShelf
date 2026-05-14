@@ -1014,11 +1014,13 @@ func TestOpenLibraryLookupHappy(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{
 			"ISBN:9780141439518": {
-				"title": "Pride and Prejudice",
-				"authors": [{"name": "Jane Austen"}],
-				"publishers": [{"name": "Penguin"}],
-				"publish_date": "1813",
-				"cover": {"large": "https://example.com/c.jpg"}
+				"details": {
+					"title": "Pride and Prejudice",
+					"authors": [{"name": "Jane Austen"}],
+					"publishers": ["Penguin"],
+					"publish_date": "1813",
+					"covers": [1234567]
+				}
 			}
 		}`))
 	}))

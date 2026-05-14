@@ -297,6 +297,7 @@ function initBookForm() {
     var authorsField = document.getElementById("book-authors");
     var yearField = document.getElementById("book-year");
     var publisherField = document.getElementById("book-publisher");
+    var descriptionField = document.getElementById("book-description");
     var coverUrlField = document.getElementById("cover-url");
     var coverPreview = document.getElementById("cover-preview");
     var coverUrlNote = document.getElementById("cover-url-note");
@@ -347,6 +348,12 @@ function initBookForm() {
                 }
                 if (data.publish_year) yearField.value = data.publish_year;
                 if (data.publisher) publisherField.value = data.publisher;
+                // Only prefill description when the existing field is
+                // blank, so we never clobber a longer summary the staff
+                // member is already in the middle of writing or editing.
+                if (data.description && descriptionField && !descriptionField.value.trim()) {
+                    descriptionField.value = data.description;
+                }
                 if (data.cover_url) {
                     coverUrlField.value = data.cover_url;
                     if (coverPreview) coverPreview.src = data.cover_url;

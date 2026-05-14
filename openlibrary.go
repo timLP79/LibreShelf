@@ -33,31 +33,73 @@ type OpenLibraryBook struct {
 	PublishYear int      `json:"publish_year,omitempty"`
 	Publisher   string   `json:"publisher,omitempty"`
 	CoverURL    string   `json:"cover_url,omitempty"`
+	Description string   `json:"description,omitempty"`
 }
 
-type olResponse map[string]olBook
+// olResponse mirrors the jscmd=details envelope returned by
+// https://openlibrary.org/api/books?jscmd=details. Switched from
+// jscmd=data because data does not include descriptions; details does
+// (under .details.description) and additionally returns cover IDs we
+// can format into our preferred -L.jpg URL ourselves.
+type olResponse map[string]olEntry
 
+type olEntry struct {
+	Details olBook `json:"details"`
+}
+
+// olBook is the shape of the `.details` sub-object on the jscmd=details
+// response. Several fields differ from the jscmd=data shape this file
+// used previously: publishers is []string not []{name string}, the
+// covers field is []int (cover IDs we format into URLs ourselves), and
+// description appears here at all.
 type olBook struct {
 	Title       string        `json:"title"`
 	Authors     []olAuthor    `json:"authors"`
-	Publishers  []olPublisher `json:"publishers"`
+	Publishers  []string      `json:"publishers"`
 	PublishDate string        `json:"publish_date"`
-	Cover       olCover       `json:"cover"`
+	Covers      []int         `json:"covers"`
+	Description olDescription `json:"description"`
 }
 
 type olAuthor struct {
 	Name string `json:"name"`
 }
 
-type olPublisher struct {
-	Name string `json:"name"`
+// olDescription unmarshals OL's description field, which is either a
+// bare string (older records) or a typed-text object of the form
+// {"type": "/type/text", "value": "..."} (newer records). Both yield
+// a plain string for the caller.
+type olDescription struct {
+	Value string
 }
 
-type olCover struct {
-	Small  string `json:"small"`
-	Medium string `json:"medium"`
-	Large  string `json:"large"`
+func (d *olDescription) UnmarshalJSON(data []byte) error {
+	// Try the typed-text object shape first.
+	var obj struct {
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(data, &obj); err == nil && obj.Value != "" {
+		d.Value = obj.Value
+		return nil
+	}
+	// Fall through to the bare-string shape.
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		d.Value = s
+		return nil
+	}
+	// Anything else (null, number, etc.) -> leave empty, do not error.
+	// OL records are heterogeneous; refusing to parse one stray record
+	// would block the whole lookup.
+	d.Value = ""
+	return nil
 }
+
+// olCoverURLTemplate builds the large cover URL for a given OL cover
+// ID. The covers endpoint takes the raw ID and a size suffix
+// (S/M/L). We always request L so the cover-storage pipeline gets
+// the highest available resolution.
+const olCoverURLTemplate = "https://covers.openlibrary.org/b/id/%d-L.jpg"
 
 var yearRegex = regexp.MustCompile(`\b(1[5-9]\d{2}|20\d{2}|2100)\b`)
 
@@ -83,6 +125,7 @@ func normalizeOpenLibraryBook(b olBook) *OpenLibraryBook {
 	out := &OpenLibraryBook{
 		Title:       b.Title,
 		PublishYear: parsePublishYear(b.PublishDate),
+		Description: strings.TrimSpace(b.Description.Value),
 	}
 	for _, a := range b.Authors {
 		if a.Name != "" {
@@ -90,15 +133,10 @@ func normalizeOpenLibraryBook(b olBook) *OpenLibraryBook {
 		}
 	}
 	if len(b.Publishers) > 0 {
-		out.Publisher = b.Publishers[0].Name
+		out.Publisher = b.Publishers[0]
 	}
-	switch {
-	case b.Cover.Large != "":
-		out.CoverURL = b.Cover.Large
-	case b.Cover.Medium != "":
-		out.CoverURL = b.Cover.Medium
-	case b.Cover.Small != "":
-		out.CoverURL = b.Cover.Small
+	if len(b.Covers) > 0 && b.Covers[0] > 0 {
+		out.CoverURL = fmt.Sprintf(olCoverURLTemplate, b.Covers[0])
 	}
 	return out
 }
@@ -113,7 +151,7 @@ func FetchOpenLibraryBook(ctx context.Context, isbn string) (*OpenLibraryBook, e
 	q := req.URL.Query()
 	q.Set("bibkeys", bibkey)
 	q.Set("format", "json")
-	q.Set("jscmd", "data")
+	q.Set("jscmd", "details")
 	req.URL.RawQuery = q.Encode()
 	req.Header.Set("User-Agent", openLibraryUserAgent)
 	req.Header.Set("Accept", "application/json")
@@ -134,10 +172,10 @@ func FetchOpenLibraryBook(ctx context.Context, isbn string) (*OpenLibraryBook, e
 		return nil, fmt.Errorf("open library decode: %w", err)
 	}
 
-	book, ok := payload[bibkey]
+	entry, ok := payload[bibkey]
 	if !ok {
 		return nil, ErrOpenLibraryNotFound
 	}
 
-	return normalizeOpenLibraryBook(book), nil
+	return normalizeOpenLibraryBook(entry.Details), nil
 }
