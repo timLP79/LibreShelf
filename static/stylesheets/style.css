@@ -137,8 +137,27 @@ a.text-decoration-none:hover > .stat-card {
  * background matches the no-cover.svg placeholder fill so a missing
  * cover and a letterboxed real cover share the same neutral slot
  * appearance. */
+/* Default to a near-black slot so a real cover's letterbox bars
+ * read as deliberate framing rather than "page bleeding through".
+ * The override below kicks in only when the inner <img> is currently
+ * showing the no-cover SVG placeholder; in that case the slot blends
+ * with the SVG's own #f0f4f8 fill so the missing-cover state reads as
+ * one neutral panel rather than a dark card with a light icon glued on.
+ *
+ * :has() tracks the *current* src attribute, so after the onerror
+ * handler in the cover templates swaps a broken real cover to
+ * /images/no-cover.svg, the background re-evaluates and flips to gray
+ * without any JS coordination.
+ *
+ * Browser support: :has() is on Chrome 105+, Safari 15.4+, Firefox
+ * 121+. Older browsers gracefully degrade to black-everywhere, which
+ * matches the pre-2026-05-03 behavior. */
 .book-cover-placeholder {
   height: 280px;
+  background: #212529;
+}
+
+.book-cover-placeholder:has(img[src*="no-cover.svg"]) {
   background: #f0f4f8;
 }
 
