@@ -27,13 +27,19 @@ const (
 
 var ErrOpenLibraryNotFound = errors.New("open library: isbn not found")
 
+// OpenLibraryBook is the prefill payload returned by HandleOpenLibraryLookup.
+// Most fields come from Open Library; Description may come from
+// Open Library OR from Wikipedia when OL's description is empty/thin.
+// DescriptionSource ("openlibrary" or "wikipedia") tells the JS-side
+// prefill code which source-label to show in the status banner.
 type OpenLibraryBook struct {
-	Title       string   `json:"title,omitempty"`
-	Authors     []string `json:"authors,omitempty"`
-	PublishYear int      `json:"publish_year,omitempty"`
-	Publisher   string   `json:"publisher,omitempty"`
-	CoverURL    string   `json:"cover_url,omitempty"`
-	Description string   `json:"description,omitempty"`
+	Title             string   `json:"title,omitempty"`
+	Authors           []string `json:"authors,omitempty"`
+	PublishYear       int      `json:"publish_year,omitempty"`
+	Publisher         string   `json:"publisher,omitempty"`
+	CoverURL          string   `json:"cover_url,omitempty"`
+	Description       string   `json:"description,omitempty"`
+	DescriptionSource string   `json:"description_source,omitempty"`
 }
 
 // olResponse mirrors the jscmd=details envelope returned by

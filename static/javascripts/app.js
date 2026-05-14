@@ -372,9 +372,16 @@ function initBookForm() {
                     if (coverPreview) coverPreview.src = "/images/no-cover.svg";
                     if (coverUrlNote) coverUrlNote.style.display = "none";
                 }
-                var msg = data.cover_url
-                    ? "Prefilled from Open Library. Review before saving."
-                    : "Prefilled from Open Library (no cover available). Review before saving.";
+                var msg;
+                if (data.description_source === "wikipedia") {
+                    msg = data.cover_url
+                        ? "Prefilled from Open Library (description via Wikipedia). Review before saving."
+                        : "Prefilled from Open Library (no cover; description via Wikipedia). Review before saving.";
+                } else {
+                    msg = data.cover_url
+                        ? "Prefilled from Open Library. Review before saving."
+                        : "Prefilled from Open Library (no cover available). Review before saving.";
+                }
                 setStatus(msg, "success");
             }).catch(function () {
                 lookupBtn.disabled = false;
