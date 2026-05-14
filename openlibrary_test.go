@@ -187,11 +187,11 @@ func TestNormalizeOpenLibraryBook_StructuredAuthorsWinOverSingular(t *testing.T)
 // (null, number, malformed) must yield an empty string, not an error,
 // so a single stray record can't block the whole lookup.
 // TestFetchOpenLibraryBook_FallsBackToWorkDescription pins the
-// edition->work fallback. When the edition record has no description
-// but carries a works ref, FetchOpenLibraryBook must follow the work
-// key and use its description. Real-world example: the Dell ed. of
-// "The Rule of Four" has no description on its edition record but
-// the work record carries the back-cover synopsis.
+// edition->work fallback for descriptions. When the edition record
+// has no description but carries a works ref, FetchOpenLibraryBook
+// must follow the work key and use its description. Real-world
+// example: the Dell ed. of "The Rule of Four" has no description on
+// its edition record but the work record carries the back-cover synopsis.
 func TestFetchOpenLibraryBook_FallsBackToWorkDescription(t *testing.T) {
 	startFakeOLRouter(t,
 		// edition (jscmd=details): no description, but a works ref
@@ -200,6 +200,7 @@ func TestFetchOpenLibraryBook_FallsBackToWorkDescription(t *testing.T) {
 				"details": {
 					"title": "The rule of four",
 					"authors": [{"name": "Ian Caldwell"}],
+					"covers": [1111],
 					"works": [{"key": "/works/OL8990536W"}]
 				}
 			}
@@ -220,6 +221,201 @@ func TestFetchOpenLibraryBook_FallsBackToWorkDescription(t *testing.T) {
 	}
 	if !strings.Contains(got.Description, "Princeton. Good Friday") {
 		t.Errorf("Description = %q, want work-record blurb", got.Description)
+	}
+	// Edition's own cover wins -- we should NOT have followed the work
+	// for covers since the edition already had one.
+	if got.CoverURL != "https://covers.openlibrary.org/b/id/1111-L.jpg" {
+		t.Errorf("CoverURL = %q, edition's cover should win when present", got.CoverURL)
+	}
+}
+
+// TestFetchOpenLibraryBook_FallsBackToWorkCovers pins the edition->work
+// fallback for covers. When the edition record has no covers but the
+// work record does, FetchOpenLibraryBook must use the work's first
+// cover ID. Real-world example: the Penguin Classics ed. of Jane Eyre
+// (ISBN 9780141441146) has covers=None on the edition but five cover
+// IDs on the work record OL1095427W.
+func TestFetchOpenLibraryBook_FallsBackToWorkCovers(t *testing.T) {
+	startFakeOLRouter(t,
+		// edition: no covers, no description
+		`{
+			"ISBN:9780141441146": {
+				"details": {
+					"title": "Jane Eyre",
+					"authors": [{"name": "Charlotte Bronte"}],
+					"works": [{"key": "/works/OL1095427W"}]
+				}
+			}
+		}`,
+		"",
+		map[string]string{
+			"/works/OL1095427W": `{
+				"description": "An orphaned governess falls for her brooding employer.",
+				"covers": [8235363, 6519400, 419525]
+			}`,
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	got, err := FetchOpenLibraryBook(ctx, "9780141441146")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook: %v", err)
+	}
+	if got.CoverURL != "https://covers.openlibrary.org/b/id/8235363-L.jpg" {
+		t.Errorf("CoverURL = %q, want first work cover", got.CoverURL)
+	}
+	if !strings.Contains(got.Description, "orphaned governess") {
+		t.Errorf("Description = %q, want work-record description (combined fallback)", got.Description)
+	}
+}
+
+// TestFetchOpenLibraryBook_FallsBackToISBNCoverProbe pins the final
+// cover fallback: when neither the edition nor the work surfaces a
+// cover ID, but OL's /b/isbn/<isbn>-L.jpg endpoint resolves (200
+// after redirect), the prefill payload should carry that URL. This
+// is the case for OL's duplicate-work problem (e.g. Charlotte's Web,
+// where the edition's linked work has no covers but a sibling work
+// does and OL's ISBN endpoint resolves to it).
+func TestFetchOpenLibraryBook_FallsBackToISBNCoverProbe(t *testing.T) {
+	startFakeOLRouter(t,
+		// Edition: no covers, work ref present
+		`{
+			"ISBN:9780064400558": {
+				"details": {
+					"title": "Charlotte's Web",
+					"authors": [{"name": "E. B. White"}],
+					"works": [{"key": "/works/OL44714598W"}]
+				}
+			}
+		}`,
+		"",
+		map[string]string{
+			// Work the edition points at has NO covers (the duplicate-
+			// work scenario).
+			"/works/OL44714598W": `{"description": "An orphaned web of a story."}`,
+		},
+		"9780064400558", // ISBN-cover endpoint resolves
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	got, err := FetchOpenLibraryBook(ctx, "9780064400558")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook: %v", err)
+	}
+	if got.CoverURL == "" {
+		t.Fatalf("CoverURL is empty; ISBN-cover fallback did not fire")
+	}
+	if !strings.HasSuffix(got.CoverURL, "/b/isbn/9780064400558-L.jpg?default=false") {
+		t.Errorf("CoverURL = %q, want ISBN-based endpoint URL", got.CoverURL)
+	}
+}
+
+// TestFetchOpenLibraryBook_ISBNCoverProbeMissingStaysEmpty pins the
+// negative case: when the ISBN-cover endpoint 404s (OL has no cover
+// for this ISBN anywhere), the prefill payload leaves CoverURL empty
+// rather than emitting a URL that would render as a broken-image
+// preview in the staff form.
+func TestFetchOpenLibraryBook_ISBNCoverProbeMissingStaysEmpty(t *testing.T) {
+	startFakeOLRouter(t,
+		`{
+			"ISBN:9780735211292": {
+				"details": {
+					"title": "Atomic Habits",
+					"authors": [{"name": "James Clear"}],
+					"works": [{"key": "/works/OL44326460W"}]
+				}
+			}
+		}`,
+		"",
+		map[string]string{
+			"/works/OL44326460W": `{}`,
+		},
+		// No coverISBNs entries -> ISBN probe will 404
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	got, err := FetchOpenLibraryBook(ctx, "9780735211292")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook: %v", err)
+	}
+	if got.CoverURL != "" {
+		t.Errorf("CoverURL = %q, want empty when ISBN probe 404s", got.CoverURL)
+	}
+}
+
+// TestFetchOpenLibraryBook_ISBNCoverProbeSkippedWhenEditionHasCover
+// pins the no-op case: if the edition already has a cover, we must
+// NOT make the extra HEAD request to the ISBN endpoint -- the test
+// configures no coverISBNs entries so the probe would 404 if invoked,
+// proving by absence that it wasn't called.
+func TestFetchOpenLibraryBook_ISBNCoverProbeSkippedWhenEditionHasCover(t *testing.T) {
+	startFakeOLRouter(t,
+		`{
+			"ISBN:9780141439518": {
+				"details": {
+					"title": "Pride and Prejudice",
+					"authors": [{"name": "Jane Austen"}],
+					"covers": [12645114],
+					"description": "When Elizabeth Bennet first meets eligible bachelor..."
+				}
+			}
+		}`,
+		"",
+		map[string]string{},
+		// no coverISBNs -- probe would 404, but it shouldn't be called
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	got, err := FetchOpenLibraryBook(ctx, "9780141439518")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook: %v", err)
+	}
+	if got.CoverURL != "https://covers.openlibrary.org/b/id/12645114-L.jpg" {
+		t.Errorf("CoverURL = %q, edition cover should win", got.CoverURL)
+	}
+}
+
+// TestFetchOpenLibraryBook_WorkFallbackSkippedWhenEditionComplete pins
+// the no-op case: when the edition has both a description and a cover,
+// the work record must NOT be fetched at all. Uses a sentinel work body
+// that would visibly clobber both fields if (incorrectly) used.
+func TestFetchOpenLibraryBook_WorkFallbackSkippedWhenEditionComplete(t *testing.T) {
+	startFakeOLRouter(t,
+		`{
+			"ISBN:9780141439518": {
+				"details": {
+					"title": "Pride and Prejudice",
+					"authors": [{"name": "Jane Austen"}],
+					"covers": [12645114],
+					"description": "When Elizabeth Bennet first meets eligible bachelor Fitzwilliam Darcy...",
+					"works": [{"key": "/works/OLClobberW"}]
+				}
+			}
+		}`,
+		"",
+		map[string]string{
+			"/works/OLClobberW": `{
+				"description": "WORK_CLOBBER_TEXT",
+				"covers": [99999999]
+			}`,
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	got, err := FetchOpenLibraryBook(ctx, "9780141439518")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook: %v", err)
+	}
+	if strings.Contains(got.Description, "WORK_CLOBBER_TEXT") {
+		t.Errorf("Description was clobbered by work record fetch; got %q", got.Description)
+	}
+	if got.CoverURL != "https://covers.openlibrary.org/b/id/12645114-L.jpg" {
+		t.Errorf("CoverURL = %q, edition's cover should win", got.CoverURL)
 	}
 }
 
@@ -377,15 +573,24 @@ func fakeOLServer(t *testing.T, status int, body string) *httptest.Server {
 
 // startFakeOLRouter spins up a single httptest.Server that routes
 // requests by path + jscmd query param so tests can exercise the
-// multi-call OL flow (jscmd=details, jscmd=data, and /works/<id>.json).
+// multi-call OL flow (jscmd=details, jscmd=data, /works/<id>.json,
+// and /b/isbn/<isbn>-L.jpg).
 //   - detailsBody: JSON returned for /api/books?jscmd=details
 //   - dataBody:    JSON returned for /api/books?jscmd=data (empty
 //                  string means the route is unconfigured -- the
 //                  handler returns 404).
 //   - workBodies:  map of work key ("/works/OL...W") to JSON body.
 //                  An empty map means all work requests 404.
-func startFakeOLRouter(t *testing.T, detailsBody, dataBody string, workBodies map[string]string) {
+//   - coverISBNs:  set of ISBNs for which the /b/isbn/<isbn>-L.jpg
+//                  endpoint should return 200. Anything else 404s.
+//                  Used to control whether the ISBN-cover fallback
+//                  finds a hit.
+func startFakeOLRouter(t *testing.T, detailsBody, dataBody string, workBodies map[string]string, coverISBNs ...string) {
 	t.Helper()
+	coverSet := make(map[string]bool, len(coverISBNs))
+	for _, i := range coverISBNs {
+		coverSet[i] = true
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/api/books"):
@@ -400,8 +605,6 @@ func startFakeOLRouter(t *testing.T, detailsBody, dataBody string, workBodies ma
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(body))
 		case strings.HasPrefix(r.URL.Path, "/works/"):
-			// Path is "/works/OL...W.json"; trim the ".json" suffix to
-			// recover the key used by the map.
 			key := strings.TrimSuffix(r.URL.Path, ".json")
 			body, ok := workBodies[key]
 			if !ok {
@@ -410,15 +613,32 @@ func startFakeOLRouter(t *testing.T, detailsBody, dataBody string, workBodies ma
 			}
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(body))
+		case strings.HasPrefix(r.URL.Path, "/b/isbn/"):
+			// "/b/isbn/9780...-L.jpg" -> isbn between the prefix and "-"
+			rest := strings.TrimPrefix(r.URL.Path, "/b/isbn/")
+			isbn := strings.SplitN(rest, "-", 2)[0]
+			if !coverSet[isbn] {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			// Real OL returns 302 -> the canonical id-based URL; the
+			// Go http.Client follows redirects by default and ends at
+			// 200. For the unit test we can just return 200 directly.
+			w.WriteHeader(http.StatusOK)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
 	t.Cleanup(srv.Close)
-	prevBase, prevHost := openLibraryBaseURL, openLibraryHost
+	prevBase, prevHost, prevCovers := openLibraryBaseURL, openLibraryHost, openLibraryCoversHost
 	openLibraryBaseURL = srv.URL + "/api/books"
 	openLibraryHost = srv.URL
-	t.Cleanup(func() { openLibraryBaseURL = prevBase; openLibraryHost = prevHost })
+	openLibraryCoversHost = srv.URL
+	t.Cleanup(func() {
+		openLibraryBaseURL = prevBase
+		openLibraryHost = prevHost
+		openLibraryCoversHost = prevCovers
+	})
 }
 
 func TestFetchOpenLibraryBook_Success(t *testing.T) {

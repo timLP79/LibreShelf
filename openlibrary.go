@@ -16,17 +16,28 @@ import (
 	"time"
 )
 
-// openLibraryBaseURL and openLibraryHost are vars (not const) so
-// tests can swap them at the httptest.Server URL via t.Cleanup(...)
-// without spinning up a real network proxy. Production callers never
-// mutate them.
+// openLibraryBaseURL, openLibraryHost, and openLibraryCoversHost are
+// vars (not const) so tests can swap them at the httptest.Server URL
+// via t.Cleanup(...) without spinning up a real network proxy.
+// Production callers never mutate them.
 //
-// openLibraryBaseURL is the Books API endpoint (/api/books). openLibraryHost
-// is the host root, used to construct /works/X.json fetches for the
-// work-description fallback.
+//   openLibraryBaseURL    Books API endpoint (/api/books).
+//   openLibraryHost       Host root used for /works/X.json fetches.
+//   openLibraryCoversHost The covers.openlibrary.org host. We HEAD-probe
+//                         /b/isbn/<isbn>-L.jpg?default=false as the
+//                         final cover fallback, because that endpoint
+//                         resolves a cover whenever OL has ANY image
+//                         indexed under the ISBN -- regardless of
+//                         whether the edition's specific work record
+//                         is the canonical one (OL frequently has
+//                         duplicate work records for the same book,
+//                         and a sparse edition can point at a
+//                         coverless work even when a sibling work has
+//                         covers).
 var (
-	openLibraryBaseURL = "https://openlibrary.org/api/books"
-	openLibraryHost    = "https://openlibrary.org"
+	openLibraryBaseURL    = "https://openlibrary.org/api/books"
+	openLibraryHost       = "https://openlibrary.org"
+	openLibraryCoversHost = "https://covers.openlibrary.org"
 )
 
 const (
@@ -276,22 +287,50 @@ func FetchOpenLibraryBook(ctx context.Context, isbn string) (*OpenLibraryBook, e
 
 	book := normalizeOpenLibraryBook(entry.Details)
 
-	// Fallback 1: when the edition record has no description (common
-	// for sparse paperback editions like Dell), follow the work
-	// reference and pull from there. The work record often carries
-	// the back-cover-style synopsis that staff want to prefill.
-	if book.Description == "" && len(entry.Details.Works) > 0 {
+	// Fallback 1: when the edition record is missing either the
+	// description or the cover (common for sparse paperback editions
+	// like Penguin Classics' Jane Eyre or the Dell ed. of Rule of
+	// Four), follow the work reference and pull what's available
+	// from there. The work record often carries both the
+	// back-cover-style synopsis and one or more cover IDs that the
+	// edition itself does not list.
+	if (book.Description == "" || book.CoverURL == "") && len(entry.Details.Works) > 0 {
 		workKey := entry.Details.Works[0].Key
-		if desc, err := fetchOLWorkDescription(ctx, workKey); err != nil {
-			// Non-fatal: log and continue with empty description.
-			// The edition metadata still flows back to the client.
-			log.Printf("openlibrary: work description fetch for %s: %v", workKey, err)
-		} else if desc != "" {
-			book.Description = desc
+		if w, err := fetchOLWork(ctx, workKey); err != nil {
+			// Non-fatal: log and continue with whatever the edition
+			// provided. The edition metadata still flows back.
+			log.Printf("openlibrary: work fetch for %s: %v", workKey, err)
+		} else {
+			if book.Description == "" && w.Description != "" {
+				book.Description = w.Description
+			}
+			if book.CoverURL == "" && len(w.Covers) > 0 && w.Covers[0] > 0 {
+				book.CoverURL = fmt.Sprintf(olCoverURLTemplate, w.Covers[0])
+			}
 		}
 	}
 
-	// Fallback 2: when the edition record has no authors (neither
+	// Fallback 2: when neither the edition nor the work surfaced a
+	// cover ID, HEAD-probe OL's ISBN-based covers endpoint. OL
+	// frequently has duplicate work records for the same book; an
+	// edition can link to a coverless work even when a sibling work
+	// has plenty of covers. The /b/isbn/<isbn>-L.jpg endpoint
+	// resolves a cover whenever OL has ANY image indexed under the
+	// ISBN, regardless of which work record holds it. ?default=false
+	// makes the endpoint return 404 (rather than a 1x1 placeholder)
+	// when nothing is indexed -- without it we'd save placeholders
+	// as if they were real covers. The HEAD probe also keeps broken
+	// images out of the staff form preview by checking resolvability
+	// before we commit the URL into the prefill payload.
+	if book.CoverURL == "" {
+		cleaned := stripISBNFormatting(isbn)
+		candidate := fmt.Sprintf("%s/b/isbn/%s-L.jpg?default=false", openLibraryCoversHost, cleaned)
+		if probeCoverURL(ctx, candidate) {
+			book.CoverURL = candidate
+		}
+	}
+
+	// Fallback 3: when the edition record has no authors (neither
 	// structured nor catalog-card form), call jscmd=data which OL
 	// resolves to the work's author records and returns by name.
 	// This recovers authors for cases like the Dell ed. of
@@ -307,23 +346,31 @@ func FetchOpenLibraryBook(ctx context.Context, isbn string) (*OpenLibraryBook, e
 	return book, nil
 }
 
-// fetchOLWorkDescription pulls the description field off an OL work
-// record. workKey is the path-style form OL returns from the edition,
-// e.g. "/works/OL8990536W"; we fetch "<host>/<workKey>.json".
+// olWorkRecord is the subset of the OL work-record JSON we use as a
+// fallback when the edition is sparse. Both fields are best-effort;
+// callers check each for non-empty before using.
+type olWorkRecord struct {
+	Description string
+	Covers      []int
+}
+
+// fetchOLWork pulls description and cover IDs off an OL work record.
+// workKey is the path-style form OL returns from the edition, e.g.
+// "/works/OL8990536W"; we fetch "<host>/<workKey>.json".
 //
-// Returns "" without error if the work has no description, or if the
-// fetch fails in a way we want to silently swallow (4xx, 5xx, network
-// error). The edition data still gets returned to the client either
-// way; this is best-effort enrichment.
-func fetchOLWorkDescription(ctx context.Context, workKey string) (string, error) {
+// Returns a zero-value record without error if the work has nothing
+// useful for us, or if the fetch fails in a way we want to silently
+// swallow (4xx, 5xx, network error). The edition data still gets
+// returned to the client either way; this is best-effort enrichment.
+func fetchOLWork(ctx context.Context, workKey string) (*olWorkRecord, error) {
 	if workKey == "" {
-		return "", nil
+		return &olWorkRecord{}, nil
 	}
 	endpoint := openLibraryHost + workKey + ".json"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("User-Agent", openLibraryUserAgent)
 	req.Header.Set("Accept", "application/json")
@@ -331,23 +378,50 @@ func fetchOLWorkDescription(ctx context.Context, workKey string) (string, error)
 	client := &http.Client{Timeout: openLibraryTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("open library work request: %w", err)
+		return nil, fmt.Errorf("open library work request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("open library work returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("open library work returned status %d", resp.StatusCode)
 	}
 
 	// Work records use the same string-or-{type,value} shape for
-	// description; reuse our olDescription unmarshaler.
+	// description; reuse our olDescription unmarshaler. Covers is
+	// the same []int as on editions.
 	var work struct {
 		Description olDescription `json:"description"`
+		Covers      []int         `json:"covers"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&work); err != nil {
-		return "", fmt.Errorf("open library work decode: %w", err)
+		return nil, fmt.Errorf("open library work decode: %w", err)
 	}
-	return strings.TrimSpace(work.Description.Value), nil
+	return &olWorkRecord{
+		Description: strings.TrimSpace(work.Description.Value),
+		Covers:      work.Covers,
+	}, nil
+}
+
+// probeCoverURL HEAD-requests the given URL and reports whether it
+// resolves to a real resource (200 OK after any redirects). Used as
+// a presence check for /b/isbn/<isbn>-L.jpg before we commit that URL
+// into the prefill payload. Failures (network error, non-2xx) return
+// false rather than propagating -- the caller treats "no cover" the
+// same as "OL has no cover", which is the common case anyway.
+func probeCoverURL(ctx context.Context, url string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, url, nil)
+	if err != nil {
+		return false
+	}
+	req.Header.Set("User-Agent", openLibraryUserAgent)
+
+	client := &http.Client{Timeout: openLibraryTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
 }
 
 // fetchOLDataAuthors makes a second call to the OL Books API with
