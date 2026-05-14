@@ -119,13 +119,6 @@ func HandleBookDetail(c *gin.Context) {
 	})
 }
 
-// minDescriptionLengthForOL is the threshold below which OL's
-// description is considered "thin" and we try Wikipedia as a fallback.
-// 80 chars is enough room for a tagline ("A novel about loss and
-// memory.") but short enough that a real back-cover blurb -- which
-// runs ~200+ chars -- triggers no fallback. Tunable here.
-const minDescriptionLengthForOL = 80
-
 func HandleOpenLibraryLookup(c *gin.Context) {
 	cleaned := stripISBNFormatting(c.Param("isbn"))
 	if !IsValidISBN(cleaned) {
@@ -144,19 +137,7 @@ func HandleOpenLibraryLookup(c *gin.Context) {
 		return
 	}
 
-	// Wikipedia fallback when OL's description is empty or too thin.
-	// Failures are non-fatal: the OL metadata still returns either way.
-	if len(strings.TrimSpace(book.Description)) < minDescriptionLengthForOL {
-		wikiText, wikiErr := FetchWikipediaSummary(c.Request.Context(), book.Title, book.Authors)
-		if wikiErr != nil {
-			log.Printf("HandleOpenLibraryLookup: Wikipedia fallback for %q: %v", book.Title, wikiErr)
-		}
-		if wikiText != "" {
-			book.Description = wikiText
-			book.DescriptionSource = "wikipedia"
-		}
-	}
-	if book.Description != "" && book.DescriptionSource == "" {
+	if book.Description != "" {
 		book.DescriptionSource = "openlibrary"
 	}
 

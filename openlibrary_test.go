@@ -125,11 +125,210 @@ func TestNormalizeOpenLibraryBook(t *testing.T) {
 	})
 }
 
+func TestNormalizeOLAuthorString(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{"Austen, Jane, 1775-1817.", "Jane Austen"},
+		{"Herbert, Frank", "Frank Herbert"},
+		{"García Márquez, Gabriel, 1927-2014.", "Gabriel García Márquez"},
+		{"Tolkien, J. R. R.", "J. R. R. Tolkien"},
+		{"Anonymous", "Anonymous"},
+		{"Doe, 1900-1980.", "Doe"}, // no first name; only dates after the comma
+		{"", ""},
+		{"  Austen, Jane, 1775-1817.  ", "Jane Austen"}, // leading/trailing whitespace
+		{"Lastname,", "Lastname"},                       // trailing comma, nothing after
+	}
+	for _, tc := range cases {
+		t.Run(tc.in, func(t *testing.T) {
+			if got := normalizeOLAuthorString(tc.in); got != tc.want {
+				t.Errorf("normalizeOLAuthorString(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestNormalizeOpenLibraryBook_FallsBackToSingularAuthor pins the bug
+// fix for OL records that carry authors only under the singular
+// `author` field in "Last, First, dates." form. Real-world example:
+// the Penguin Classics edition of Pride and Prejudice (ISBN
+// 9780141439518) returns "author": ["Austen, Jane, 1775-1817."] with
+// no `authors` array, so the previous code dropped the author entirely.
+func TestNormalizeOpenLibraryBook_FallsBackToSingularAuthor(t *testing.T) {
+	got := normalizeOpenLibraryBook(olBook{
+		Title:  "Pride and Prejudice",
+		Author: []string{"Austen, Jane, 1775-1817."},
+	})
+	if len(got.Authors) != 1 || got.Authors[0] != "Jane Austen" {
+		t.Errorf("Authors = %v, want [Jane Austen]", got.Authors)
+	}
+}
+
+// TestNormalizeOpenLibraryBook_StructuredAuthorsWinOverSingular pins
+// the precedence rule: when a record carries BOTH `authors` (structured)
+// and `author` (string), use the structured form. The structured form
+// is the canonical OL shape; the singular field exists mostly on older
+// catalog-card-style records and is only used as a fallback.
+func TestNormalizeOpenLibraryBook_StructuredAuthorsWinOverSingular(t *testing.T) {
+	got := normalizeOpenLibraryBook(olBook{
+		Title:   "Both Forms",
+		Authors: []olAuthor{{Name: "Canonical Name"}},
+		Author:  []string{"Catalog, Form, 1900-2000."},
+	})
+	if len(got.Authors) != 1 || got.Authors[0] != "Canonical Name" {
+		t.Errorf("Authors = %v, want [Canonical Name]", got.Authors)
+	}
+}
+
 // TestOLDescriptionUnmarshal pins the two real-world JSON shapes
 // OL uses for the description field: bare string (older records) and
 // typed-text object {type, value} (newer records). Anything else
 // (null, number, malformed) must yield an empty string, not an error,
 // so a single stray record can't block the whole lookup.
+// TestFetchOpenLibraryBook_FallsBackToWorkDescription pins the
+// edition->work fallback. When the edition record has no description
+// but carries a works ref, FetchOpenLibraryBook must follow the work
+// key and use its description. Real-world example: the Dell ed. of
+// "The Rule of Four" has no description on its edition record but
+// the work record carries the back-cover synopsis.
+func TestFetchOpenLibraryBook_FallsBackToWorkDescription(t *testing.T) {
+	startFakeOLRouter(t,
+		// edition (jscmd=details): no description, but a works ref
+		`{
+			"ISBN:9780440241355": {
+				"details": {
+					"title": "The rule of four",
+					"authors": [{"name": "Ian Caldwell"}],
+					"works": [{"key": "/works/OL8990536W"}]
+				}
+			}
+		}`,
+		"", // jscmd=data not configured (won't fire -- authors present)
+		map[string]string{
+			"/works/OL8990536W": `{
+				"description": {"type": "/type/text", "value": "Princeton. Good Friday, 1999. On the eve of graduation..."}
+			}`,
+		},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	got, err := FetchOpenLibraryBook(ctx, "9780440241355")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook: %v", err)
+	}
+	if !strings.Contains(got.Description, "Princeton. Good Friday") {
+		t.Errorf("Description = %q, want work-record blurb", got.Description)
+	}
+}
+
+// TestFetchOpenLibraryBook_WorkFallbackSilentOn404 pins the
+// non-fatal-failure contract: when the work record 404s, the edition
+// metadata still flows back to the caller with an empty description.
+// The handler must not 500 just because the work fetch failed.
+func TestFetchOpenLibraryBook_WorkFallbackSilentOn404(t *testing.T) {
+	startFakeOLRouter(t,
+		`{
+			"ISBN:9780440241355": {
+				"details": {
+					"title": "Sparse Edition",
+					"authors": [{"name": "Some Author"}],
+					"works": [{"key": "/works/OLDoesNotExistW"}]
+				}
+			}
+		}`,
+		"",
+		map[string]string{}, // no work bodies -> 404
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	got, err := FetchOpenLibraryBook(ctx, "9780440241355")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook should be non-fatal on work 404; got err=%v", err)
+	}
+	if got.Title != "Sparse Edition" {
+		t.Errorf("Title = %q, want edition metadata preserved", got.Title)
+	}
+	if got.Description != "" {
+		t.Errorf("Description = %q, want empty on work miss", got.Description)
+	}
+}
+
+// TestFetchOpenLibraryBook_FallsBackToDataAuthors pins the
+// edition->jscmd=data author fallback. When the edition record has
+// neither structured `authors` nor singular `author`, FetchOpenLibraryBook
+// calls jscmd=data, which OL resolves from work-record refs into
+// {name, url} objects. Real-world example: the Dell ed. of "The Rule
+// of Four" has no author info on the edition; jscmd=data returns
+// Ian Caldwell, Dustin Thomason, and Eiko Kakinuma by name.
+func TestFetchOpenLibraryBook_FallsBackToDataAuthors(t *testing.T) {
+	startFakeOLRouter(t,
+		// edition: no authors at all
+		`{
+			"ISBN:9780440241355": {
+				"details": {
+					"title": "The rule of four"
+				}
+			}
+		}`,
+		// jscmd=data: resolved author names
+		`{
+			"ISBN:9780440241355": {
+				"title": "The rule of four",
+				"authors": [
+					{"name": "Ian Caldwell"},
+					{"name": "Dustin Thomason"},
+					{"name": "Eiko Kakinuma"}
+				]
+			}
+		}`,
+		map[string]string{},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	got, err := FetchOpenLibraryBook(ctx, "9780440241355")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook: %v", err)
+	}
+	want := []string{"Ian Caldwell", "Dustin Thomason", "Eiko Kakinuma"}
+	if !reflect.DeepEqual(got.Authors, want) {
+		t.Errorf("Authors = %v, want %v", got.Authors, want)
+	}
+}
+
+// TestFetchOpenLibraryBook_DataAuthorsFallbackSilentOn404 pins the
+// non-fatal-failure contract for the data-authors fallback. When the
+// data call 404s, edition metadata still flows back with empty Authors.
+func TestFetchOpenLibraryBook_DataAuthorsFallbackSilentOn404(t *testing.T) {
+	startFakeOLRouter(t,
+		`{
+			"ISBN:9780440241355": {
+				"details": {
+					"title": "Sparse Edition"
+				}
+			}
+		}`,
+		"", // 404 on data
+		map[string]string{},
+	)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	got, err := FetchOpenLibraryBook(ctx, "9780440241355")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook should be non-fatal on data 404; got err=%v", err)
+	}
+	if got.Title != "Sparse Edition" {
+		t.Errorf("Title = %q, want edition metadata preserved", got.Title)
+	}
+	if len(got.Authors) != 0 {
+		t.Errorf("Authors = %v, want empty on data miss", got.Authors)
+	}
+}
+
 func TestOLDescriptionUnmarshal(t *testing.T) {
 	cases := []struct {
 		name string
@@ -157,7 +356,11 @@ func TestOLDescriptionUnmarshal(t *testing.T) {
 }
 
 // fakeOLServer returns an httptest.Server that responds with the given
-// status code and body, and a t.Cleanup hook to restore openLibraryBaseURL.
+// status code and body, and a t.Cleanup hook to restore openLibraryBaseURL
+// and openLibraryHost. Both URLs are swapped to the same fake so a
+// work-fallback fetch lands on the same server (where it will fail to
+// decode as a work record and be silently swallowed -- safe for tests
+// that don't exercise the fallback path).
 func fakeOLServer(t *testing.T, status int, body string) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -165,10 +368,57 @@ func fakeOLServer(t *testing.T, status int, body string) *httptest.Server {
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
-	prev := openLibraryBaseURL
+	prevBase, prevHost := openLibraryBaseURL, openLibraryHost
 	openLibraryBaseURL = srv.URL
-	t.Cleanup(func() { openLibraryBaseURL = prev })
+	openLibraryHost = srv.URL
+	t.Cleanup(func() { openLibraryBaseURL = prevBase; openLibraryHost = prevHost })
 	return srv
+}
+
+// startFakeOLRouter spins up a single httptest.Server that routes
+// requests by path + jscmd query param so tests can exercise the
+// multi-call OL flow (jscmd=details, jscmd=data, and /works/<id>.json).
+//   - detailsBody: JSON returned for /api/books?jscmd=details
+//   - dataBody:    JSON returned for /api/books?jscmd=data (empty
+//                  string means the route is unconfigured -- the
+//                  handler returns 404).
+//   - workBodies:  map of work key ("/works/OL...W") to JSON body.
+//                  An empty map means all work requests 404.
+func startFakeOLRouter(t *testing.T, detailsBody, dataBody string, workBodies map[string]string) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/api/books"):
+			body := detailsBody
+			if r.URL.Query().Get("jscmd") == "data" {
+				body = dataBody
+			}
+			if body == "" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(body))
+		case strings.HasPrefix(r.URL.Path, "/works/"):
+			// Path is "/works/OL...W.json"; trim the ".json" suffix to
+			// recover the key used by the map.
+			key := strings.TrimSuffix(r.URL.Path, ".json")
+			body, ok := workBodies[key]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(body))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	prevBase, prevHost := openLibraryBaseURL, openLibraryHost
+	openLibraryBaseURL = srv.URL + "/api/books"
+	openLibraryHost = srv.URL
+	t.Cleanup(func() { openLibraryBaseURL = prevBase; openLibraryHost = prevHost })
 }
 
 func TestFetchOpenLibraryBook_Success(t *testing.T) {
