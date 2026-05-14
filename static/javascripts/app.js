@@ -348,10 +348,12 @@ function initBookForm() {
                 }
                 if (data.publish_year) yearField.value = data.publish_year;
                 if (data.publisher) publisherField.value = data.publisher;
-                // Only prefill description when the existing field is
-                // blank, so we never clobber a longer summary the staff
-                // member is already in the middle of writing or editing.
-                if (data.description && descriptionField && !descriptionField.value.trim()) {
+                // Description follows the same overwrite-on-OL-hit
+                // semantics as title/authors/year/publisher above: if
+                // OL returns a value, take it. A second consecutive
+                // Lookup against a different ISBN must update every
+                // prefilled field, including description.
+                if (data.description && descriptionField) {
                     descriptionField.value = data.description;
                 }
                 if (data.cover_url) {
