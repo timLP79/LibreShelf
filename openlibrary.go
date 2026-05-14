@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -287,30 +288,73 @@ func FetchOpenLibraryBook(ctx context.Context, isbn string) (*OpenLibraryBook, e
 
 	book := normalizeOpenLibraryBook(entry.Details)
 
-	// Fallback 1: when the edition record is missing either the
-	// description or the cover (common for sparse paperback editions
-	// like Penguin Classics' Jane Eyre or the Dell ed. of Rule of
-	// Four), follow the work reference and pull what's available
-	// from there. The work record often carries both the
-	// back-cover-style synopsis and one or more cover IDs that the
-	// edition itself does not list.
-	if (book.Description == "" || book.CoverURL == "") && len(entry.Details.Works) > 0 {
-		workKey := entry.Details.Works[0].Key
-		if w, err := fetchOLWork(ctx, workKey); err != nil {
-			// Non-fatal: log and continue with whatever the edition
-			// provided. The edition metadata still flows back.
-			log.Printf("openlibrary: work fetch for %s: %v", workKey, err)
-		} else {
-			if book.Description == "" && w.Description != "" {
-				book.Description = w.Description
+	// Fallbacks 1 + 2 (work fetch for description/cover, jscmd=data
+	// for authors) are both triggered by gaps in the edition response
+	// but are independent of each other. Fire them in parallel via
+	// goroutines so the worst-case Lookup latency (sparse Dell-style
+	// edition) drops from ~1100ms sequential to ~700ms.
+	//
+	// The ISBN-cover HEAD probe (the third potential fallback)
+	// depends on the work fetch's result (only fires when the work
+	// also has no covers), so it stays sequential after these two
+	// concurrent fetches complete.
+	needWork := (book.Description == "" || book.CoverURL == "") && len(entry.Details.Works) > 0
+	needDataAuthors := len(book.Authors) == 0
+
+	var (
+		wg     sync.WaitGroup
+		workMu sync.Mutex // guards workResult / workErr
+		// Closure-captured results from the two concurrent fetches.
+		// Read after wg.Wait() so no further synchronization needed
+		// then.
+		workResult  *olWorkRecord
+		workErr     error
+		authorNames []string
+		authorErr   error
+	)
+	if needWork {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r, err := fetchOLWork(ctx, entry.Details.Works[0].Key)
+			workMu.Lock()
+			workResult, workErr = r, err
+			workMu.Unlock()
+		}()
+	}
+	if needDataAuthors {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			names, err := fetchOLDataAuthors(ctx, bibkey)
+			// authorNames + authorErr are only written by this one
+			// goroutine and only read after Wait, so no mutex needed.
+			authorNames, authorErr = names, err
+		}()
+	}
+	wg.Wait()
+
+	if needWork {
+		if workErr != nil {
+			log.Printf("openlibrary: work fetch for %s: %v", entry.Details.Works[0].Key, workErr)
+		} else if workResult != nil {
+			if book.Description == "" && workResult.Description != "" {
+				book.Description = workResult.Description
 			}
-			if book.CoverURL == "" && len(w.Covers) > 0 && w.Covers[0] > 0 {
-				book.CoverURL = fmt.Sprintf(olCoverURLTemplate, w.Covers[0])
+			if book.CoverURL == "" && len(workResult.Covers) > 0 && workResult.Covers[0] > 0 {
+				book.CoverURL = fmt.Sprintf(olCoverURLTemplate, workResult.Covers[0])
 			}
 		}
 	}
+	if needDataAuthors {
+		if authorErr != nil {
+			log.Printf("openlibrary: data-authors fetch for %s: %v", bibkey, authorErr)
+		} else {
+			book.Authors = authorNames
+		}
+	}
 
-	// Fallback 2: when neither the edition nor the work surfaced a
+	// Fallback 3: when neither the edition nor the work surfaced a
 	// cover ID, HEAD-probe OL's ISBN-based covers endpoint. OL
 	// frequently has duplicate work records for the same book; an
 	// edition can link to a coverless work even when a sibling work
@@ -327,19 +371,6 @@ func FetchOpenLibraryBook(ctx context.Context, isbn string) (*OpenLibraryBook, e
 		candidate := fmt.Sprintf("%s/b/isbn/%s-L.jpg?default=false", openLibraryCoversHost, cleaned)
 		if probeCoverURL(ctx, candidate) {
 			book.CoverURL = candidate
-		}
-	}
-
-	// Fallback 3: when the edition record has no authors (neither
-	// structured nor catalog-card form), call jscmd=data which OL
-	// resolves to the work's author records and returns by name.
-	// This recovers authors for cases like the Dell ed. of
-	// "The Rule of Four" where details has no author info at all.
-	if len(book.Authors) == 0 {
-		if names, err := fetchOLDataAuthors(ctx, bibkey); err != nil {
-			log.Printf("openlibrary: data-authors fetch for %s: %v", bibkey, err)
-		} else {
-			book.Authors = names
 		}
 	}
 
