@@ -68,7 +68,7 @@ func TestNormalizeOpenLibraryBook(t *testing.T) {
 			Covers:      []int{1234567, 999},
 			Description: olDescription{Value: "A romance."},
 		}
-		want := &OpenLibraryBook{
+		want := &BookPrefill{
 			Title:       "Pride and Prejudice",
 			Authors:     []string{"Jane Austen", "Editor"},
 			PublishYear: 1813,

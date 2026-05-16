@@ -48,12 +48,17 @@ const (
 
 var ErrOpenLibraryNotFound = errors.New("open library: isbn not found")
 
-// OpenLibraryBook is the prefill payload returned by HandleOpenLibraryLookup.
-// Most fields come from Open Library; Description may come from
-// Open Library OR from Wikipedia when OL's description is empty/thin.
-// DescriptionSource ("openlibrary" or "wikipedia") tells the JS-side
-// prefill code which source-label to show in the status banner.
-type OpenLibraryBook struct {
+// BookPrefill is the merged-source prefill payload returned by
+// HandleOpenLibraryLookup. Fields originate from the Open Library chain
+// (jscmd=details, work record, jscmd=data) and from the Google Books
+// volumes API when GOOGLE_BOOKS_API_KEY is configured. The merge rule is
+// "OL wins, GB fills gaps": each field uses the OL value if non-empty
+// after strings.TrimSpace, otherwise the GB value. DescriptionSource and
+// CoverSource carry the per-field origin so the admin Lookup JS can show
+// a "via Google Books" hint on the staged banner. GoogleBooksError is
+// true when GB was attempted (key set, gap detected) but failed; the JS
+// uses this to render a small "Google Books unavailable" note.
+type BookPrefill struct {
 	Title             string   `json:"title,omitempty"`
 	Authors           []string `json:"authors,omitempty"`
 	PublishYear       int      `json:"publish_year,omitempty"`
@@ -61,6 +66,8 @@ type OpenLibraryBook struct {
 	CoverURL          string   `json:"cover_url,omitempty"`
 	Description       string   `json:"description,omitempty"`
 	DescriptionSource string   `json:"description_source,omitempty"`
+	CoverSource       string   `json:"cover_source,omitempty"`
+	GoogleBooksError  bool     `json:"google_books_error,omitempty"`
 }
 
 // olResponse mirrors the jscmd=details envelope returned by
@@ -165,8 +172,8 @@ func stripISBNFormatting(s string) string {
 	return s
 }
 
-func normalizeOpenLibraryBook(b olBook) *OpenLibraryBook {
-	out := &OpenLibraryBook{
+func normalizeOpenLibraryBook(b olBook) *BookPrefill {
+	out := &BookPrefill{
 		Title:       b.Title,
 		PublishYear: parsePublishYear(b.PublishDate),
 		Description: strings.TrimSpace(b.Description.Value),
@@ -257,14 +264,14 @@ func normalizeOLAuthorString(s string) string {
 //
 // Tests that need to drive the OL chain against httptest.NewServer
 // should keep calling FetchOpenLibraryBook directly.
-func FetchOpenLibraryBookGated(ctx context.Context, dm *DatabaseManager, isbn string) (*OpenLibraryBook, error) {
+func FetchOpenLibraryBookGated(ctx context.Context, dm *DatabaseManager, isbn string) (*BookPrefill, error) {
 	if !IsExternalAllowed(dm) {
 		return nil, ErrExternalDisabled
 	}
 	return FetchOpenLibraryBook(ctx, isbn)
 }
 
-func FetchOpenLibraryBook(ctx context.Context, isbn string) (*OpenLibraryBook, error) {
+func FetchOpenLibraryBook(ctx context.Context, isbn string) (*BookPrefill, error) {
 	bibkey := "ISBN:" + stripISBNFormatting(isbn)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, openLibraryBaseURL, nil)
