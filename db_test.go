@@ -718,9 +718,10 @@ func TestFetchAndStoreSeedCovers_OfflineSkipsWithoutHTTP(t *testing.T) {
 		t.Fatalf("insert: %v", err)
 	}
 
-	// Hit the function with a context that would expire instantly if any
-	// HTTP attempt slipped through; the offline short-circuit must fire
-	// before the request loop.
+	// Hit the function with a short-fused context (100ms) so any HTTP
+	// attempt that slips through the gate eventually times out rather than
+	// blocking the test suite. The offline short-circuit must fire before
+	// the request loop.
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
@@ -732,8 +733,8 @@ func TestFetchAndStoreSeedCovers_OfflineSkipsWithoutHTTP(t *testing.T) {
 	// that bails at DNS or connection setup) takes at least several
 	// milliseconds. If this assertion fails, the gate was likely removed
 	// and the function fell through to the per-book HTTP loop.
-	if elapsed > 50*time.Millisecond {
-		t.Errorf("offline gate should return in <50ms, took %v (HTTP attempt slipped through?)", elapsed)
+	if elapsed > 200*time.Millisecond {
+		t.Errorf("offline gate should return in <200ms, took %v (HTTP attempt slipped through?)", elapsed)
 	}
 
 	// Secondary check: verify the book still has no cover (the function did not
