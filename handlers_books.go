@@ -253,6 +253,7 @@ func HandleBookCreate(c *gin.Context) {
 	}
 
 	coverURL := strings.TrimSpace(c.PostForm("cover_url"))
+	coverSkippedOffline := false
 	if fh, err := c.FormFile("cover"); err == nil {
 		saved, err := SaveUploadedCover(fh)
 		if err != nil {
@@ -271,13 +272,18 @@ func HandleBookCreate(c *gin.Context) {
 		}
 		book.CoverFilename = &saved
 	} else if coverURL != "" {
-		saved, err := SaveCoverFromURL(coverURL)
-		if err != nil {
-			log.Printf("HandleBookCreate: SaveCoverFromURL(%q): %v", coverURL, err)
+		saved, err := SaveCoverFromURLGated(dm, coverURL)
+		switch {
+		case errors.Is(err, ErrExternalDisabled):
+			log.Printf("HandleBookCreate: cover URL skipped due to offline mode (url=%q)", coverURL)
+			coverSkippedOffline = true
+		case err != nil:
+			log.Printf("HandleBookCreate: SaveCoverFromURLGated(%q): %v", coverURL, err)
 			renderBookCreateForm(c, book, authorsText, "Could not download cover from Open Library. Try uploading a file instead.")
 			return
+		default:
+			book.CoverFilename = &saved
 		}
-		book.CoverFilename = &saved
 	}
 
 	if book.ISBN != nil {
@@ -298,7 +304,11 @@ func HandleBookCreate(c *gin.Context) {
 		return
 	}
 
-	setFlash(c, flashKindSuccess, "book_created")
+	if coverSkippedOffline {
+		setFlash(c, flashKindSuccess, "book_created_cover_skipped_offline")
+	} else {
+		setFlash(c, flashKindSuccess, "book_created")
+	}
 	setFlashDetail(c, book.Title)
 
 	if c.PostForm("submit_action") == "add_another" {
@@ -476,6 +486,7 @@ func HandleBookUpdate(c *gin.Context) {
 	// cover if the DB write failed.
 	var oldCoverToDelete string
 	coverURL := strings.TrimSpace(c.PostForm("cover_url"))
+	coverSkippedOffline := false
 	if fh, err := c.FormFile("cover"); err == nil {
 		saved, err := SaveUploadedCover(fh)
 		if err != nil {
@@ -497,16 +508,21 @@ func HandleBookUpdate(c *gin.Context) {
 		}
 		book.CoverFilename = &saved
 	} else if coverURL != "" {
-		saved, err := SaveCoverFromURL(coverURL)
-		if err != nil {
-			log.Printf("HandleBookUpdate: SaveCoverFromURL(%q): %v", coverURL, err)
+		saved, err := SaveCoverFromURLGated(dm, coverURL)
+		switch {
+		case errors.Is(err, ErrExternalDisabled):
+			log.Printf("HandleBookUpdate: cover URL skipped due to offline mode (url=%q)", coverURL)
+			coverSkippedOffline = true
+		case err != nil:
+			log.Printf("HandleBookUpdate: SaveCoverFromURLGated(%q): %v", coverURL, err)
 			renderBookEditForm(c, id, book, authorsText, "Could not download cover from Open Library. Try uploading a file instead.")
 			return
+		default:
+			if existing.CoverFilename != nil {
+				oldCoverToDelete = *existing.CoverFilename
+			}
+			book.CoverFilename = &saved
 		}
-		if existing.CoverFilename != nil {
-			oldCoverToDelete = *existing.CoverFilename
-		}
-		book.CoverFilename = &saved
 	}
 
 	// Duplicate-ISBN guard: another book (different id) already owns this
@@ -536,7 +552,11 @@ func HandleBookUpdate(c *gin.Context) {
 		}
 	}
 
-	setFlash(c, flashKindSuccess, "book_updated")
+	if coverSkippedOffline {
+		setFlash(c, flashKindSuccess, "book_updated_cover_skipped_offline")
+	} else {
+		setFlash(c, flashKindSuccess, "book_updated")
+	}
 	setFlashDetail(c, book.Title)
 	c.Redirect(http.StatusFound, fmt.Sprintf("/books/%d", id))
 }
