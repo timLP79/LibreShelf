@@ -724,10 +724,19 @@ func TestFetchAndStoreSeedCovers_OfflineSkipsWithoutHTTP(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
+	start := time.Now()
 	dm.FetchAndStoreSeedCovers(ctx)
+	elapsed := time.Since(start)
 
-	// If we got here without hanging or panicking, the function returned
-	// quickly. Verify the book still has no cover (the function did not
+	// The offline gate returns in microseconds. Any HTTP attempt (even one
+	// that bails at DNS or connection setup) takes at least several
+	// milliseconds. If this assertion fails, the gate was likely removed
+	// and the function fell through to the per-book HTTP loop.
+	if elapsed > 50*time.Millisecond {
+		t.Errorf("offline gate should return in <50ms, took %v (HTTP attempt slipped through?)", elapsed)
+	}
+
+	// Secondary check: verify the book still has no cover (the function did not
 	// reach the save step).
 	var coverFilename *string
 	if err := dm.db.QueryRow(
