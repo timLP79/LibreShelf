@@ -78,6 +78,30 @@ sudo systemctl status libreshelf
 
 The service runs the app on port 3000 and restarts it automatically on failure or reboot.
 
+## Environment Variables
+
+The systemd service runs `libreshelf` with whatever env vars are set in the unit file or
+the systemd environment. The app reads several optional env vars at startup; the only one
+covered here is the offline-mode declaration. Other env vars are documented inline in
+`main.go`.
+
+### `LIBRESHELF_OFFLINE` (optional)
+
+Set to `true` to declare this deployment offline at startup. When on, LibreShelf does not
+attempt any outbound HTTP for Open Library lookup, seed-cover backfill, or future external
+metadata sources. Admin can also flip this at runtime via Settings; the runtime setting
+wins over the env var. Default: `false`.
+
+Use for deployments where outbound internet access is unavailable or policy-restricted
+(prisons, secure facilities, air-gapped networks). To set via systemd, add an
+`Environment=` line in `deploy/libreshelf.service`:
+
+```
+Environment=LIBRESHELF_OFFLINE=true
+```
+
+Then `sudo systemctl daemon-reload && sudo systemctl restart libreshelf`.
+
 ## Step 7: Configure nginx
 
 Create the nginx site config:

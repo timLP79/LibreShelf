@@ -1155,3 +1155,33 @@ endpoints in one test.
   recovered by the ISBN probe.
 
 Full seed backfill on a fresh install: 100/100 covers, ~70s total.
+
+---
+
+## DEC-033: Operator-declared offline mode (env var + admin toggle, no auto-detect)
+
+**Decision:** External HTTP calls (Open Library, future Google Books, future Internet Archive)
+are gated by an operator-declared offline-mode predicate. Sources: `LIBRESHELF_OFFLINE` env
+var as startup default, `offline_mode` row in the existing `settings` table as runtime
+override. The settings row wins when present. Admin-only toggle on the existing Settings
+page.
+
+**Why not auto-detect:** Restricted networks are inconsistent. Some allow outbound HTTPS
+to some hosts and block others; transparent proxies can return success codes for blocked
+URLs; air-gapped facilities have no reliable probe target. The operator knows the
+deployment's network policy. Asking the app to guess from inside the network creates
+false positives and negatives that are worse than an explicit declaration.
+
+**Call sites gated by `IsExternalAllowed`:**
+- `FetchOpenLibraryBookGated` (admin OL Lookup path)
+- `FetchAndStoreSeedCovers` (startup seed backfill)
+
+The un-gated `FetchOpenLibraryBook` remains exported so the existing httptest-driven tests
+in `openlibrary_test.go` keep working without needing a DB.
+
+**Future use:** Subproject A (Google Books) reads the same predicate before any GB HTTP
+attempt. Same pattern applies to Internet Archive, Wikidata, and any future external
+source -- one gate, one toggle.
+
+**Related:** spec at `docs/specs/2026-05-15-google-books-fallback-design.md`; bd issues
+cs408-go-stack-8gj (next subproject) and cs408-go-stack-0eh (offline workflow context).
