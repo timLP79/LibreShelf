@@ -829,3 +829,69 @@ func TestFetchOpenLibraryBook_NoGBKey_OLChainOnly(t *testing.T) {
 		t.Errorf("GoogleBooksError should be false when GB is disabled (no error, just skipped)")
 	}
 }
+
+func TestFetchOpenLibraryBook_OLMissGBHasBook_ReturnsGB(t *testing.T) {
+	// OL returns no record for the bibkey. GB has the book. The function
+	// should return a GB-only BookPrefill with source labels stamped
+	// "googlebooks", not the OL-not-found sentinel.
+	startFakeOLRouter(t, `{}`, "", map[string]string{})
+
+	gbBody := `{"items":[{"volumeInfo":{
+		"title": "New Book Not In OL",
+		"authors": ["A Author"],
+		"description": "GB-only description.",
+		"imageLinks": {"thumbnail": "http://books.google.com/books/content?id=X"}
+	}}]}`
+	gbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(gbBody))
+	}))
+	t.Cleanup(gbSrv.Close)
+	withGoogleBooksBaseURL(t, gbSrv.URL)
+	withGoogleBooksAPIKey(t, "test-key")
+
+	got, err := FetchOpenLibraryBook(context.Background(), "9780000000999")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook: %v", err)
+	}
+	if got.Title != "New Book Not In OL" {
+		t.Errorf("title: want 'New Book Not In OL' from GB, got %q", got.Title)
+	}
+	if got.DescriptionSource != "googlebooks" {
+		t.Errorf("DescriptionSource: want 'googlebooks', got %q", got.DescriptionSource)
+	}
+	if got.CoverSource != "googlebooks" {
+		t.Errorf("CoverSource: want 'googlebooks', got %q", got.CoverSource)
+	}
+}
+
+func TestFetchOpenLibraryBook_OLMissGBAlsoMisses_ReturnsNotFound(t *testing.T) {
+	// OL has no record. GB also returns no record. The function should
+	// return ErrOpenLibraryNotFound (preserving the existing contract
+	// for the case where neither source has the book).
+	startFakeOLRouter(t, `{}`, "", map[string]string{})
+
+	gbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	t.Cleanup(gbSrv.Close)
+	withGoogleBooksBaseURL(t, gbSrv.URL)
+	withGoogleBooksAPIKey(t, "test-key")
+
+	_, err := FetchOpenLibraryBook(context.Background(), "9780000000999")
+	if !errors.Is(err, ErrOpenLibraryNotFound) {
+		t.Errorf("want ErrOpenLibraryNotFound (neither source has it), got %v", err)
+	}
+}
+
+func TestFetchOpenLibraryBook_OLMissNoGBKey_ReturnsNotFound(t *testing.T) {
+	// OL has no record. GB is not configured (no API key). The function
+	// should return ErrOpenLibraryNotFound without attempting any GB
+	// call. Preserves the existing behavior for deployments without GB.
+	startFakeOLRouter(t, `{}`, "", map[string]string{})
+	withGoogleBooksAPIKey(t, "")
+
+	_, err := FetchOpenLibraryBook(context.Background(), "9780000000999")
+	if !errors.Is(err, ErrOpenLibraryNotFound) {
+		t.Errorf("want ErrOpenLibraryNotFound (no GB key, OL miss), got %v", err)
+	}
+}

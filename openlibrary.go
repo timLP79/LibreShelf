@@ -304,6 +304,24 @@ func FetchOpenLibraryBook(ctx context.Context, isbn string) (*BookPrefill, error
 
 	entry, ok := payload[bibkey]
 	if !ok {
+		// OL has no record for this ISBN. Fall back to Google Books if
+		// configured -- this is the "total-miss fallback" case from
+		// DEC-035. The merge function's gbOnly path stamps source labels
+		// so the JS banner can show "Some fields via Google Books."
+		if IsGoogleBooksConfigured() {
+			gbResult, gbErr := FetchByISBN(ctx, isbn)
+			switch {
+			case gbErr == nil && gbResult != nil:
+				return mergePrefill(nil, gbResult), nil
+			case errors.Is(gbErr, ErrGoogleBooksNotFound), errors.Is(gbErr, ErrGoogleBooksDisabled):
+				// Neither source has it; fall through to NotFound.
+			default:
+				// GB had a real error (network, 5xx, decode). Log it and
+				// fall through to NotFound; the admin sees "fill manually"
+				// and can decide whether to retry once GB recovers.
+				log.Printf("openlibrary: google books fetch for %s (OL miss): %v", isbn, gbErr)
+			}
+		}
 		return nil, ErrOpenLibraryNotFound
 	}
 
