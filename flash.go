@@ -12,11 +12,11 @@ import (
 )
 
 const (
-	flashMaxAgeSeconds     = 60
-	flashKindError         = "error"
-	flashKindSuccess       = "success"
-	flashDetailCookieName  = "flash_detail"
-	flashDetailMaxBytes    = 255
+	flashMaxAgeSeconds    = 60
+	flashKindError        = "error"
+	flashKindSuccess      = "success"
+	flashDetailCookieName = "flash_detail"
+	flashDetailMaxBytes   = 255
 )
 
 // flashMessages maps a stable code slug to the human-visible banner text.
@@ -25,44 +25,44 @@ const (
 // request referers. Add a new entry here whenever a handler emits a new
 // code.
 var flashMessages = map[string]string{
-	"password_mismatch":        "Password and confirmation did not match.",
-	"weak_password":            "Password does not meet complexity requirements.",
-	"invalid_username":         "Username may only contain letters, numbers, and underscores.",
-	"invalid_role":             "Role must be either 'admin' or 'staff'.",
-	"duplicate_username":       "That username is already taken.",
-	"staff_created":            "Staff account created.",
-	"cannot_demote_self":       "You cannot demote your own account.",
-	"cannot_demote_last_admin": "At least one admin account must remain.",
-	"staff_updated":            "Account updated.",
-	"cannot_delete_self":       "You cannot delete your own account.",
-	"cannot_delete_last_admin": "At least one admin account must remain.",
-	"staff_deleted":            "Account deleted.",
-	"password_reset":           "Password reset. Share the new password with the user through a trusted channel.",
-	"book_created":                          "Added to the catalog:",
-	"book_created_cover_skipped_offline":    "Book created. Cover URL was skipped because offline mode is on.",
-	"book_updated":                          "Updated:",
-	"book_updated_cover_skipped_offline":    "Book updated. Cover URL was skipped because offline mode is on.",
-	"book_deleted":             "Removed from the catalog:",
-	"book_has_loans":           "This book cannot be deleted while it has loan history.",
-	"patron_created":           "Patron added:",
-	"patron_updated":           "Patron updated:",
-	"patron_deleted":           "Patron removed:",
-	"patron_has_loans":         "This patron cannot be removed while they have loan history.",
-	"patron_name_required":     "Patron name is required.",
-	"patron_name_unusable":     "Could not derive a username from the provided name. Use letters or digits.",
-	"loan_checkout_success":    "Checked out:",
-	"loan_return_success":      "Book returned.",
-	"loan_blocked_overdue":     "Cannot check out. This patron has overdue loans that must be returned first.",
-	"loan_blocked_limit":       "Cannot check out. This patron has reached the maximum of 5 active loans.",
-	"loan_no_copies":           "No copies available to check out.",
-	"loan_already_returned":    "This loan has already been returned.",
-	"loan_patron_required":     "Please select a patron before checking out.",
-	"backup_imported":          "Backup restored. The previous database and covers are preserved as .bak files for one-step rollback.",
-	"settings_saved":           "Settings saved.",
-	"settings_save_failed":     "Could not save settings. Please try again.",
-	"temp_password_dismissed":  "Temporary password marked as delivered.",
-	"temp_password_regenerated": "New temporary password generated.",
-	"temp_password_unavailable": "No temporary password is set for that patron.",
+	"password_mismatch":                  "Password and confirmation did not match.",
+	"weak_password":                      "Password does not meet complexity requirements.",
+	"invalid_username":                   "Username may only contain letters, numbers, and underscores.",
+	"invalid_role":                       "Role must be either 'admin' or 'staff'.",
+	"duplicate_username":                 "That username is already taken.",
+	"staff_created":                      "Staff account created.",
+	"cannot_demote_self":                 "You cannot demote your own account.",
+	"cannot_demote_last_admin":           "At least one admin account must remain.",
+	"staff_updated":                      "Account updated.",
+	"cannot_delete_self":                 "You cannot delete your own account.",
+	"cannot_delete_last_admin":           "At least one admin account must remain.",
+	"staff_deleted":                      "Account deleted.",
+	"password_reset":                     "Password reset. Share the new password with the user through a trusted channel.",
+	"book_created":                       "Added to the catalog:",
+	"book_created_cover_skipped_offline": "Book created. Cover URL was skipped because offline mode is on.",
+	"book_updated":                       "Updated:",
+	"book_updated_cover_skipped_offline": "Book updated. Cover URL was skipped because offline mode is on.",
+	"book_deleted":                       "Removed from the catalog:",
+	"book_has_loans":                     "This book cannot be deleted while it has loan history.",
+	"patron_created":                     "Patron added:",
+	"patron_updated":                     "Patron updated:",
+	"patron_deleted":                     "Patron removed:",
+	"patron_has_loans":                   "This patron cannot be removed while they have loan history.",
+	"patron_name_required":               "Patron name is required.",
+	"patron_name_unusable":               "Could not derive a username from the provided name. Use letters or digits.",
+	"loan_checkout_success":              "Checked out:",
+	"loan_return_success":                "Book returned.",
+	"loan_blocked_overdue":               "Cannot check out. This patron has overdue loans that must be returned first.",
+	"loan_blocked_limit":                 "Cannot check out. This patron has reached the maximum of 5 active loans.",
+	"loan_no_copies":                     "No copies available to check out.",
+	"loan_already_returned":              "This loan has already been returned.",
+	"loan_patron_required":               "Please select a patron before checking out.",
+	"backup_imported":                    "Backup restored. The previous database and covers are preserved as .bak files for one-step rollback.",
+	"settings_saved":                     "Settings saved.",
+	"settings_save_failed":               "Could not save settings. Please try again.",
+	"temp_password_dismissed":            "Temporary password marked as delivered.",
+	"temp_password_regenerated":          "New temporary password generated.",
+	"temp_password_unavailable":          "No temporary password is set for that patron.",
 }
 
 func flashCookieName(kind string) string {

@@ -577,14 +577,14 @@ func fakeOLServer(t *testing.T, status int, body string) *httptest.Server {
 // and /b/isbn/<isbn>-L.jpg).
 //   - detailsBody: JSON returned for /api/books?jscmd=details
 //   - dataBody:    JSON returned for /api/books?jscmd=data (empty
-//                  string means the route is unconfigured -- the
-//                  handler returns 404).
+//     string means the route is unconfigured -- the
+//     handler returns 404).
 //   - workBodies:  map of work key ("/works/OL...W") to JSON body.
-//                  An empty map means all work requests 404.
+//     An empty map means all work requests 404.
 //   - coverISBNs:  set of ISBNs for which the /b/isbn/<isbn>-L.jpg
-//                  endpoint should return 200. Anything else 404s.
-//                  Used to control whether the ISBN-cover fallback
-//                  finds a hit.
+//     endpoint should return 200. Anything else 404s.
+//     Used to control whether the ISBN-cover fallback
+//     finds a hit.
 func startFakeOLRouter(t *testing.T, detailsBody, dataBody string, workBodies map[string]string, coverISBNs ...string) {
 	t.Helper()
 	coverSet := make(map[string]bool, len(coverISBNs))

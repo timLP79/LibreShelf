@@ -266,9 +266,9 @@ func TestGetActiveLoansFiltersReturnedAndOverdue(t *testing.T) {
 	nextWeek := time.Now().AddDate(0, 0, 7).UTC().Format("2006-01-02")
 	yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
 
-	mustInsertLoan(t, dm, bookA, patronID, nextWeek, "")                             // active
-	mustInsertLoan(t, dm, bookB, patronID, nextWeek, "2026-04-01 12:00:00")          // returned
-	mustInsertLoan(t, dm, bookC, patronID, yesterday, "")                            // overdue
+	mustInsertLoan(t, dm, bookA, patronID, nextWeek, "")                    // active
+	mustInsertLoan(t, dm, bookB, patronID, nextWeek, "2026-04-01 12:00:00") // returned
+	mustInsertLoan(t, dm, bookC, patronID, yesterday, "")                   // overdue
 
 	loans, err := dm.GetActiveLoans()
 	if err != nil {
@@ -349,9 +349,9 @@ func TestCountActiveAndOverdueLoans(t *testing.T) {
 	nextWeek := time.Now().AddDate(0, 0, 7).UTC().Format("2006-01-02")
 	yesterday := time.Now().AddDate(0, 0, -1).UTC().Format("2006-01-02")
 
-	mustInsertLoan(t, dm, bookA, patronID, nextWeek, "")                    // active (not overdue)
-	mustInsertLoan(t, dm, bookB, patronID, yesterday, "")                   // overdue (excluded from active)
-	mustInsertLoan(t, dm, bookC, patronID, nextWeek, "2026-04-01 12:00:00") // returned
+	mustInsertLoan(t, dm, bookA, patronID, nextWeek, "")                     // active (not overdue)
+	mustInsertLoan(t, dm, bookB, patronID, yesterday, "")                    // overdue (excluded from active)
+	mustInsertLoan(t, dm, bookC, patronID, nextWeek, "2026-04-01 12:00:00")  // returned
 	mustInsertLoan(t, dm, bookD, patronID, yesterday, "2026-04-01 12:00:00") // returned past due date
 
 	active, err := dm.CountActiveLoans()
