@@ -17,8 +17,8 @@ import (
 var ErrExternalDisabled = errors.New("external API calls disabled (offline mode)")
 
 // offlineEnvDefault is the startup value of LIBRESHELF_OFFLINE.
-// Captured once so the predicate does not re-read os.Getenv on every
-// call. Settings table overrides this when a row is present.
+// Captured once so IsOfflineEnvLocked does not re-read os.Getenv on
+// every call. Tests override this via withOfflineEnvDefault.
 var offlineEnvDefault bool
 
 func init() {
@@ -26,24 +26,36 @@ func init() {
 }
 
 // IsExternalAllowed returns true when external HTTP calls are
-// permitted for this deployment. Reads the offline_mode row from the
-// settings table if present; otherwise uses the LIBRESHELF_OFFLINE
-// env-var default captured at startup.
+// permitted for this deployment. When LIBRESHELF_OFFLINE=true is set
+// at startup, the env var acts as a deployment lock: it overrides any
+// DB row. Otherwise the offline_mode row in the settings table
+// controls; default true (external HTTP allowed).
 func IsExternalAllowed(dm *DatabaseManager) bool {
-	return isExternalAllowedFn(dm, offlineEnvDefault)
+	if offlineEnvDefault {
+		return false
+	}
+	return isExternalAllowedFromDB(dm)
 }
 
-// isExternalAllowedFn is the testable inner. Tests inject the
-// offlineFromEnv value directly so they do not have to manipulate
-// process env vars.
-func isExternalAllowedFn(dm *DatabaseManager, offlineFromEnv bool) bool {
+// isExternalAllowedFromDB reads the offline_mode settings row. Used
+// by IsExternalAllowed when the env var is not locking, and by tests
+// that want to exercise the DB-path branches without invoking
+// withOfflineEnvDefault.
+func isExternalAllowedFromDB(dm *DatabaseManager) bool {
 	v, err := dm.GetSetting("offline_mode")
 	if err != nil {
-		log.Printf("IsExternalAllowed: GetSetting failed, falling back to env default: %v", err)
-		return !offlineFromEnv
+		log.Printf("IsExternalAllowed: GetSetting failed, defaulting to allow: %v", err)
+		return true
 	}
 	if v == "" {
-		return !offlineFromEnv
+		return true
 	}
 	return !strings.EqualFold(v, "true")
+}
+
+// IsOfflineEnvLocked returns true when the LIBRESHELF_OFFLINE env var
+// is locking offline mode (set to "true" at startup). The admin
+// Settings page uses this to render the toggle as locked.
+func IsOfflineEnvLocked() bool {
+	return offlineEnvDefault
 }
