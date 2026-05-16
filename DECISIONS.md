@@ -1160,6 +1160,8 @@ Full seed backfill on a fresh install: 100/100 covers, ~70s total.
 
 ## DEC-033: Operator-declared offline mode (env var + admin toggle, no auto-detect)
 
+**Date:** 2026-05-15 (cs408-go-stack-ahq, branch `feat/offline-mode-a0`, commits `4db0070` through `0b6b574`).
+
 **Decision:** External HTTP calls (Open Library, future Google Books, future Internet Archive)
 are gated by an operator-declared offline-mode predicate. Sources: `LIBRESHELF_OFFLINE` env
 var as startup default, `offline_mode` row in the existing `settings` table as runtime
