@@ -115,6 +115,33 @@ Environment=LIBRESHELF_OFFLINE=true
 
 Then `sudo systemctl daemon-reload && sudo systemctl restart libreshelf`.
 
+### `GOOGLE_BOOKS_API_KEY` (optional)
+
+Set to a Google Books API key to enable the Google Books fallback +
+enrichment chain. When set, the admin OL Lookup fans out to GB in
+parallel with the OL chain's internal fallbacks and merges results
+using the "OL wins, GB fills gaps" rule. The site footer credits
+"Open Library and Google Books." Default: unset (GB disabled, OL only).
+
+When unset, no GB API calls are made. The OL chain runs alone with no
+warnings or errors. The site footer credits "Open Library" only.
+
+Get a key from Google Cloud Console (Library -> Books API -> Credentials).
+Free-tier quota is 1000 requests/day, sufficient for typical small-library
+admin Lookup volume (one click per ISBN, occasionally).
+
+To set via systemd, add an `Environment=` line in `deploy/libreshelf.service`:
+
+```
+Environment=GOOGLE_BOOKS_API_KEY=AIza...redacted...
+```
+
+Then `sudo systemctl daemon-reload && sudo systemctl restart libreshelf`.
+
+When offline mode is on (`LIBRESHELF_OFFLINE=true`), the GB key is
+ignored and no GB calls are made -- the offline predicate fires before
+the OL chain, which is the only entry point that calls GB.
+
 ## Step 7: Configure nginx
 
 Create the nginx site config:

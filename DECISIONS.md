@@ -1221,3 +1221,37 @@ cs408-go-stack-8gj (next subproject) and cs408-go-stack-0eh (offline workflow co
 - bd issue `cs408-go-stack-85j` -- the bug report and four-option brainstorm.
 - bd issue `cs408-go-stack-ahq` -- parent A0 work that shipped DEC-033 and surfaced this issue.
 - Spec: `docs/specs/2026-05-15-offline-mode-env-lock-design.md`.
+
+---
+
+## DEC-035: Google Books as fallback + field-level enrichment over Open Library
+
+**Date:** 2026-05-15 (cs408-go-stack-8gj, branch `feat/google-books-fallback`).
+
+**Decision:** When `GOOGLE_BOOKS_API_KEY` is set at startup and the Open Library edition response has any gap (TrimSpace-empty title, authors, year, publisher, cover URL, or description), the OL chain fans out to Google Books in parallel with the existing OL work-record and jscmd=data fallbacks. After all concurrent calls complete, `mergePrefill(ol, gb)` applies the rule "OL wins, GB fills gaps" -- each field uses the OL value if non-empty after TrimSpace, otherwise the GB value. Per-field source labels (`DescriptionSource`, `CoverSource`) carry "googlebooks" when GB filled the gap, "openlibrary" when OL filled it. On GB error, the OL data flows through unchanged and `GoogleBooksError = true` so the JS banner can show a "Google Books unavailable" note.
+
+**Why fallback + enrichment, not replacement:** Open Library is the open-data primary that aligns with LibreShelf's self-hostable framing. The DEC-032 chain already covers 100% of OL-catalogued books. The remaining gap is books OL does not catalog at all (mostly new releases and niche presses); GB has substantially better coverage there. For OL-catalogued books with sparse editions, GB's descriptions and covers are often richer than OL's, so enriching gap-by-gap gives noticeable quality improvement without abandoning OL as the source of truth for bibliographic data.
+
+**Why parallel, not sequential:** The OL chain already runs work-record and jscmd=data concurrently (commit 316e31c). Adding GB to that fan-out keeps end-to-end latency dominated by the slowest of the three calls (~700ms typical) rather than their sum (~1500ms+ if GB were tacked on after).
+
+**Asymmetric trigger:** GB fires only when the OL edition response has at least one gap. An entirely-populated OL response (rare but possible) skips the GB call entirely. The gap check happens before the OL work/data fallbacks complete, so it is conservative -- GB may fire even when the work record would have filled the gap. That trade is acceptable: the latency win of the parallel fan-out outweighs the occasional unused GB call.
+
+**API key handling:** `GOOGLE_BOOKS_API_KEY` is opt-in. Unset means GB is disabled; the OL chain runs alone with no error, no warning. Get a key from Google Cloud Console; free tier 1000 requests/day is sufficient for typical small-library volume.
+
+**Error policy:**
+- `ErrGoogleBooksDisabled` (key unset) -- silent short-circuit; no flag.
+- `ErrGoogleBooksNotFound` (GB has no record) -- silent short-circuit; no flag.
+- Other errors (network, 5xx, decode, timeout) -- `GoogleBooksError = true` on the response; OL data still flows through; JS renders a small "Google Books unavailable" banner note.
+
+**Attribution:** A site-wide footer renders on every page through the shared layout. When offline-locked: no attribution (no external data is being used). When GB configured: "Book data from Open Library and Google Books." Otherwise: "Book data from Open Library." State captured once at startup; templates do not re-check on every render.
+
+**Cover downloads:** A GB-sourced cover URL flows through the same `cover_url` form field that OL covers use. On submit, `HandleBookCreate` / `HandleBookUpdate` call `SaveCoverFromURLGated` to download. No new download path is added; the existing gated wrapper handles any URL the prefill returns.
+
+**Struct change:** `OpenLibraryBook` is renamed to `BookPrefill` (PR commit 1 on this branch). The struct now represents the merged-source payload, not OL alone. New fields: `CoverSource` (parallel to `DescriptionSource`), `GoogleBooksError`. Existing JSON consumers (the admin Lookup JS) ignore the new fields when zero-valued via `omitempty`.
+
+**Related:**
+- DEC-032 -- OL enrichment chain that this design layers on top of.
+- DEC-033 -- offline-mode predicate that gates the GB call.
+- DEC-034 -- env-var-as-lock precedence flip that GB consumes via IsExternalAllowed.
+- bd issue `cs408-go-stack-8gj` -- the parent issue for this work.
+- Spec: `docs/specs/2026-05-15-google-books-fallback-design.md`.
