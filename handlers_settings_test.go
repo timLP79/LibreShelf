@@ -90,6 +90,71 @@ func TestSettingsPagePOST_FlipsToggleOff(t *testing.T) {
 	}
 }
 
+func TestSettingsPagePOST_FlipsOfflineModeOn(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin1", "admin")
+
+	if dm.GetSettingBool("offline_mode", false) {
+		t.Fatalf("offline_mode should default off")
+	}
+
+	form := url.Values{}
+	form.Set("csrf_token", csrf)
+	form.Set("offline_mode", "on")
+	req := httptest.NewRequest("POST", "/admin/settings", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want 303", rr.Code)
+	}
+	if !dm.GetSettingBool("offline_mode", false) {
+		t.Errorf("offline_mode should be true after POST with checkbox=on")
+	}
+}
+
+func TestSettingsPagePOST_FlipsOfflineModeOff(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	adminID := mustCreateUser(t, dm, "admin_off_init", "admin")
+	_ = dm.SetSetting("offline_mode", "true", adminID)
+	sess, csrf := loginAs(t, dm, "admin1", "admin")
+
+	form := url.Values{}
+	form.Set("csrf_token", csrf)
+	// offline_mode absent = off
+	req := httptest.NewRequest("POST", "/admin/settings", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want 303", rr.Code)
+	}
+	if dm.GetSettingBool("offline_mode", true) {
+		t.Errorf("offline_mode should be false after POST with checkbox absent")
+	}
+}
+
+func TestSettingsPageGET_RendersOfflineToggle(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin1", "admin")
+
+	req := httptest.NewRequest("GET", "/admin/settings", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "offline_mode") {
+		t.Errorf("expected offline_mode toggle in body, got %q", rr.Body.String())
+	}
+}
+
 func TestSettingsPagePOST_StaffForbidden(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, csrf := loginAs(t, dm, "staff1", "staff")
