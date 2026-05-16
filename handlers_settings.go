@@ -18,7 +18,8 @@ func HandleSettings(c *gin.Context) {
 		"Success": readAndClearFlash(c, flashKindSuccess),
 		"Settings": gin.H{
 			"StaffCanImportPatrons": dm.GetSettingBool("staff_can_import_patrons", false),
-			"OfflineMode":           dm.GetSettingBool("offline_mode", offlineEnvDefault),
+			"OfflineMode":           dm.GetSettingBool("offline_mode", false),
+			"OfflineModeLocked":     IsOfflineEnvLocked(),
 		},
 	})
 }
@@ -28,13 +29,17 @@ func HandleSettingsPost(c *gin.Context) {
 	dm := getDB(c)
 
 	type setting struct {
-		key   string
-		field string
+		key       string
+		field     string
+		skipWrite bool
 	}
 	for _, s := range []setting{
-		{"staff_can_import_patrons", "staff_can_import_patrons"},
-		{"offline_mode", "offline_mode"},
+		{"staff_can_import_patrons", "staff_can_import_patrons", false},
+		{"offline_mode", "offline_mode", IsOfflineEnvLocked()},
 	} {
+		if s.skipWrite {
+			continue
+		}
 		value := "false"
 		if c.PostForm(s.field) == "on" {
 			value = "true"
