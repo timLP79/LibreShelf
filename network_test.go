@@ -42,3 +42,21 @@ func TestIsExternalAllowed_SettingsOverridesEnvToOnline(t *testing.T) {
 		t.Errorf("settings=false must override env=true: want allowed=true, got false")
 	}
 }
+
+func TestIsExternalAllowed_DBErrorFallsBackToEnvDefault(t *testing.T) {
+	// Simulate a DB fault: open a DM, then immediately close its
+	// underlying *sql.DB so every subsequent query returns
+	// "sql: database is closed". The predicate must fall back to
+	// the env-var default and not panic.
+	dm := NewDatabaseManager(t.TempDir() + "/broken.sqlite")
+	if err := dm.db.Close(); err != nil {
+		t.Fatalf("close dm.db: %v", err)
+	}
+
+	if !isExternalAllowedFn(dm, false /* env=online */) {
+		t.Errorf("DB error + env=online: want allowed=true (fallback to env), got false")
+	}
+	if isExternalAllowedFn(dm, true /* env=offline */) {
+		t.Errorf("DB error + env=offline: want allowed=false (fallback to env), got true")
+	}
+}
