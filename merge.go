@@ -7,10 +7,11 @@ import "strings"
 
 // mergePrefill applies the "OL wins, GB fills gaps" rule documented in
 // DEC-035. For each field, the OL value is kept if non-empty after
-// strings.TrimSpace; otherwise the GB value is used. Per-field source
-// labels (DescriptionSource, CoverSource) are stamped "googlebooks"
-// when GB filled the gap, "openlibrary" when OL filled it, or left
-// empty when neither did.
+// strings.TrimSpace; otherwise the GB value is used. When GB fills the
+// gap for Description or CoverURL, the corresponding source label
+// (DescriptionSource, CoverSource) is stamped "googlebooks". Other
+// source labels (e.g. "openlibrary") are the caller's responsibility;
+// merge preserves whatever the OL input arrived with.
 //
 // Either argument may be nil. The function never returns nil.
 func mergePrefill(ol, gb *BookPrefill) *BookPrefill {
@@ -50,10 +51,10 @@ func mergePrefill(ol, gb *BookPrefill) *BookPrefill {
 
 func gbOnly(gb *BookPrefill) *BookPrefill {
 	out := *gb
-	if out.Description != "" {
+	if strings.TrimSpace(out.Description) != "" {
 		out.DescriptionSource = "googlebooks"
 	}
-	if out.CoverURL != "" {
+	if strings.TrimSpace(out.CoverURL) != "" {
 		out.CoverSource = "googlebooks"
 	}
 	return &out

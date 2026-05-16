@@ -142,8 +142,15 @@ func HandleOpenLibraryLookup(c *gin.Context) {
 		return
 	}
 
-	if book.Description != "" {
+	// Stamp the "openlibrary" source label only when no source is already
+	// set. The OL-chain merge (FetchOpenLibraryBook + mergePrefill, wired
+	// in a later commit on this branch) will pre-stamp "googlebooks" for
+	// GB-sourced fields; we must not clobber that with "openlibrary".
+	if book.Description != "" && book.DescriptionSource == "" {
 		book.DescriptionSource = "openlibrary"
+	}
+	if book.CoverURL != "" && book.CoverSource == "" {
+		book.CoverSource = "openlibrary"
 	}
 
 	c.JSON(http.StatusOK, book)
