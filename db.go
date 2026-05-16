@@ -2526,6 +2526,11 @@ func (dm *DatabaseManager) DeletePatron(id int) error {
 // SaveCoverFromURL. If ctx fires, remaining books get skipped and
 // their covers can be backfilled on the next startup.
 func (dm *DatabaseManager) FetchAndStoreSeedCovers(ctx context.Context) {
+	if !IsExternalAllowed(dm) {
+		log.Printf("FetchAndStoreSeedCovers: offline mode -- skipping seed cover backfill")
+		return
+	}
+
 	rows, err := dm.db.Query(`
 		SELECT id, isbn FROM books
 		WHERE cover_filename IS NULL AND isbn IS NOT NULL AND isbn != ''`)

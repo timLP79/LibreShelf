@@ -18,6 +18,7 @@ func HandleSettings(c *gin.Context) {
 		"Success": readAndClearFlash(c, flashKindSuccess),
 		"Settings": gin.H{
 			"StaffCanImportPatrons": dm.GetSettingBool("staff_can_import_patrons", false),
+			"OfflineMode":           dm.GetSettingBool("offline_mode", offlineEnvDefault),
 		},
 	})
 }
@@ -26,16 +27,24 @@ func HandleSettingsPost(c *gin.Context) {
 	user := c.MustGet("user").(*User)
 	dm := getDB(c)
 
-	enabled := c.PostForm("staff_can_import_patrons") == "on"
-	value := "false"
-	if enabled {
-		value = "true"
+	type setting struct {
+		key   string
+		field string
 	}
-	if err := dm.SetSetting("staff_can_import_patrons", value, user.ID); err != nil {
-		log.Printf("settings save failed: %v", err)
-		setFlash(c, flashKindError, "settings_save_failed")
-		c.Redirect(http.StatusSeeOther, "/admin/settings")
-		return
+	for _, s := range []setting{
+		{"staff_can_import_patrons", "staff_can_import_patrons"},
+		{"offline_mode", "offline_mode"},
+	} {
+		value := "false"
+		if c.PostForm(s.field) == "on" {
+			value = "true"
+		}
+		if err := dm.SetSetting(s.key, value, user.ID); err != nil {
+			log.Printf("settings save failed for %s: %v", s.key, err)
+			setFlash(c, flashKindError, "settings_save_failed")
+			c.Redirect(http.StatusSeeOther, "/admin/settings")
+			return
+		}
 	}
 
 	setFlash(c, flashKindSuccess, "settings_saved")

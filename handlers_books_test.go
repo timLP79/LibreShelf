@@ -1184,3 +1184,24 @@ func TestDashboardRendersForStaff(t *testing.T) {
 		t.Errorf("dashboard status = %d, want 200", rr.Code)
 	}
 }
+
+func TestHandleOpenLibraryLookup_OfflineReturns503(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin1", "admin")
+	adminID := mustCreateUser(t, dm, "admin_lookup_off", "admin")
+	if err := dm.SetSetting("offline_mode", "true", adminID); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+
+	req := httptest.NewRequest("GET", "/api/openlibrary/isbn/9780000000000", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "offline_mode") {
+		t.Errorf("body should mention offline_mode, got %q", rr.Body.String())
+	}
+}

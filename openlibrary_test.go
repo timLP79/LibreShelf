@@ -731,3 +731,16 @@ func TestFetchOpenLibraryBook_BadJSON(t *testing.T) {
 		t.Errorf("err = %v, want decode error", err)
 	}
 }
+
+func TestFetchOpenLibraryBookGated_OfflineReturnsSentinel(t *testing.T) {
+	dm := setupTestDB(t)
+	adminID := mustCreateUser(t, dm, "admin_off1", "admin")
+	if err := dm.SetSetting("offline_mode", "true", adminID); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+
+	_, err := FetchOpenLibraryBookGated(context.Background(), dm, "9780000000000")
+	if !errors.Is(err, ErrExternalDisabled) {
+		t.Errorf("want ErrExternalDisabled, got %v", err)
+	}
+}

@@ -126,7 +126,12 @@ func HandleOpenLibraryLookup(c *gin.Context) {
 		return
 	}
 
-	book, err := FetchOpenLibraryBook(c.Request.Context(), cleaned)
+	dm := getDB(c)
+	book, err := FetchOpenLibraryBookGated(c.Request.Context(), dm, cleaned)
+	if errors.Is(err, ErrExternalDisabled) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "offline_mode"})
+		return
+	}
 	if errors.Is(err, ErrOpenLibraryNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
 		return

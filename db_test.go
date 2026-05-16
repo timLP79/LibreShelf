@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"strings"
@@ -699,6 +700,54 @@ func TestGenerateTempPasswordSatisfiesPolicy(t *testing.T) {
 		if strings.ContainsAny(pw, "0Oo1lI") {
 			t.Errorf("generated %q contains an excluded ambiguous character", pw)
 		}
+	}
+}
+
+func TestFetchAndStoreSeedCovers_OfflineSkipsWithoutHTTP(t *testing.T) {
+	dm := setupTestDB(t)
+	adminID := mustCreateUser(t, dm, "admin_seed_off", "admin")
+	if err := dm.SetSetting("offline_mode", "true", adminID); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+
+	// Insert a book with ISBN but no cover so the function has work to
+	// do if it ignored offline mode.
+	_, err := dm.db.Exec(`INSERT INTO books (title, isbn) VALUES (?, ?)`,
+		"Offline Test Book", "9780000000000")
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	// Hit the function with a short-fused context (100ms) so any HTTP
+	// attempt that slips through the gate eventually times out rather than
+	// blocking the test suite. The offline short-circuit must fire before
+	// the request loop.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	dm.FetchAndStoreSeedCovers(ctx)
+	elapsed := time.Since(start)
+
+	// The offline gate returns in microseconds. Any HTTP attempt (even one
+	// that bails at DNS or connection setup) takes at least several
+	// milliseconds. If this assertion fails, the gate was likely removed
+	// and the function fell through to the per-book HTTP loop.
+	if elapsed > 200*time.Millisecond {
+		t.Errorf("offline gate should return in <200ms, took %v (HTTP attempt slipped through?)", elapsed)
+	}
+
+	// Secondary check: verify the book still has no cover (the function did not
+	// reach the save step).
+	var coverFilename *string
+	if err := dm.db.QueryRow(
+		`SELECT cover_filename FROM books WHERE isbn = ?`,
+		"9780000000000",
+	).Scan(&coverFilename); err != nil {
+		t.Fatalf("select cover: %v", err)
+	}
+	if coverFilename != nil {
+		t.Errorf("offline mode allowed a cover to be written: %q", *coverFilename)
 	}
 }
 
