@@ -48,12 +48,8 @@ const (
 
 var ErrOpenLibraryNotFound = errors.New("open library: isbn not found")
 
-// ErrExternalSourcesUnavailable signals that OL had no record for the
-// ISBN AND the Google Books fallback hit a real upstream error
-// (network, 5xx, decode, auth). Distinct from ErrOpenLibraryNotFound,
-// which means both sources legitimately don't catalog the ISBN. The
-// handler maps this to 503 so the JS can prompt a retry instead of
-// "fill manually." See bd cs408-go-stack-efc.
+// Distinguishes OL-miss + GB-error (retryable) from OL-miss + GB-miss
+// (which uses ErrOpenLibraryNotFound).
 var ErrExternalSourcesUnavailable = errors.New("open library: external sources unavailable")
 
 // BookPrefill is the merged-source prefill payload returned by
@@ -324,10 +320,6 @@ func FetchOpenLibraryBook(ctx context.Context, isbn string) (*BookPrefill, error
 			case errors.Is(gbErr, ErrGoogleBooksNotFound), errors.Is(gbErr, ErrGoogleBooksDisabled):
 				// Neither source has it; fall through to NotFound.
 			default:
-				// GB had a real error (network, 5xx, decode). Signal
-				// "retryable" to the handler so the admin sees an
-				// "external sources unavailable" banner instead of
-				// "fill manually." See bd cs408-go-stack-efc.
 				log.Printf("openlibrary: google books fetch for %s (OL miss): %v", isbn, gbErr)
 				return nil, ErrExternalSourcesUnavailable
 			}

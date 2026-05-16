@@ -1085,11 +1085,6 @@ func TestOpenLibraryLookupUpstreamError(t *testing.T) {
 	}
 }
 
-// TestOpenLibraryLookupExternalSourcesUnavailable pins the 503 branch
-// for the OL-miss + GB-real-error case (bd cs408-go-stack-efc). OL
-// returns {} (no record) and GB returns 500. The handler must respond
-// 503 external_sources_unavailable -- NOT 404 not_found, which is
-// reserved for "both sources legitimately don't catalog this ISBN."
 func TestOpenLibraryLookupExternalSourcesUnavailable(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, _ := loginAs(t, dm, "staff_ol_miss_gb_5xx", "staff")

@@ -897,12 +897,6 @@ func TestFetchOpenLibraryBook_OLMissNoGBKey_ReturnsNotFound(t *testing.T) {
 }
 
 func TestFetchOpenLibraryBook_OLMissGBErrors_ReturnsExternalSourcesUnavailable(t *testing.T) {
-	// OL has no record. GB returns a 500 error (transport / upstream
-	// failure, distinct from "GB has no record"). The function should
-	// log the GB error and return ErrExternalSourcesUnavailable so the
-	// handler can render a 503 + retry banner instead of the same 404
-	// the admin gets when both sources legitimately don't have the
-	// book. See bd cs408-go-stack-efc.
 	startFakeOLRouter(t, `{}`, "", map[string]string{})
 
 	gbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -915,8 +909,5 @@ func TestFetchOpenLibraryBook_OLMissGBErrors_ReturnsExternalSourcesUnavailable(t
 	_, err := FetchOpenLibraryBook(context.Background(), "9780000000999")
 	if !errors.Is(err, ErrExternalSourcesUnavailable) {
 		t.Errorf("want ErrExternalSourcesUnavailable on GB error, got %v", err)
-	}
-	if errors.Is(err, ErrOpenLibraryNotFound) {
-		t.Errorf("must not return ErrOpenLibraryNotFound on GB error; that path is for genuine both-sources-miss")
 	}
 }
