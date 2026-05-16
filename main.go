@@ -32,6 +32,10 @@ func main() {
 	dm := NewDatabaseManager(dataDir + "/" + dbName)
 	dm.SeedDefaultUsers()
 
+	if IsOfflineEnvLocked() {
+		log.Printf("LIBRESHELF_OFFLINE=true is locking offline mode; runtime DB setting will be ignored until the env var is unset.")
+	}
+
 	// LIBRESHELF_SKIP_SEED skips the book + cover seed steps so the
 	// server starts with login working but otherwise empty -- useful
 	// for testing the backup import flow against a clean state and
