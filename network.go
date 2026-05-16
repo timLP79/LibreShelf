@@ -16,9 +16,10 @@ import (
 // failure.
 var ErrExternalDisabled = errors.New("external API calls disabled (offline mode)")
 
-// offlineEnvDefault is the startup value of LIBRESHELF_OFFLINE.
-// Captured once so IsOfflineEnvLocked does not re-read os.Getenv on
-// every call. Tests override this via withOfflineEnvDefault.
+// offlineEnvDefault is the startup value of LIBRESHELF_OFFLINE,
+// captured once at process start. IsExternalAllowed checks it as a
+// lock guard; IsOfflineEnvLocked exposes it to the admin UI. Tests
+// override it via withOfflineEnvDefault.
 var offlineEnvDefault bool
 
 func init() {
@@ -37,10 +38,10 @@ func IsExternalAllowed(dm *DatabaseManager) bool {
 	return isExternalAllowedFromDB(dm)
 }
 
-// isExternalAllowedFromDB reads the offline_mode settings row. Used
-// by IsExternalAllowed when the env var is not locking, and by tests
-// that want to exercise the DB-path branches without invoking
-// withOfflineEnvDefault.
+// isExternalAllowedFromDB reads the offline_mode settings row.
+// Called only by IsExternalAllowed when the env var is not locking;
+// the lock check is the caller's responsibility. On a DB read error
+// returns true (fail-open).
 func isExternalAllowedFromDB(dm *DatabaseManager) bool {
 	v, err := dm.GetSetting("offline_mode")
 	if err != nil {
