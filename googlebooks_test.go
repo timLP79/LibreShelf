@@ -78,7 +78,7 @@ const gbDescOnlyPayload = `{
   }]
 }`
 
-const gbEmptyItemsPayload = `{"totalItems": 0}`
+const gbEmptyItemsPayload = `{"items": []}`
 
 func TestFetchByISBN_HappyFull(t *testing.T) {
 	startFakeGBServer(t, gbFullPayload, http.StatusOK)
@@ -183,6 +183,9 @@ func TestFetchByISBN_MalformedJSON(t *testing.T) {
 
 func TestFetchByISBN_ContextTimeout(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The server sleeps 2s -- far longer than the 50ms deadline below
+		// -- so the timeout fires well before the response arrives on any
+		// CI machine, eliminating timing races.
 		time.Sleep(2 * time.Second)
 		_, _ = w.Write([]byte(gbFullPayload))
 	}))

@@ -42,8 +42,7 @@ func init() {
 // https://www.googleapis.com/books/v1/volumes?q=isbn:<isbn>&key=<key>.
 // Only the fields we read are declared; unknown fields are ignored.
 type gbResponse struct {
-	TotalItems int      `json:"totalItems"`
-	Items      []gbItem `json:"items"`
+	Items []gbItem `json:"items"`
 }
 
 type gbItem struct {
@@ -93,6 +92,7 @@ func FetchByISBN(ctx context.Context, isbn string) (*BookPrefill, error) {
 	q.Set("key", googleBooksAPIKey)
 	req.URL.RawQuery = q.Encode()
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", openLibraryUserAgent)
 
 	client := &http.Client{Timeout: googleBooksTimeout}
 	resp, err := client.Do(req)
