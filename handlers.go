@@ -175,6 +175,9 @@ func renderKioskTemplate(c *gin.Context, name string, data gin.H) {
 		c.String(http.StatusInternalServerError, "Internal Server Error")
 		return
 	}
+	if _, ok := data["SiteFooter"]; !ok {
+		data["SiteFooter"] = siteFooter
+	}
 
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "kiosk_layout", data); err != nil {
