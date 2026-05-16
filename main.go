@@ -31,6 +31,7 @@ func main() {
 
 	dm := NewDatabaseManager(dataDir + "/" + dbName)
 	dm.SeedDefaultUsers()
+	initSiteFooter()
 
 	if IsOfflineEnvLocked() {
 		log.Printf("LIBRESHELF_OFFLINE=true is locking offline mode; runtime DB setting will be ignored until the env var is unset.")

@@ -90,6 +90,8 @@ offline even if the env var were misconfigured.
 
 ### Predicate API
 
+> **Note (2026-05-15):** the precedence rule described in this subsection was flipped by DEC-034 (cs408-go-stack-85j) after A0 shipped. Under DEC-034, `LIBRESHELF_OFFLINE=true` acts as a deployment lock that overrides any DB row; on DB error when unlocked, the predicate fail-opens (returns true). The shipped function signature `IsExternalAllowed(dm) bool` is unchanged. Subproject A consumes the post-DEC-034 contract.
+
 New function in a new file `network.go`:
 
 ```go
@@ -167,23 +169,27 @@ same phase rather than running serially after it.
 ```
 HandleOpenLibraryLookup(isbn)
   |
-  +-- IsExternalAllowed(dm)? -- no --> 503 (banner)
-  |   yes
-  |
-  +-- FetchOpenLibraryBook(ctx, isbn)
+  +-- FetchOpenLibraryBookGated(ctx, dm, isbn)
   |     |
-  |     +-- OL ISBN call (jscmd=details)
+  |     +-- IsExternalAllowed(dm)? -- no --> ErrExternalDisabled --> 503 (banner)
+  |     |   yes
   |     |
-  |     +-- if sparse, run in parallel:
-  |           +-- OL work record fetch
-  |           +-- OL jscmd=data
-  |           +-- googlebooks.FetchByISBN(ctx, isbn)
-  |                   (only if GOOGLE_BOOKS_API_KEY is set)
+  |     +-- FetchOpenLibraryBook(ctx, isbn)   [un-gated; existing httptest-driven tests still drive this]
+  |           |
+  |           +-- OL ISBN call (jscmd=details)
+  |           |
+  |           +-- if sparse, run in parallel:
+  |                 +-- OL work record fetch
+  |                 +-- OL jscmd=data
+  |                 +-- googlebooks.FetchByISBN(ctx, isbn)
+  |                         (only if GOOGLE_BOOKS_API_KEY is set)
   |
   +-- Merge in Go: OL wins, GB fills gaps
   |
   +-- Return BookPrefill + GoogleBooksError flag
 ```
+
+A GB-sourced cover URL flows through the same prefill JSON that the OL chain already produces. The browser stages it into the hidden `cover_url` form field; on submit, `HandleBookCreate` / `HandleBookUpdate` download it via `SaveCoverFromURLGated` (added in cs408-go-stack-di7). No new download path is needed: the existing gated wrapper already handles any URL the prefill returns, GB or OL.
 
 Latency in the common partial-OL case is dominated by the slowest of
 the three parallel calls, not their sum. Google Books is never called
@@ -287,8 +293,8 @@ Two PRs, sequential.
    note for GB errors. Tests listed in A section.
 
 Both PRs add a new DECISIONS.md entry:
-- A0 -> DEC-033 (Offline mode declaration).
-- A -> DEC-034 (Google Books fallback and enrichment).
+- A0 -> DEC-033 (Offline mode declaration). Shipped 2026-05-15.
+- A -> DEC-035 (Google Books fallback and enrichment). DEC-034 was already used by the env-var-as-lock precedence flip (cs408-go-stack-85j) that landed between A0 and A.
 
 ## Open questions / future work
 
@@ -304,8 +310,10 @@ Both PRs add a new DECISIONS.md entry:
 ## References
 
 - DEC-032 -- Open Library enrichment chain.
+- DEC-033 -- Operator-declared offline mode (A0 shipped 2026-05-15, PR #78).
+- DEC-034 -- LIBRESHELF_OFFLINE acts as a deployment lock; precedence flip (shipped 2026-05-15, PR #79).
+- cs408-go-stack-di7 -- SaveCoverFromURLGated, closed the third external-HTTP entry-point gap (shipped 2026-05-15, PR #80).
 - cs408-go-stack-8gj -- bd issue: Google Books fallback.
 - cs408-go-stack-0eh -- bd issue: offline workflow context.
-- cs408-go-stack-069 -- bd issue: OL endpoint exhaustion (re-evaluate).
-- `openlibrary.go`, `handlers_books.go`, `handlers_settings.go` -- the
-  files this design extends.
+- cs408-go-stack-069 -- bd issue: OL endpoint exhaustion (re-evaluate after A lands).
+- `openlibrary.go`, `handlers_books.go`, `handlers_settings.go`, `covers.go`, `network.go` -- the files this design extends.

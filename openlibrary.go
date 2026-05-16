@@ -48,12 +48,17 @@ const (
 
 var ErrOpenLibraryNotFound = errors.New("open library: isbn not found")
 
-// OpenLibraryBook is the prefill payload returned by HandleOpenLibraryLookup.
-// Most fields come from Open Library; Description may come from
-// Open Library OR from Wikipedia when OL's description is empty/thin.
-// DescriptionSource ("openlibrary" or "wikipedia") tells the JS-side
-// prefill code which source-label to show in the status banner.
-type OpenLibraryBook struct {
+// BookPrefill is the merged-source prefill payload returned by
+// HandleOpenLibraryLookup. Fields originate from the Open Library chain
+// (jscmd=details, work record, jscmd=data) and from the Google Books
+// volumes API when GOOGLE_BOOKS_API_KEY is configured. The merge rule is
+// "OL wins, GB fills gaps": each field uses the OL value if non-empty
+// after strings.TrimSpace, otherwise the GB value. DescriptionSource and
+// CoverSource carry the per-field origin so the admin Lookup JS can show
+// a "via Google Books" hint on the staged banner. GoogleBooksError is
+// true when GB was attempted (key set, gap detected) but failed; the JS
+// uses this to render a small "Google Books unavailable" note.
+type BookPrefill struct {
 	Title             string   `json:"title,omitempty"`
 	Authors           []string `json:"authors,omitempty"`
 	PublishYear       int      `json:"publish_year,omitempty"`
@@ -61,6 +66,8 @@ type OpenLibraryBook struct {
 	CoverURL          string   `json:"cover_url,omitempty"`
 	Description       string   `json:"description,omitempty"`
 	DescriptionSource string   `json:"description_source,omitempty"`
+	CoverSource       string   `json:"cover_source,omitempty"`
+	GoogleBooksError  bool     `json:"google_books_error,omitempty"`
 }
 
 // olResponse mirrors the jscmd=details envelope returned by
@@ -165,8 +172,8 @@ func stripISBNFormatting(s string) string {
 	return s
 }
 
-func normalizeOpenLibraryBook(b olBook) *OpenLibraryBook {
-	out := &OpenLibraryBook{
+func normalizeOpenLibraryBook(b olBook) *BookPrefill {
+	out := &BookPrefill{
 		Title:       b.Title,
 		PublishYear: parsePublishYear(b.PublishDate),
 		Description: strings.TrimSpace(b.Description.Value),
@@ -257,14 +264,14 @@ func normalizeOLAuthorString(s string) string {
 //
 // Tests that need to drive the OL chain against httptest.NewServer
 // should keep calling FetchOpenLibraryBook directly.
-func FetchOpenLibraryBookGated(ctx context.Context, dm *DatabaseManager, isbn string) (*OpenLibraryBook, error) {
+func FetchOpenLibraryBookGated(ctx context.Context, dm *DatabaseManager, isbn string) (*BookPrefill, error) {
 	if !IsExternalAllowed(dm) {
 		return nil, ErrExternalDisabled
 	}
 	return FetchOpenLibraryBook(ctx, isbn)
 }
 
-func FetchOpenLibraryBook(ctx context.Context, isbn string) (*OpenLibraryBook, error) {
+func FetchOpenLibraryBook(ctx context.Context, isbn string) (*BookPrefill, error) {
 	bibkey := "ISBN:" + stripISBNFormatting(isbn)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, openLibraryBaseURL, nil)
@@ -297,6 +304,24 @@ func FetchOpenLibraryBook(ctx context.Context, isbn string) (*OpenLibraryBook, e
 
 	entry, ok := payload[bibkey]
 	if !ok {
+		// OL has no record for this ISBN. Fall back to Google Books if
+		// configured -- this is the "total-miss fallback" case from
+		// DEC-035. The merge function's gbOnly path stamps source labels
+		// so the JS banner can show "Some fields via Google Books."
+		if IsGoogleBooksConfigured() {
+			gbResult, gbErr := FetchByISBN(ctx, isbn)
+			switch {
+			case gbErr == nil && gbResult != nil:
+				return mergePrefill(nil, gbResult), nil
+			case errors.Is(gbErr, ErrGoogleBooksNotFound), errors.Is(gbErr, ErrGoogleBooksDisabled):
+				// Neither source has it; fall through to NotFound.
+			default:
+				// GB had a real error (network, 5xx, decode). Log it and
+				// fall through to NotFound; the admin sees "fill manually"
+				// and can decide whether to retry once GB recovers.
+				log.Printf("openlibrary: google books fetch for %s (OL miss): %v", isbn, gbErr)
+			}
+		}
 		return nil, ErrOpenLibraryNotFound
 	}
 
@@ -346,6 +371,28 @@ func FetchOpenLibraryBook(ctx context.Context, isbn string) (*OpenLibraryBook, e
 			authorNames, authorErr = names, err
 		}()
 	}
+
+	// GB fans out alongside the OL work/jscmd=data fallbacks. Only
+	// fires when (1) the API key is configured AND (2) the OL response
+	// has at least one prefill gap (any field empty). The gap check
+	// happens here against the *current* OL state (after the edition
+	// parse but before the work/data fallbacks merge in), which is
+	// conservative -- the GB call may end up unused if work/data later
+	// fill all the gaps. Acceptable trade for the latency win of the
+	// parallel fan-out.
+	var (
+		gbResult *BookPrefill
+		gbErr    error
+	)
+	needGB := IsGoogleBooksConfigured() && hasAnyGap(book)
+	if needGB {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			gbResult, gbErr = FetchByISBN(ctx, isbn)
+		}()
+	}
+
 	wg.Wait()
 
 	if needWork {
@@ -365,6 +412,33 @@ func FetchOpenLibraryBook(ctx context.Context, isbn string) (*OpenLibraryBook, e
 			log.Printf("openlibrary: data-authors fetch for %s: %v", bibkey, authorErr)
 		} else {
 			book.Authors = authorNames
+		}
+	}
+
+	// Apply GB merge after OL fallbacks have had their chance to fill
+	// gaps. This means GB only contributes to fields still empty after
+	// the full OL chain ran, which respects DEC-035's "OL wins" rule.
+	if needGB {
+		switch {
+		case errors.Is(gbErr, ErrGoogleBooksNotFound):
+			// Normal outcome for ISBNs GB does not catalog. No error
+			// flag; OL data flows through unchanged.
+		case errors.Is(gbErr, ErrGoogleBooksDisabled):
+			// Can only happen if the key was unset between the
+			// IsGoogleBooksConfigured check and the FetchByISBN call.
+			// Treat the same as not-found.
+		case gbErr != nil:
+			// Real GB failure (network, 5xx, decode). Surface via the
+			// flag so the JS can render a banner note; OL data still
+			// flows through.
+			log.Printf("openlibrary: google books fetch for %s: %v", isbn, gbErr)
+			book.GoogleBooksError = true
+		case gbResult != nil:
+			merged := mergePrefill(book, gbResult)
+			// Preserve the GoogleBooksError flag on the merge output;
+			// merge does not carry it through itself.
+			merged.GoogleBooksError = book.GoogleBooksError
+			book = merged
 		}
 	}
 
@@ -467,6 +541,34 @@ func probeCoverURL(ctx context.Context, url string) bool {
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode == http.StatusOK
+}
+
+// hasAnyGap returns true when at least one BookPrefill field is empty
+// after TrimSpace. The merge step uses this to decide whether to fan
+// out to GB; an entirely-populated OL response skips the GB call.
+func hasAnyGap(b *BookPrefill) bool {
+	if b == nil {
+		return true
+	}
+	if strings.TrimSpace(b.Title) == "" {
+		return true
+	}
+	if len(b.Authors) == 0 {
+		return true
+	}
+	if b.PublishYear == 0 {
+		return true
+	}
+	if strings.TrimSpace(b.Publisher) == "" {
+		return true
+	}
+	if strings.TrimSpace(b.CoverURL) == "" {
+		return true
+	}
+	if strings.TrimSpace(b.Description) == "" {
+		return true
+	}
+	return false
 }
 
 // fetchOLDataAuthors makes a second call to the OL Books API with

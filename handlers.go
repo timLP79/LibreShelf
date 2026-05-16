@@ -21,10 +21,11 @@ import (
 // a template-wide refactor. script-src defaults to 'self' (no inline,
 // no eval) since all JS is loaded from /javascripts. img-src allows
 // data: for the small data URLs Bootstrap embeds, plus
-// covers.openlibrary.org and archive.org (and IA subdomains) so the
-// OL Lookup cover preview can render in the Add/Edit Book form. OL
+// covers.openlibrary.org and archive.org (and IA subdomains) for OL
+// covers and books.google.com for Google Books covers, so both Lookup
+// chains' cover previews can render in the Add/Edit Book form. OL
 // covers HTTP-302 redirect to archive.org (Internet Archive's CDN),
-// and CSP applies to the final URL after redirect, so both hosts
+// and CSP applies to the final URL after redirect, so both OL hosts
 // must be allowlisted. The server already trusts these hosts when
 // SaveCoverFromURL fetches the bytes server-side.
 //
@@ -39,7 +40,7 @@ func SecurityHeaders(c *gin.Context) {
 	h.Set("Content-Security-Policy",
 		"default-src 'self'; "+
 			"style-src 'self' 'unsafe-inline'; "+
-			"img-src 'self' data: https://covers.openlibrary.org https://archive.org https://*.archive.org; "+
+			"img-src 'self' data: https://covers.openlibrary.org https://archive.org https://*.archive.org https://books.google.com; "+
 			"frame-ancestors 'none'; "+
 			"base-uri 'self'; "+
 			"form-action 'self'")
@@ -151,6 +152,9 @@ func renderTemplate(c *gin.Context, name string, data gin.H) {
 	if token, exists := c.Get("csrfToken"); exists {
 		data["CSRFToken"] = token
 	}
+	if _, ok := data["SiteFooter"]; !ok {
+		data["SiteFooter"] = siteFooter
+	}
 
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "layout", data); err != nil {
@@ -171,6 +175,9 @@ func renderKioskTemplate(c *gin.Context, name string, data gin.H) {
 		log.Printf("template not found: %q", name)
 		c.String(http.StatusInternalServerError, "Internal Server Error")
 		return
+	}
+	if _, ok := data["SiteFooter"]; !ok {
+		data["SiteFooter"] = siteFooter
 	}
 
 	var buf bytes.Buffer

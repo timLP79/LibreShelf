@@ -377,6 +377,12 @@ function initBookForm() {
                 var msg = data.cover_url
                     ? "Prefilled from Open Library. Review before saving."
                     : "Prefilled from Open Library (no cover available). Review before saving.";
+                if (data.description_source === "googlebooks" || data.cover_source === "googlebooks") {
+                    msg += " Some fields via Google Books.";
+                }
+                if (data.google_books_error) {
+                    msg += " Google Books unavailable; showing Open Library data only.";
+                }
                 setStatus(msg, "success");
             }).catch(function () {
                 lookupBtn.disabled = false;
