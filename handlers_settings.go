@@ -18,8 +18,11 @@ func HandleSettings(c *gin.Context) {
 		"Success": readAndClearFlash(c, flashKindSuccess),
 		"Settings": gin.H{
 			"StaffCanImportPatrons": dm.GetSettingBool("staff_can_import_patrons", false),
-			"OfflineMode":           dm.GetSettingBool("offline_mode", false),
-			"OfflineModeLocked":     IsOfflineEnvLocked(),
+			// Default false, not offlineEnvDefault: the locked state is
+			// surfaced via OfflineModeLocked; OfflineMode only drives
+			// the toggle when unlocked.
+			"OfflineMode":       dm.GetSettingBool("offline_mode", false),
+			"OfflineModeLocked": IsOfflineEnvLocked(),
 		},
 	})
 }

@@ -190,8 +190,14 @@ func TestSettingsPageGET_RendersLockedToggleWhenEnvLocked(t *testing.T) {
 		t.Errorf("status = %d, want 200", rr.Code)
 	}
 	body := rr.Body.String()
-	if !strings.Contains(body, "disabled") {
-		t.Errorf("expected 'disabled' attribute in locked toggle, got %q", body)
+	if !strings.Contains(body, `name="offline_mode"`) {
+		t.Errorf("expected offline_mode input in body, got %q", body)
+	}
+	// "checked disabled" together is unique to the locked toggle; a bare
+	// "disabled" could match a button elsewhere on the page in the
+	// future and pass vacuously.
+	if !strings.Contains(body, "checked disabled") {
+		t.Errorf("expected 'checked disabled' on locked toggle, got %q", body)
 	}
 	if !strings.Contains(body, "LIBRESHELF_OFFLINE") {
 		t.Errorf("expected 'LIBRESHELF_OFFLINE' explanation in body, got %q", body)
@@ -252,6 +258,11 @@ func TestSettingsPagePOST_SkipsOfflineModeWhenEnvLocked(t *testing.T) {
 // to silently reset the absent toggle to false. The existing per-toggle
 // tests didn't catch this because each starts from a fresh DB. This
 // test exercises the cross-toggle behavior explicitly.
+//
+// Note: when LIBRESHELF_OFFLINE=true is set at startup, offline_mode
+// is excluded from this every-POST-writes-every-key invariant. See
+// TestSettingsPagePOST_SkipsOfflineModeWhenEnvLocked for the locked
+// contract.
 func TestSettingsPagePOST_BothTogglesWrittenEveryPOST(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, csrf := loginAs(t, dm, "admin1", "admin")
