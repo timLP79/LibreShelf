@@ -46,6 +46,7 @@ func TestSecurityHeadersOnPublicPage(t *testing.T) {
 		"base-uri 'self'",
 		"form-action 'self'",
 		"img-src 'self' data:",
+		"https://books.google.com",
 	} {
 		if !strings.Contains(csp, fragment) {
 			t.Errorf("CSP missing %q; got %q", fragment, csp)
