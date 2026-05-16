@@ -73,6 +73,18 @@
 
 </div>
 
+<footer class="container mt-5 mb-3">
+  <p class="small text-muted text-center mb-0">
+    {{if .SiteFooter.OfflineLocked}}
+      Running in offline mode. No external metadata sources are being contacted.
+    {{else if .SiteFooter.GoogleBooksConfigured}}
+      Book data from <a href="https://openlibrary.org" rel="noopener" target="_blank">Open Library</a> and <a href="https://books.google.com" rel="noopener" target="_blank">Google Books</a>.
+    {{else}}
+      Book data from <a href="https://openlibrary.org" rel="noopener" target="_blank">Open Library</a>.
+    {{end}}
+  </p>
+</footer>
+
 <script src="/javascripts/bootstrap.bundle.min.js"></script>
 </body>
 </html>

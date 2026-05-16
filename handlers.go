@@ -151,6 +151,9 @@ func renderTemplate(c *gin.Context, name string, data gin.H) {
 	if token, exists := c.Get("csrfToken"); exists {
 		data["CSRFToken"] = token
 	}
+	if _, ok := data["SiteFooter"]; !ok {
+		data["SiteFooter"] = siteFooter
+	}
 
 	var buf bytes.Buffer
 	if err := tmpl.ExecuteTemplate(&buf, "layout", data); err != nil {
