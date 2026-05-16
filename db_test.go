@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"strings"
@@ -699,6 +700,44 @@ func TestGenerateTempPasswordSatisfiesPolicy(t *testing.T) {
 		if strings.ContainsAny(pw, "0Oo1lI") {
 			t.Errorf("generated %q contains an excluded ambiguous character", pw)
 		}
+	}
+}
+
+func TestFetchAndStoreSeedCovers_OfflineSkipsWithoutHTTP(t *testing.T) {
+	dm := setupTestDB(t)
+	adminID := mustCreateUser(t, dm, "admin_seed_off", "admin")
+	if err := dm.SetSetting("offline_mode", "true", adminID); err != nil {
+		t.Fatalf("SetSetting: %v", err)
+	}
+
+	// Insert a book with ISBN but no cover so the function has work to
+	// do if it ignored offline mode.
+	_, err := dm.db.Exec(`INSERT INTO books (title, isbn) VALUES (?, ?)`,
+		"Offline Test Book", "9780000000000")
+	if err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+
+	// Hit the function with a context that would expire instantly if any
+	// HTTP attempt slipped through; the offline short-circuit must fire
+	// before the request loop.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	dm.FetchAndStoreSeedCovers(ctx)
+
+	// If we got here without hanging or panicking, the function returned
+	// quickly. Verify the book still has no cover (the function did not
+	// reach the save step).
+	var coverFilename *string
+	if err := dm.db.QueryRow(
+		`SELECT cover_filename FROM books WHERE isbn = ?`,
+		"9780000000000",
+	).Scan(&coverFilename); err != nil {
+		t.Fatalf("select cover: %v", err)
+	}
+	if coverFilename != nil {
+		t.Errorf("offline mode allowed a cover to be written: %q", *coverFilename)
 	}
 }
 
