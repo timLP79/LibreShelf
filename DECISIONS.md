@@ -1162,6 +1162,8 @@ Full seed backfill on a fresh install: 100/100 covers, ~70s total.
 
 **Date:** 2026-05-15 (cs408-go-stack-ahq, branch `feat/offline-mode-a0`, commits `4db0070` through `0b6b574`).
 
+**Superseded in part by DEC-034 (2026-05-15):** the precedence rule was flipped from "settings row wins over env var" to "env var=true acts as a deployment lock that overrides the DB row." See DEC-034 for current behavior. The rest of this entry (env var name, settings key, why-not-auto-detect, call sites) still applies.
+
 **Decision:** External HTTP calls (Open Library, future Google Books, future Internet Archive)
 are gated by an operator-declared offline-mode predicate. Sources: `LIBRESHELF_OFFLINE` env
 var as startup default, `offline_mode` row in the existing `settings` table as runtime
@@ -1187,3 +1189,35 @@ source -- one gate, one toggle.
 
 **Related:** spec at `docs/specs/2026-05-15-google-books-fallback-design.md`; bd issues
 cs408-go-stack-8gj (next subproject) and cs408-go-stack-0eh (offline workflow context).
+
+---
+
+## DEC-034: LIBRESHELF_OFFLINE acts as a deployment lock (precedence flip)
+
+**Date:** 2026-05-15 (cs408-go-stack-85j, branch `feat/offline-mode-env-lock`).
+
+**Decision:** Flip the precedence rule established in DEC-033. `LIBRESHELF_OFFLINE=true` at startup now overrides any `offline_mode` row in the settings table. Setting the env var to any other value (false, 1, yes, unset) leaves the DB row in control. Only the case-insensitive string `"true"` locks. The admin Settings UI renders the offline-mode toggle as checked+disabled with an explanatory note when locked; the handler skips writing the offline_mode row while locked. Other settings (currently `staff_can_import_patrons`) are unaffected by the lock.
+
+**Why the flip:** During manual test of PR #78 (A0), Tim hit the precedence trap that the original DEC-033 design created. The admin Settings handler writes every known setting on every POST (treating absent checkboxes as off). A Save-while-exploring with the offline_mode checkbox unchecked persisted `offline_mode=false` to the DB. On the next restart with `LIBRESHELF_OFFLINE=true`, the DB row silently overrode the env var; OL Lookup returned 200 instead of 503. No log line, no warning. For the documented audience (prisons, secure facilities, air-gapped deployments) the operator needs confidence that an env-var declaration cannot be silently undone by a prior UI Save.
+
+**Asymmetric lock:** Only `=true` locks. There is no "lock online" use case. An operator who deploys in a connected environment simply does not set the env var; the runtime UI is the source of truth.
+
+**Predicate behavior:**
+- `offlineEnvDefault=true` (env locks): `IsExternalAllowed` returns false. DB is not consulted. A DB fault during the lock period does not change behavior.
+- `offlineEnvDefault=false` (no lock): `IsExternalAllowed` consults the DB row. Empty row defaults to allow (true). DB fault defaults to allow (true) -- fail-open, since there is no env signal to fall back to.
+
+**UI behavior:**
+- Locked: toggle rendered as `checked disabled`, help copy reads "Locked by the LIBRESHELF_OFFLINE env var. Clear the env var and restart the server to edit this setting from the UI."
+- Unlocked: toggle rendered from the DB row, help copy reads the standard offline-mode description.
+
+**Handler behavior:**
+- Locked: `HandleSettingsPost` skips writing the offline_mode row regardless of the submitted form value. The `staff_can_import_patrons` write path is unaffected.
+- Unlocked: `HandleSettingsPost` writes every known setting on every POST per the original DEC-033 design (and the cross-toggle non-interference test in PR #78 continues to pin that behavior).
+
+**Startup log:** When locked, `main.go` logs a single line at startup: "LIBRESHELF_OFFLINE=true is locking offline mode; runtime DB setting will be ignored until the env var is unset."
+
+**Related:**
+- DEC-033 -- the original A0 precedence decision being superseded in part.
+- bd issue `cs408-go-stack-85j` -- the bug report and four-option brainstorm.
+- bd issue `cs408-go-stack-ahq` -- parent A0 work that shipped DEC-033 and surfaced this issue.
+- Spec: `docs/specs/2026-05-15-offline-mode-env-lock-design.md`.

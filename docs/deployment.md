@@ -87,14 +87,27 @@ covered here is the offline-mode declaration. Other env vars are documented inli
 
 ### `LIBRESHELF_OFFLINE` (optional)
 
-Set to `true` to declare this deployment offline at startup. When on, LibreShelf does not
-attempt any outbound HTTP for Open Library lookup, seed-cover backfill, or future external
-metadata sources. Admin can also flip this at runtime via Settings; the runtime setting
-wins over the env var. Default: `false`.
+Set to `true` to lock this deployment in offline mode. When set,
+LibreShelf does not attempt any outbound HTTP for Open Library lookup,
+seed-cover backfill, or future external metadata sources. The admin
+Settings UI shows the offline-mode toggle as checked and disabled; it
+cannot be edited until the env var is unset and the server is
+restarted. Default: unset (no lock).
 
-Use for deployments where outbound internet access is unavailable or policy-restricted
-(prisons, secure facilities, air-gapped networks). To set via systemd, add an
-`Environment=` line in `deploy/libreshelf.service`:
+Only the case-insensitive string `"true"` locks. Any other value
+(`false`, `1`, `yes`, etc.) is treated the same as unset.
+
+When the env var is not locking, the admin Settings UI is the source
+of truth for offline mode. Admin can flip the toggle at runtime; the
+DB row persists across restarts.
+
+Use the env-var lock for deployments where outbound internet access is
+unavailable or policy-restricted (prisons, secure facilities,
+air-gapped networks). Use the runtime UI toggle for deployments that
+need temporary offline mode (network maintenance windows, etc).
+
+To set via systemd, add an `Environment=` line in
+`deploy/libreshelf.service`:
 
 ```
 Environment=LIBRESHELF_OFFLINE=true
