@@ -327,6 +327,12 @@ function initBookForm() {
                 headers: { "Accept": "application/json" }
             }).then(function (resp) {
                 lookupBtn.disabled = false;
+                if (resp.status === 503) {
+                    // Either offline_mode or external_sources_unavailable.
+                    // Both mean "retry might succeed"; same banner for both.
+                    setStatus("External sources unavailable. Try again or fill in manually.", "error");
+                    return null;
+                }
                 if (resp.status === 404) {
                     setStatus("No match in Open Library. Fill in manually.", "error");
                     return null;

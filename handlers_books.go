@@ -132,6 +132,10 @@ func HandleOpenLibraryLookup(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "offline_mode"})
 		return
 	}
+	if errors.Is(err, ErrExternalSourcesUnavailable) {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "external_sources_unavailable"})
+		return
+	}
 	if errors.Is(err, ErrOpenLibraryNotFound) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "not_found"})
 		return
