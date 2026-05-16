@@ -744,3 +744,88 @@ func TestFetchOpenLibraryBookGated_OfflineReturnsSentinel(t *testing.T) {
 		t.Errorf("want ErrExternalDisabled, got %v", err)
 	}
 }
+
+func TestFetchOpenLibraryBook_GBFillsGapWhenOLPartial(t *testing.T) {
+	// OL returns an edition with title + authors but no description and
+	// no cover. The work record returns 404 (so OL chain exhausts).
+	// GB returns a description and a cover URL. Merge should produce a
+	// BookPrefill with OL bibliographic data + GB description + GB cover.
+	olDetails := `{"ISBN:9780000000001":{"details":{"title":"Sparse Edition","authors":[{"name":"Jane Doe"}],"publish_date":"2004","works":[{"key":"/works/OL999999W"}]}}}`
+	startFakeOLRouter(t, olDetails, "", map[string]string{})
+
+	const gbBody = `{
+	  "items": [{
+	    "volumeInfo": {
+	      "description": "GB-sourced description.",
+	      "imageLinks": {"thumbnail": "http://books.google.com/books/content?id=X&img=1"}
+	    }
+	  }]
+	}`
+	gbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(gbBody))
+	}))
+	t.Cleanup(gbSrv.Close)
+	withGoogleBooksBaseURL(t, gbSrv.URL)
+	withGoogleBooksAPIKey(t, "test-key")
+
+	got, err := FetchOpenLibraryBook(context.Background(), "9780000000001")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook: %v", err)
+	}
+	if got.Title != "Sparse Edition" || len(got.Authors) == 0 {
+		t.Errorf("OL bibliographic fields should win, got %+v", got)
+	}
+	if got.Description != "GB-sourced description." || got.DescriptionSource != "googlebooks" {
+		t.Errorf("GB description should fill the gap, got desc=%q src=%q", got.Description, got.DescriptionSource)
+	}
+	if got.CoverURL == "" || got.CoverSource != "googlebooks" {
+		t.Errorf("GB cover should fill the gap, got url=%q src=%q", got.CoverURL, got.CoverSource)
+	}
+	if got.GoogleBooksError {
+		t.Errorf("GoogleBooksError should be false on a successful GB call")
+	}
+}
+
+func TestFetchOpenLibraryBook_GBErrorSetsFlagButReturnsOL(t *testing.T) {
+	olDetails := `{"ISBN:9780000000001":{"details":{"title":"Title","authors":[{"name":"A"}],"publish_date":"2004","works":[{"key":"/works/OL999999W"}]}}}`
+	startFakeOLRouter(t, olDetails, "", map[string]string{})
+
+	// GB returns 500. Handler should set GoogleBooksError=true and
+	// return OL data unmodified.
+	gbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(gbSrv.Close)
+	withGoogleBooksBaseURL(t, gbSrv.URL)
+	withGoogleBooksAPIKey(t, "test-key")
+
+	got, err := FetchOpenLibraryBook(context.Background(), "9780000000001")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook should not surface GB error: %v", err)
+	}
+	if got.Title != "Title" {
+		t.Errorf("OL data should still flow through, got %+v", got)
+	}
+	if !got.GoogleBooksError {
+		t.Errorf("GoogleBooksError flag should be set when GB call fails")
+	}
+}
+
+func TestFetchOpenLibraryBook_NoGBKey_OLChainOnly(t *testing.T) {
+	olDetails := `{"ISBN:9780000000001":{"details":{"title":"Title","authors":[{"name":"A"}]}}}`
+	startFakeOLRouter(t, olDetails, "", map[string]string{})
+
+	withGoogleBooksAPIKey(t, "")
+
+	got, err := FetchOpenLibraryBook(context.Background(), "9780000000001")
+	if err != nil {
+		t.Fatalf("FetchOpenLibraryBook: %v", err)
+	}
+	if got.Title != "Title" {
+		t.Errorf("OL data should flow through, got %+v", got)
+	}
+	if got.GoogleBooksError {
+		t.Errorf("GoogleBooksError should be false when GB is disabled (no error, just skipped)")
+	}
+}
