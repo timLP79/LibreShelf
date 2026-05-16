@@ -1085,6 +1085,42 @@ func TestOpenLibraryLookupUpstreamError(t *testing.T) {
 	}
 }
 
+// TestOpenLibraryLookupExternalSourcesUnavailable pins the 503 branch
+// for the OL-miss + GB-real-error case (bd cs408-go-stack-efc). OL
+// returns {} (no record) and GB returns 500. The handler must respond
+// 503 external_sources_unavailable -- NOT 404 not_found, which is
+// reserved for "both sources legitimately don't catalog this ISBN."
+func TestOpenLibraryLookupExternalSourcesUnavailable(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "staff_ol_miss_gb_5xx", "staff")
+
+	prevOL := openLibraryBaseURL
+	olSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	openLibraryBaseURL = olSrv.URL
+	t.Cleanup(func() { openLibraryBaseURL = prevOL; olSrv.Close() })
+
+	gbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(gbSrv.Close)
+	withGoogleBooksBaseURL(t, gbSrv.URL)
+	withGoogleBooksAPIKey(t, "test-key")
+
+	req, _ := http.NewRequest("GET", "/api/openlibrary/isbn/9780141439518", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want 503; body=%s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "external_sources_unavailable") {
+		t.Errorf("body missing external_sources_unavailable: %s", rr.Body.String())
+	}
+}
+
 func TestCatalogRendersForStaff(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, _ := loginAs(t, dm, "staff_catalog", "staff")
