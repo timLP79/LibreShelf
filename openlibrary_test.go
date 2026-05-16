@@ -895,3 +895,25 @@ func TestFetchOpenLibraryBook_OLMissNoGBKey_ReturnsNotFound(t *testing.T) {
 		t.Errorf("want ErrOpenLibraryNotFound (no GB key, OL miss), got %v", err)
 	}
 }
+
+func TestFetchOpenLibraryBook_OLMissGBErrors_ReturnsNotFound(t *testing.T) {
+	// OL has no record. GB returns a 500 error (transport / upstream
+	// failure, distinct from "GB has no record"). The function should
+	// log the GB error and fall through to ErrOpenLibraryNotFound,
+	// preserving the existing contract for callers that can't tell
+	// the admin "GB tried and failed" any differently than "fill
+	// manually."
+	startFakeOLRouter(t, `{}`, "", map[string]string{})
+
+	gbSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(gbSrv.Close)
+	withGoogleBooksBaseURL(t, gbSrv.URL)
+	withGoogleBooksAPIKey(t, "test-key")
+
+	_, err := FetchOpenLibraryBook(context.Background(), "9780000000999")
+	if !errors.Is(err, ErrOpenLibraryNotFound) {
+		t.Errorf("want ErrOpenLibraryNotFound on GB error (per fall-through contract), got %v", err)
+	}
+}
