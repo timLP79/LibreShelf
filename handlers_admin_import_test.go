@@ -335,17 +335,17 @@ func TestImportDownload_SingleUse(t *testing.T) {
 
 func TestDefangCSVCell(t *testing.T) {
 	cases := map[string]string{
-		"":                      "",
-		"normal":                "normal",
-		"Alice Brown":           "Alice Brown",
-		"=HYPERLINK(x)":         "'=HYPERLINK(x)",
-		"+CMD":                  "'+CMD",
-		"-2+1":                  "'-2+1",
-		"@SUM(A1)":              "'@SUM(A1)",
-		"\tleading tab":         "'\tleading tab",
-		"\rleading cr":          "'\rleading cr",
-		"a=safe":                "a=safe",
-		"5 dollars":             "5 dollars",
+		"":              "",
+		"normal":        "normal",
+		"Alice Brown":   "Alice Brown",
+		"=HYPERLINK(x)": "'=HYPERLINK(x)",
+		"+CMD":          "'+CMD",
+		"-2+1":          "'-2+1",
+		"@SUM(A1)":      "'@SUM(A1)",
+		"\tleading tab": "'\tleading tab",
+		"\rleading cr":  "'\rleading cr",
+		"a=safe":        "a=safe",
+		"5 dollars":     "5 dollars",
 	}
 	for in, want := range cases {
 		got := defangCSVCell(in)

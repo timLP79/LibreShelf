@@ -750,4 +750,3 @@ func TestFetchAndStoreSeedCovers_OfflineSkipsWithoutHTTP(t *testing.T) {
 		t.Errorf("offline mode allowed a cover to be written: %q", *coverFilename)
 	}
 }
-

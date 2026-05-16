@@ -148,4 +148,3 @@ func TestRegressionAnonymousBookDetailGated(t *testing.T) {
 		t.Errorf("expected redirect to /login, got %q", loc)
 	}
 }
-

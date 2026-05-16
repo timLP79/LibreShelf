@@ -22,19 +22,19 @@ import (
 // via t.Cleanup(...) without spinning up a real network proxy.
 // Production callers never mutate them.
 //
-//   openLibraryBaseURL    Books API endpoint (/api/books).
-//   openLibraryHost       Host root used for /works/X.json fetches.
-//   openLibraryCoversHost The covers.openlibrary.org host. We HEAD-probe
-//                         /b/isbn/<isbn>-L.jpg?default=false as the
-//                         final cover fallback, because that endpoint
-//                         resolves a cover whenever OL has ANY image
-//                         indexed under the ISBN -- regardless of
-//                         whether the edition's specific work record
-//                         is the canonical one (OL frequently has
-//                         duplicate work records for the same book,
-//                         and a sparse edition can point at a
-//                         coverless work even when a sibling work has
-//                         covers).
+//	openLibraryBaseURL    Books API endpoint (/api/books).
+//	openLibraryHost       Host root used for /works/X.json fetches.
+//	openLibraryCoversHost The covers.openlibrary.org host. We HEAD-probe
+//	                      /b/isbn/<isbn>-L.jpg?default=false as the
+//	                      final cover fallback, because that endpoint
+//	                      resolves a cover whenever OL has ANY image
+//	                      indexed under the ISBN -- regardless of
+//	                      whether the edition's specific work record
+//	                      is the canonical one (OL frequently has
+//	                      duplicate work records for the same book,
+//	                      and a sparse edition can point at a
+//	                      coverless work even when a sibling work has
+//	                      covers).
 var (
 	openLibraryBaseURL    = "https://openlibrary.org/api/books"
 	openLibraryHost       = "https://openlibrary.org"

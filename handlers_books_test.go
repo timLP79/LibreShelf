@@ -983,7 +983,6 @@ func TestBookDeleteReturns404ForMissing(t *testing.T) {
 	}
 }
 
-
 // TestBookNewFormRenders pins the GET /books/new form for staff.
 // The handler is a thin renderTemplate call; this test exists so a
 // future template edit that breaks the form surfaces here rather
