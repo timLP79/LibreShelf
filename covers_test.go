@@ -165,3 +165,16 @@ func TestSaveCoverFromURL_PNGContentType(t *testing.T) {
 		t.Errorf("filename = %q, expected .png suffix", filename)
 	}
 }
+
+func TestSaveCoverFromURLGated_OfflineReturnsSentinel(t *testing.T) {
+	dm := setupTestDB(t)
+	withOfflineEnvDefault(t, true)
+
+	// The URL is intentionally .invalid (RFC 6761 reserved TLD) so any
+	// accidental HTTP attempt fails fast and obviously. The gate must
+	// fire before any HTTP attempt is made.
+	_, err := SaveCoverFromURLGated(dm, "https://example.invalid/cover.jpg")
+	if !errors.Is(err, ErrExternalDisabled) {
+		t.Errorf("want ErrExternalDisabled, got %v", err)
+	}
+}

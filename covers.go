@@ -96,6 +96,19 @@ func SaveUploadedCover(fh *multipart.FileHeader) (string, error) {
 	return writeCoverStream(file, ext)
 }
 
+// SaveCoverFromURLGated is the offline-aware entry point for any caller
+// that has a DatabaseManager. Returns ErrExternalDisabled without making
+// any HTTP attempt when external calls are blocked.
+//
+// Tests that need to drive the HTTP path against httptest.NewServer
+// should keep calling SaveCoverFromURL directly.
+func SaveCoverFromURLGated(dm *DatabaseManager, url string) (string, error) {
+	if !IsExternalAllowed(dm) {
+		return "", ErrExternalDisabled
+	}
+	return SaveCoverFromURL(url)
+}
+
 func SaveCoverFromURL(url string) (string, error) {
 	client := &http.Client{Timeout: coverDownloadTimeout}
 	resp, err := client.Get(url)
