@@ -250,6 +250,20 @@ func normalizeOLAuthorString(s string) string {
 	return rest + " " + last
 }
 
+// FetchOpenLibraryBookGated is the offline-aware entry point for the
+// admin Lookup path and any future caller that should respect the
+// operator's offline-mode declaration. Returns ErrExternalDisabled
+// without making any HTTP attempt when external calls are blocked.
+//
+// Tests that need to drive the OL chain against httptest.NewServer
+// should keep calling FetchOpenLibraryBook directly.
+func FetchOpenLibraryBookGated(ctx context.Context, dm *DatabaseManager, isbn string) (*OpenLibraryBook, error) {
+	if !IsExternalAllowed(dm) {
+		return nil, ErrExternalDisabled
+	}
+	return FetchOpenLibraryBook(ctx, isbn)
+}
+
 func FetchOpenLibraryBook(ctx context.Context, isbn string) (*OpenLibraryBook, error) {
 	bibkey := "ISBN:" + stripISBNFormatting(isbn)
 
