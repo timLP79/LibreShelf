@@ -40,17 +40,23 @@
             <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" role="switch"
                        id="offline_mode" name="offline_mode"
-                       {{if .Settings.OfflineMode}}checked{{end}}>
+                       {{if .Settings.OfflineModeLocked}}checked disabled{{else if .Settings.OfflineMode}}checked{{end}}>
                 <label class="form-check-label" for="offline_mode">
                     <strong>Offline mode (disable external API calls)</strong>
                 </label>
                 <div class="form-text small">
-                    When enabled, LibreShelf will not contact Open Library
-                    (or future external metadata sources) for cover art
-                    or book information. Book entry continues to work
-                    using whatever information staff type in manually.
-                    Use this for deployments without internet access or
-                    where outbound HTTP is policy-restricted.
+                    {{if .Settings.OfflineModeLocked}}
+                        Locked by the <code>LIBRESHELF_OFFLINE</code> env var.
+                        Clear the env var and restart the server to edit this
+                        setting from the UI.
+                    {{else}}
+                        When enabled, LibreShelf will not contact Open Library
+                        (or future external metadata sources) for cover art
+                        or book information. Book entry continues to work
+                        using whatever information staff type in manually.
+                        Use this for deployments without internet access or
+                        where outbound HTTP is policy-restricted.
+                    {{end}}
                 </div>
             </div>
         </div>

@@ -7,17 +7,31 @@ import (
 	"testing"
 )
 
+// withOfflineEnvDefault swaps offlineEnvDefault for the duration of the
+// test function and restores the prior value on Cleanup. Tests that
+// need to exercise the env-locked branches use this instead of
+// os.Setenv, which would not retroactively change the package var
+// since init() ran at process start.
+func withOfflineEnvDefault(t *testing.T, locked bool) {
+	t.Helper()
+	prior := offlineEnvDefault
+	offlineEnvDefault = locked
+	t.Cleanup(func() { offlineEnvDefault = prior })
+}
+
 func TestIsExternalAllowed_EnvDefaultTrue_NoSettingsRow(t *testing.T) {
 	dm := setupTestDB(t)
-	if !isExternalAllowedFn(dm, false /* offlineFromEnv */) {
-		t.Errorf("env-default online, no settings row: want allowed=true, got false")
+	withOfflineEnvDefault(t, true)
+	if IsExternalAllowed(dm) {
+		t.Errorf("env locked, no settings row: want allowed=false, got true")
 	}
 }
 
-func TestIsExternalAllowed_EnvDefaultOffline_NoSettingsRow(t *testing.T) {
+func TestIsExternalAllowed_EnvDefaultFalse_NoSettingsRow(t *testing.T) {
 	dm := setupTestDB(t)
-	if isExternalAllowedFn(dm, true /* offlineFromEnv */) {
-		t.Errorf("env-default offline, no settings row: want allowed=false, got true")
+	withOfflineEnvDefault(t, false)
+	if !IsExternalAllowed(dm) {
+		t.Errorf("env not locked, no settings row: want allowed=true, got false")
 	}
 }
 
@@ -27,36 +41,53 @@ func TestIsExternalAllowed_SettingsOverridesEnvToOffline(t *testing.T) {
 	if err := dm.SetSetting("offline_mode", "true", adminID); err != nil {
 		t.Fatalf("SetSetting: %v", err)
 	}
-	if isExternalAllowedFn(dm, false /* env says online */) {
-		t.Errorf("settings=true must override env=false: want allowed=false, got true")
+	withOfflineEnvDefault(t, false)
+	if IsExternalAllowed(dm) {
+		t.Errorf("env unlocked, DB=true: want allowed=false (DB wins), got true")
 	}
 }
 
-func TestIsExternalAllowed_SettingsOverridesEnvToOnline(t *testing.T) {
+func TestIsExternalAllowed_EnvLockBeatsDBOnline(t *testing.T) {
 	dm := setupTestDB(t)
 	adminID := mustCreateUser(t, dm, "admin_y", "admin")
 	if err := dm.SetSetting("offline_mode", "false", adminID); err != nil {
 		t.Fatalf("SetSetting: %v", err)
 	}
-	if !isExternalAllowedFn(dm, true /* env says offline */) {
-		t.Errorf("settings=false must override env=true: want allowed=true, got false")
+	withOfflineEnvDefault(t, true)
+	if IsExternalAllowed(dm) {
+		t.Errorf("env locked, DB=false: want allowed=false (lock wins over DB), got true")
 	}
 }
 
-func TestIsExternalAllowed_DBErrorFallsBackToEnvDefault(t *testing.T) {
-	// Simulate a DB fault: open a DM, then immediately close its
-	// underlying *sql.DB so every subsequent query returns
-	// "sql: database is closed". The predicate must fall back to
-	// the env-var default and not panic.
+func TestIsExternalAllowed_DBErrorWhenUnlockedFallsBackToAllow(t *testing.T) {
 	dm := NewDatabaseManager(t.TempDir() + "/broken.sqlite")
 	if err := dm.db.Close(); err != nil {
 		t.Fatalf("close dm.db: %v", err)
 	}
-
-	if !isExternalAllowedFn(dm, false /* env=online */) {
-		t.Errorf("DB error + env=online: want allowed=true (fallback to env), got false")
+	withOfflineEnvDefault(t, false)
+	if !IsExternalAllowed(dm) {
+		t.Errorf("DB error + env unlocked: want allowed=true (fail-open), got false")
 	}
-	if isExternalAllowedFn(dm, true /* env=offline */) {
-		t.Errorf("DB error + env=offline: want allowed=false (fallback to env), got true")
+}
+
+func TestIsExternalAllowed_DBErrorWhenLockedStaysBlocked(t *testing.T) {
+	dm := NewDatabaseManager(t.TempDir() + "/broken.sqlite")
+	if err := dm.db.Close(); err != nil {
+		t.Fatalf("close dm.db: %v", err)
+	}
+	withOfflineEnvDefault(t, true)
+	if IsExternalAllowed(dm) {
+		t.Errorf("DB error + env locked: want allowed=false (lock fires before DB read), got true")
+	}
+}
+
+func TestIsOfflineEnvLocked_ReturnsEnvDefault(t *testing.T) {
+	withOfflineEnvDefault(t, true)
+	if !IsOfflineEnvLocked() {
+		t.Errorf("locked=true: want true, got false")
+	}
+	withOfflineEnvDefault(t, false)
+	if IsOfflineEnvLocked() {
+		t.Errorf("locked=false: want false, got true")
 	}
 }

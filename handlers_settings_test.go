@@ -176,6 +176,77 @@ func TestSettingsPagePOST_StaffForbidden(t *testing.T) {
 	}
 }
 
+func TestSettingsPageGET_RendersLockedToggleWhenEnvLocked(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	withOfflineEnvDefault(t, true)
+	sess, _ := loginAs(t, dm, "admin1", "admin")
+
+	req := httptest.NewRequest("GET", "/admin/settings", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, `name="offline_mode"`) {
+		t.Errorf("expected offline_mode input in body, got %q", body)
+	}
+	// "checked disabled" together is unique to the locked toggle; a bare
+	// "disabled" could match a button elsewhere on the page in the
+	// future and pass vacuously.
+	if !strings.Contains(body, "checked disabled") {
+		t.Errorf("expected 'checked disabled' on locked toggle, got %q", body)
+	}
+	if !strings.Contains(body, "LIBRESHELF_OFFLINE") {
+		t.Errorf("expected 'LIBRESHELF_OFFLINE' explanation in body, got %q", body)
+	}
+}
+
+func TestSettingsPagePOST_SkipsOfflineModeWhenEnvLocked(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	withOfflineEnvDefault(t, true)
+	sess, csrf := loginAs(t, dm, "admin1", "admin")
+
+	// Pre-condition: no offline_mode row.
+	if v, _ := dm.GetSetting("offline_mode"); v != "" {
+		t.Fatalf("pre-condition: offline_mode row should be empty, got %q", v)
+	}
+
+	// Submit a crafted POST that tries to flip offline_mode to true
+	// while the env-var lock is in place. The handler must skip the
+	// write regardless of the form value. Also flip the staff toggle
+	// so we can confirm OTHER settings still write normally.
+	form := url.Values{}
+	form.Set("csrf_token", csrf)
+	form.Set("offline_mode", "on")
+	form.Set("staff_can_import_patrons", "on")
+	req := httptest.NewRequest("POST", "/admin/settings", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Errorf("status = %d, want 303", rr.Code)
+	}
+
+	// Post-condition: offline_mode row still empty (write skipped).
+	v, err := dm.GetSetting("offline_mode")
+	if err != nil {
+		t.Fatalf("GetSetting: %v", err)
+	}
+	if v != "" {
+		t.Errorf("offline_mode row should not be written while locked, got %q", v)
+	}
+
+	// Confirm staff_can_import_patrons WAS written (lock affects only offline_mode).
+	if !dm.GetSettingBool("staff_can_import_patrons", false) {
+		t.Errorf("staff_can_import_patrons should be true (lock only affects offline_mode)")
+	}
+}
+
 // TestSettingsPagePOST_BothTogglesWrittenEveryPOST documents the design
 // of the multi-toggle settings handler: each POST writes every known
 // setting from the form, treating an absent checkbox as "off." This
@@ -187,6 +258,11 @@ func TestSettingsPagePOST_StaffForbidden(t *testing.T) {
 // to silently reset the absent toggle to false. The existing per-toggle
 // tests didn't catch this because each starts from a fresh DB. This
 // test exercises the cross-toggle behavior explicitly.
+//
+// Note: when LIBRESHELF_OFFLINE=true is set at startup, offline_mode
+// is excluded from this every-POST-writes-every-key invariant. See
+// TestSettingsPagePOST_SkipsOfflineModeWhenEnvLocked for the locked
+// contract.
 func TestSettingsPagePOST_BothTogglesWrittenEveryPOST(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, csrf := loginAs(t, dm, "admin1", "admin")
