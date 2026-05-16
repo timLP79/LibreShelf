@@ -1205,3 +1205,70 @@ func TestHandleOpenLibraryLookup_OfflineReturns503(t *testing.T) {
 		t.Errorf("body should mention offline_mode, got %q", rr.Body.String())
 	}
 }
+
+func TestHandleBookCreate_CoverURLSkippedWhenOffline(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	withOfflineEnvDefault(t, true)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	fields := validBookFields()
+	fields["isbn"] = "9780000000001"
+	// .invalid is RFC 6761 reserved TLD; any accidental HTTP attempt
+	// will fail fast. The offline gate must fire before any attempt.
+	fields["cover_url"] = "https://example.invalid/cover.jpg"
+
+	rr := postBookMultipart(t, router, "/books", sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	if got := flashCode(rr, "flash_success"); got != "book_created_cover_skipped_offline" {
+		t.Errorf("expected flash_success=book_created_cover_skipped_offline, got %q", got)
+	}
+
+	// The book row should exist with no cover.
+	got, err := dm.GetBookByISBN("9780000000001")
+	if err != nil {
+		t.Fatalf("GetBookByISBN: %v", err)
+	}
+	if got.CoverFilename != nil {
+		t.Errorf("expected nil cover_filename after offline skip, got %q", *got.CoverFilename)
+	}
+}
+
+func TestHandleBookUpdate_CoverURLSkippedWhenOffline(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	// Pre-seed a book with no cover.
+	id, err := dm.CreateBook(&Book{Title: "Existing", QuantityTotal: 1, QuantityAvailable: 1}, []string{"Author"})
+	if err != nil {
+		t.Fatalf("CreateBook: %v", err)
+	}
+
+	// Lock AFTER the seed so seed-time external calls are not relevant.
+	withOfflineEnvDefault(t, true)
+
+	fields := map[string]string{
+		"title":     "Existing",
+		"authors":   "Author",
+		"quantity":  "1",
+		"cover_url": "https://example.invalid/cover.jpg",
+	}
+	rr := postBookMultipart(t, router, fmt.Sprintf("/books/%d/edit", id), sess, csrf, fields, "", nil)
+
+	if rr.Code != http.StatusFound {
+		t.Fatalf("expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+	if got := flashCode(rr, "flash_success"); got != "book_updated_cover_skipped_offline" {
+		t.Errorf("expected flash_success=book_updated_cover_skipped_offline, got %q", got)
+	}
+
+	got, err := dm.GetBookByID(id)
+	if err != nil {
+		t.Fatalf("GetBookByID: %v", err)
+	}
+	if got.CoverFilename != nil {
+		t.Errorf("expected nil cover_filename after offline skip, got %q", *got.CoverFilename)
+	}
+}
