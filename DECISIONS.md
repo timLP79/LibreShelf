@@ -1255,3 +1255,48 @@ cs408-go-stack-8gj (next subproject) and cs408-go-stack-0eh (offline workflow co
 - DEC-034 -- env-var-as-lock precedence flip that GB consumes via IsExternalAllowed.
 - bd issue `cs408-go-stack-8gj` -- the parent issue for this work.
 - Spec: `docs/specs/2026-05-15-google-books-fallback-design.md`.
+
+---
+
+## DEC-036: Idempotent additive ALTER TABLE migrations in createSchema
+
+**Date:** 2026-05-16 (cs408-go-stack-ygu, PR #85, branch `feat/patron-address-field`).
+
+**Context:** Until now, LibreShelf's `createSchema` used only `CREATE TABLE IF NOT EXISTS` and any schema change required wiping `data/database.sqlite` -- documented as a CLAUDE.md gotcha. That was acceptable while the project was pre-deployment; once production data exists on EC2, dropping the DB to add a column is no longer acceptable. ygu (patron address field for printed overdue notices) was the first additive change that needed a real migration path.
+
+**Decision:** For additive schema changes (`ADD COLUMN`), run the `ALTER TABLE` statement after the main `CREATE TABLE IF NOT EXISTS` block, and ignore the SQLite `"duplicate column"` error so the path is idempotent on every startup. The migration block lives inline in `createSchema`, not in a separate framework.
+
+Pattern:
+
+```go
+if _, err := dm.db.Exec(`ALTER TABLE patrons ADD COLUMN address TEXT`); err != nil &&
+    !strings.Contains(err.Error(), "duplicate column") {
+    log.Fatalf("Failed to add patrons.address column: %v", err)
+}
+```
+
+The same column is also included in the `CREATE TABLE` block above. That way:
+- **Fresh DBs**: CREATE TABLE creates the column; ALTER returns "duplicate column"; ignored.
+- **Existing DBs**: CREATE TABLE IF NOT EXISTS no-ops; ALTER adds the column.
+- **Re-running** at startup: ALTER always returns "duplicate column" after the first success; ignored.
+
+**Why inline, not a migration framework:** LibreShelf has one production deployment and a small, well-known schema. A real framework (versioned files, applied-migrations table, up/down scripts) is more machinery than the change rate justifies. The inline pattern handles the common case (additive column) idempotently and explicitly. When a non-additive change is needed -- column rename, NOT NULL with no default, table drop -- we revisit then.
+
+**What this pattern does NOT support:**
+- `DROP COLUMN` (SQLite supports it since 3.35, but we don't have a tested pattern yet).
+- Column rename. Requires a multi-step ALTER + UPDATE + ALTER dance.
+- Adding `NOT NULL` without `DEFAULT`. SQLite rejects this for existing rows.
+- Changing a column type. Requires the standard SQLite rebuild dance (create temp table, copy, drop, rename).
+- Composite migrations that touch multiple tables atomically. The current pattern Execs ALTERs one at a time; if a later one fails the earlier ones are already committed.
+
+If a change needs any of those, file a bd issue, design the migration as a one-off in the same `createSchema` block (or escalate to a framework), and document in DECISIONS.
+
+**Error-string match is brittle but acceptable:** `strings.Contains(err.Error(), "duplicate column")` matches `modernc.org/sqlite`'s wording, which mirrors upstream SQLite's `SQLITE_ERROR` for that case. The error code itself is not exposed cleanly by the driver. If `modernc` ever changes the wording (rare for SQLite error strings -- they are stable across major versions), the migration would refuse to run on existing DBs, which is a noisy fail-fast at startup. Acceptable risk.
+
+**Updates the CLAUDE.md "Schema changes don't migrate" gotcha:** Partially solved. Additive `ADD COLUMN` is now first-class; non-additive changes still require the local-wipe escape hatch.
+
+**Related:**
+- CLAUDE.md gotcha "Schema changes don't migrate" -- updated to reflect this pattern.
+- bd issue `cs408-go-stack-ygu` -- the first use; adds `patrons.address TEXT`.
+- bd issue `cs408-go-stack-wdy` -- next consumer; the printed-notice route reads this column.
+- bd memory `schema-migrations` -- pattern reference for future additive changes.

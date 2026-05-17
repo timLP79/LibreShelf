@@ -141,7 +141,7 @@ All checkpoints complete. CP1-CP4 shipped over weeks 3-5. CP5 closed 2026-04-18 
 For per-checkpoint detail:
 - `bd memories cp5-architecture` -- staff / book / patron CRUD, OL integration, cover validation
 - `bd memories cp6-architecture` -- loans + dashboard + kiosk + role-differentiated routing
-- `DECISIONS.md` -- DEC-001 through DEC-032 (DEC-027: backup design; DEC-028: security hardening; DEC-029: admin tools-index pattern; DEC-030: CSV patron import; DEC-031: SQLite busy_timeout + provable TOCTOU safety; DEC-032: Open Library metadata enrichment chain -- no Wikipedia)
+- `DECISIONS.md` -- DEC-001 through DEC-036 (DEC-027: backup design; DEC-028: security hardening; DEC-029: admin tools-index pattern; DEC-030: CSV patron import; DEC-031: SQLite busy_timeout + provable TOCTOU safety; DEC-032: Open Library metadata enrichment chain -- no Wikipedia; DEC-033/034: offline-mode predicate + env-var-as-lock precedence flip; DEC-035: Google Books fallback + field-level enrichment over Open Library; DEC-036: idempotent additive ALTER TABLE migrations in createSchema)
 - `git log` -- implementation history
 
 ---
@@ -165,7 +165,7 @@ For per-checkpoint detail:
 - **SQLite driver name.** `modernc.org/sqlite` registers as `"sqlite"`, not `"sqlite3"`. Don't copy-paste snippets from `mattn/go-sqlite3` docs (DEC-002).
 - **Seed passwords are fresh-install-only.** `SeedDefaultUsers` skips users that already exist. Bumping a seed value does NOT update existing rows; `rm data/database.sqlite*` to re-seed locally.
 - **Test router uses the production middleware chain** (fixed in #35). `setupTestRouter` returns `(router, dm)` and mirrors `main.go` route groups exactly. Use `loginAs(t, dm, username, role)` to get a session cookie + CSRF token, then `req.AddCookie(sess)` and set `csrf_token` on POSTs. `logoutHelper` exists for the logout path.
-- **Schema changes don't migrate.** `createSchema` uses `CREATE TABLE IF NOT EXISTS`. Altering a column requires either `ALTER TABLE` or nuking `data/database.sqlite` locally.
+- **Schema changes: additive only, no framework.** `createSchema` uses `CREATE TABLE IF NOT EXISTS` plus an idempotent `ALTER TABLE ... ADD COLUMN` block (DEC-036). Adding a new column: put it in both the `CREATE TABLE` body and an `ALTER TABLE` line that ignores the "duplicate column" error. Works on fresh and existing DBs without a wipe. Non-additive changes (rename, drop, NOT NULL with no default, type change) are NOT supported by the current pattern; design as a one-off and revisit then.
 - **Go has no hot-reload.** Template edits take effect only after a process restart (templates are parsed once at startup via `template.Must` in `main.go`). Go source edits take effect only after re-running `go run .`. Symptom of forgetting: the browser sees the old behavior with no errors. If something "didn't do anything," restart the server first.
 - **Static assets cache aggressively in the browser.** `router.Static` serves `static/javascripts/app.js` and `static/stylesheets/style.css` without cache-busting query strings or asset fingerprinting, so after a JS/CSS edit the browser may still hold the prior version. Symptom: `typeof initWhateverIJustAdded` is `"undefined"` in the console even though the file on disk is current. Fix during dev: hard refresh (Ctrl+Shift+R) or keep DevTools open with "Disable cache" checked in the Network tab. Proper fix (a `?v=<build-time>` query or content-hash URL) was de-scoped from CP7; it lives in the deferred backlog.
 
