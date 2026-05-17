@@ -47,7 +47,7 @@ func loginAsPatron(t *testing.T, dm *DatabaseManager, name string) (*http.Cookie
 	if err != nil {
 		t.Fatalf("bcrypt: %v", err)
 	}
-	patronID, username, err := dm.CreatePatron(name, "", "", string(hash))
+	patronID, username, err := dm.CreatePatron(name, "", "", "", string(hash))
 	if err != nil {
 		t.Fatalf("CreatePatron(%q): %v", name, err)
 	}

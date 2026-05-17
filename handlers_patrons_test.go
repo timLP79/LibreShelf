@@ -102,6 +102,65 @@ func TestPatronCreateHappyPath(t *testing.T) {
 	}
 }
 
+func TestPatronCreatePersistsAddressAndEditUpdates(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, csrf := loginAs(t, dm, "admin", "admin")
+
+	fields := validPatronFields()
+	fields["address"] = "123 Main St\nBoise, ID 83702"
+
+	rr := postStaffForm(t, router, "/patrons", sess, csrf, fields)
+	if rr.Code != http.StatusFound {
+		t.Fatalf("create: expected 302, got %d. body: %s", rr.Code, rr.Body.String())
+	}
+
+	user, err := dm.GetUserByUsername("jsmith")
+	if err != nil {
+		t.Fatalf("GetUserByUsername jsmith: %v", err)
+	}
+	patron, err := dm.GetPatronByID(*user.PatronID)
+	if err != nil {
+		t.Fatalf("GetPatronByID: %v", err)
+	}
+	if patron.Address == nil || *patron.Address != "123 Main St\nBoise, ID 83702" {
+		t.Errorf("address not persisted on create: %+v", patron.Address)
+	}
+
+	editFields := map[string]string{
+		"name":    "Jane Smith",
+		"email":   "jane@example.com",
+		"phone":   "555-1234",
+		"address": "456 Oak Ave\nBoise, ID 83703",
+	}
+	editURL := fmt.Sprintf("/patrons/%d/edit", *user.PatronID)
+	editRR := postStaffForm(t, router, editURL, sess, csrf, editFields)
+	if editRR.Code != http.StatusFound {
+		t.Fatalf("edit: expected 302, got %d. body: %s", editRR.Code, editRR.Body.String())
+	}
+
+	patron2, err := dm.GetPatronByID(*user.PatronID)
+	if err != nil {
+		t.Fatalf("GetPatronByID after edit: %v", err)
+	}
+	if patron2.Address == nil || *patron2.Address != "456 Oak Ave\nBoise, ID 83703" {
+		t.Errorf("address not updated on edit: %+v", patron2.Address)
+	}
+
+	// Empty address on edit clears it (NULL in DB).
+	editFields["address"] = ""
+	clearRR := postStaffForm(t, router, editURL, sess, csrf, editFields)
+	if clearRR.Code != http.StatusFound {
+		t.Fatalf("clear: expected 302, got %d", clearRR.Code)
+	}
+	patron3, err := dm.GetPatronByID(*user.PatronID)
+	if err != nil {
+		t.Fatalf("GetPatronByID after clear: %v", err)
+	}
+	if patron3.Address != nil {
+		t.Errorf("address should be nil after clear, got %q", *patron3.Address)
+	}
+}
+
 // TestPatronCreateAutoSuffixesDuplicateUsername pins the collision
 // retry loop inside CreatePatron's transaction: the second patron with
 // the same auto-generated base gets suffix "2", the third "3", etc.
@@ -236,7 +295,7 @@ func TestPatronEditHappyPath(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, csrf := loginAs(t, dm, "admin", "admin")
 
-	patronID, username, err := dm.CreatePatron("Jane Smith", "jane@example.com", "555-1234", "fake-hash")
+	patronID, username, err := dm.CreatePatron("Jane Smith", "jane@example.com", "555-1234", "", "fake-hash")
 	if err != nil {
 		t.Fatalf("seed CreatePatron: %v", err)
 	}
@@ -293,7 +352,7 @@ func TestPatronEditRejectsMissingName(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, csrf := loginAs(t, dm, "admin", "admin")
 
-	patronID, _, err := dm.CreatePatron("Jane Smith", "", "", "fake-hash")
+	patronID, _, err := dm.CreatePatron("Jane Smith", "", "", "", "fake-hash")
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -327,7 +386,7 @@ func TestPatronDeleteHappyPath(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, csrf := loginAs(t, dm, "admin", "admin")
 
-	patronID, username, err := dm.CreatePatron("Doomed Patron", "", "", "fake-hash")
+	patronID, username, err := dm.CreatePatron("Doomed Patron", "", "", "", "fake-hash")
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -369,7 +428,7 @@ func TestPatronDeleteRejectsWhenHasLoans(t *testing.T) {
 	router, dm := setupTestRouter(t)
 	sess, csrf := loginAs(t, dm, "admin", "admin")
 
-	patronID, _, err := dm.CreatePatron("Patron With Loans", "", "", "fake-hash")
+	patronID, _, err := dm.CreatePatron("Patron With Loans", "", "", "", "fake-hash")
 	if err != nil {
 		t.Fatalf("seed patron: %v", err)
 	}

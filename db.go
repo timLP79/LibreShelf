@@ -75,6 +75,7 @@ type Patron struct {
 	Name            string
 	Email           *string
 	Phone           *string
+	Address         *string
 	JoinedDate      string
 	Metadata        *string
 	Username        string
@@ -634,6 +635,7 @@ func (dm *DatabaseManager) createSchema() {
 		name        TEXT NOT NULL,
 		email       TEXT,
 		phone       TEXT,
+		address     TEXT,
 		joined_date DATETIME DEFAULT CURRENT_TIMESTAMP,
 		metadata    TEXT
 	);
@@ -674,6 +676,14 @@ func (dm *DatabaseManager) createSchema() {
 
 	if _, err := dm.db.Exec(schema); err != nil {
 		log.Fatalf("Failed to create schema: %v", err)
+	}
+
+	// Additive migrations for tables that pre-existed the column.
+	// SQLite raises "duplicate column" when the column is already
+	// present; that's the idempotent path on existing deployments.
+	if _, err := dm.db.Exec(`ALTER TABLE patrons ADD COLUMN address TEXT`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		log.Fatalf("Failed to add patrons.address column: %v", err)
 	}
 
 	log.Println("Database schema ready")
@@ -1296,7 +1306,7 @@ var (
 
 func (dm *DatabaseManager) GetAllPatrons() ([]Patron, error) {
 	rows, err := dm.db.Query(`
-		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata,
+		SELECT p.id, p.name, p.email, p.phone, p.address, p.joined_date, p.metadata,
 		       COALESCE(u.username, ''), (u.temp_password IS NOT NULL)
 		FROM patrons p
 		LEFT JOIN users u ON u.patron_id = p.id
@@ -1309,7 +1319,7 @@ func (dm *DatabaseManager) GetAllPatrons() ([]Patron, error) {
 	var patrons []Patron
 	for rows.Next() {
 		var p Patron
-		if err := rows.Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.JoinedDate, &p.Metadata, &p.Username, &p.HasTempPassword); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.Address, &p.JoinedDate, &p.Metadata, &p.Username, &p.HasTempPassword); err != nil {
 			return nil, err
 		}
 		patrons = append(patrons, p)
@@ -1320,12 +1330,12 @@ func (dm *DatabaseManager) GetAllPatrons() ([]Patron, error) {
 func (dm *DatabaseManager) GetPatronByID(id int) (*Patron, error) {
 	p := &Patron{}
 	err := dm.db.QueryRow(`
-		SELECT p.id, p.name, p.email, p.phone, p.joined_date, p.metadata,
+		SELECT p.id, p.name, p.email, p.phone, p.address, p.joined_date, p.metadata,
 		       COALESCE(u.username, ''), (u.temp_password IS NOT NULL)
 		FROM patrons p
 		LEFT JOIN users u ON u.patron_id = p.id
 		WHERE p.id = ?`, id,
-	).Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.JoinedDate, &p.Metadata, &p.Username, &p.HasTempPassword)
+	).Scan(&p.ID, &p.Name, &p.Email, &p.Phone, &p.Address, &p.JoinedDate, &p.Metadata, &p.Username, &p.HasTempPassword)
 	if err != nil {
 		return nil, err
 	}
@@ -1346,24 +1356,27 @@ func (dm *DatabaseManager) GetPatronByID(id int) (*Patron, error) {
 // to a nil pointer before INSERT so the column stores NULL rather
 // than a zero-length string. This keeps the DB shape honest about
 // "not provided" vs "provided as empty".
-func (dm *DatabaseManager) CreatePatron(name, email, phone, passwordHash string) (int, string, error) {
+func (dm *DatabaseManager) CreatePatron(name, email, phone, address, passwordHash string) (int, string, error) {
 	tx, err := dm.db.Begin()
 	if err != nil {
 		return 0, "", err
 	}
 	defer tx.Rollback()
 
-	var emailPtr, phonePtr *string
+	var emailPtr, phonePtr, addressPtr *string
 	if email != "" {
 		emailPtr = &email
 	}
 	if phone != "" {
 		phonePtr = &phone
 	}
+	if address != "" {
+		addressPtr = &address
+	}
 
 	res, err := tx.Exec(
-		"INSERT INTO patrons (name, email, phone) VALUES (?, ?, ?)",
-		name, emailPtr, phonePtr,
+		"INSERT INTO patrons (name, email, phone, address) VALUES (?, ?, ?, ?)",
+		name, emailPtr, phonePtr, addressPtr,
 	)
 	if err != nil {
 		return 0, "", err
@@ -1560,17 +1573,20 @@ func (dm *DatabaseManager) FindPatronByEmail(email string) (*Patron, error) {
 	return p, nil
 }
 
-func (dm *DatabaseManager) UpdatePatron(id int, name, email, phone string) error {
-	var emailPtr, phonePtr *string
+func (dm *DatabaseManager) UpdatePatron(id int, name, email, phone, address string) error {
+	var emailPtr, phonePtr, addressPtr *string
 	if email != "" {
 		emailPtr = &email
 	}
 	if phone != "" {
 		phonePtr = &phone
 	}
+	if address != "" {
+		addressPtr = &address
+	}
 	_, err := dm.db.Exec(
-		"UPDATE patrons SET name = ?, email = ?, phone = ? WHERE id = ?",
-		name, emailPtr, phonePtr, id,
+		"UPDATE patrons SET name = ?, email = ?, phone = ?, address = ? WHERE id = ?",
+		name, emailPtr, phonePtr, addressPtr, id,
 	)
 	return err
 }

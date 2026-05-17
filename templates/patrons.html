@@ -59,7 +59,8 @@
                                     data-patron-id="{{.ID}}"
                                     data-patron-name="{{.Name}}"
                                     data-patron-email="{{if .Email}}{{deref .Email}}{{end}}"
-                                    data-patron-phone="{{if .Phone}}{{deref .Phone}}{{end}}">
+                                    data-patron-phone="{{if .Phone}}{{deref .Phone}}{{end}}"
+                                    data-patron-address="{{if .Address}}{{deref .Address}}{{end}}">
                                 Edit
                             </button>
                             <button type="button" class="btn btn-sm btn-outline-danger patron-delete-btn"
@@ -106,6 +107,10 @@
                     <input type="tel" id="add-patron-phone" name="phone" class="form-control" maxlength="40">
                 </div>
                 <div class="mb-3">
+                    <label for="add-patron-address" class="form-label">Address <span class="text-muted">(optional, for mailed notices)</span></label>
+                    <textarea id="add-patron-address" name="address" class="form-control" rows="3" maxlength="500"></textarea>
+                </div>
+                <div class="mb-3">
                     <label for="add-patron-password" class="form-label">Initial Password</label>
                     <input type="password" id="add-patron-password" name="password" class="form-control" required minlength="8"
                            pattern="(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}">
@@ -150,6 +155,10 @@
                 <div class="mb-3">
                     <label for="edit-patron-phone" class="form-label">Phone <span class="text-muted">(optional)</span></label>
                     <input type="tel" id="edit-patron-phone" name="phone" class="form-control" maxlength="40">
+                </div>
+                <div class="mb-3">
+                    <label for="edit-patron-address" class="form-label">Address <span class="text-muted">(optional, for mailed notices)</span></label>
+                    <textarea id="edit-patron-address" name="address" class="form-control" rows="3" maxlength="500"></textarea>
                 </div>
             </div>
             <div class="modal-footer">

@@ -28,7 +28,7 @@ func mustCreateBook(t *testing.T, dm *DatabaseManager, title string, quantity in
 // transactional CreatePatron path). Returns the patron id.
 func mustCreatePatron(t *testing.T, dm *DatabaseManager, name string) int {
 	t.Helper()
-	id, _, err := dm.CreatePatron(name, "", "", "fake-hash")
+	id, _, err := dm.CreatePatron(name, "", "", "", "fake-hash")
 	if err != nil {
 		t.Fatalf("CreatePatron(%q): %v", name, err)
 	}
