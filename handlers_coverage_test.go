@@ -855,7 +855,7 @@ func TestDBMethods_ErrorReturnsOnClosedDB(t *testing.T) {
 	if err := dm.UpdateBook(1, &Book{Title: "x", QuantityTotal: 1, QuantityAvailable: 1}, []string{"a"}); err == nil {
 		t.Errorf("UpdateBook: expected error on closed db, got nil")
 	}
-	if _, _, err := dm.CreatePatron("Test Person", "", "", "hash"); err == nil {
+	if _, _, err := dm.CreatePatron("Test Person", "", "", "", "hash"); err == nil {
 		t.Errorf("CreatePatron: expected error on closed db, got nil")
 	}
 	if _, err := dm.CreateBook(&Book{Title: "x", QuantityTotal: 1, QuantityAvailable: 1}, []string{"a"}); err == nil {

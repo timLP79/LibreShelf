@@ -196,6 +196,7 @@ function initPatronManagement() {
         var editName = document.getElementById("edit-patron-name");
         var editEmail = document.getElementById("edit-patron-email");
         var editPhone = document.getElementById("edit-patron-phone");
+        var editAddress = document.getElementById("edit-patron-address");
 
         document.querySelectorAll(".patron-edit-btn").forEach(function (btn) {
             btn.addEventListener("click", function () {
@@ -204,6 +205,7 @@ function initPatronManagement() {
                 editName.value = btn.getAttribute("data-patron-name") || "";
                 editEmail.value = btn.getAttribute("data-patron-email") || "";
                 editPhone.value = btn.getAttribute("data-patron-phone") || "";
+                if (editAddress) editAddress.value = btn.getAttribute("data-patron-address") || "";
             });
         });
     }

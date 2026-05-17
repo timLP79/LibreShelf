@@ -49,6 +49,7 @@ func HandlePatronCreate(c *gin.Context) {
 	name := normalizeFreeText(c.PostForm("name"))
 	email := strings.TrimSpace(c.PostForm("email"))
 	phone := strings.TrimSpace(c.PostForm("phone"))
+	address := strings.TrimSpace(c.PostForm("address"))
 	password := c.PostForm("password")
 	passwordConfirm := c.PostForm("password_confirm")
 
@@ -86,7 +87,7 @@ func HandlePatronCreate(c *gin.Context) {
 		return
 	}
 
-	_, username, err := dm.CreatePatron(name, email, phone, string(hash))
+	_, username, err := dm.CreatePatron(name, email, phone, address, string(hash))
 	if err != nil {
 		log.Printf("HandlePatronCreate: CreatePatron: %v", err)
 		c.String(http.StatusInternalServerError, "Internal Server Error")
@@ -126,6 +127,7 @@ func HandlePatronEdit(c *gin.Context) {
 	name := normalizeFreeText(c.PostForm("name"))
 	email := strings.TrimSpace(c.PostForm("email"))
 	phone := strings.TrimSpace(c.PostForm("phone"))
+	address := strings.TrimSpace(c.PostForm("address"))
 
 	if name == "" {
 		setFlash(c, flashKindError, "patron_name_required")
@@ -133,7 +135,7 @@ func HandlePatronEdit(c *gin.Context) {
 		return
 	}
 
-	if err := dm.UpdatePatron(id, name, email, phone); err != nil {
+	if err := dm.UpdatePatron(id, name, email, phone, address); err != nil {
 		log.Printf("HandlePatronEdit: UpdatePatron: %v", err)
 		c.String(http.StatusInternalServerError, "Internal Server Error")
 		return
