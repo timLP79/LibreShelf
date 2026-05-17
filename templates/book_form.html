@@ -25,16 +25,18 @@
 
             <div class="row mb-3">
                 <label for="book-isbn" class="col-sm-2 col-form-label">ISBN</label>
-                <div class="col-sm-7">
+                <div class="{{if .ExternalAllowed}}col-sm-7{{else}}col-sm-10{{end}}">
                     <input type="text" class="form-control" id="book-isbn" name="isbn"
                            value="{{if .Book}}{{deref .Book.ISBN}}{{end}}"
                            maxlength="20" pattern="[0-9Xx\- ]*"
                            title="ISBN-10 or ISBN-13; digits with optional hyphens or spaces">
                     <div class="invalid-feedback">ISBN must be 10 or 13 characters, digits with optional hyphens or spaces.</div>
                 </div>
+                {{if .ExternalAllowed}}
                 <div class="col-sm-3">
                     <button type="button" class="btn btn-outline-primary w-100" id="ol-lookup-btn">Lookup on Open Library</button>
                 </div>
+                {{end}}
             </div>
 
             <div class="row mb-3">
