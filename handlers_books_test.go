@@ -1003,6 +1003,59 @@ func TestBookNewFormRenders(t *testing.T) {
 	if !strings.Contains(body, "<form") {
 		t.Errorf("expected a form in the body; got %s", body[:min(200, len(body))])
 	}
+	if !strings.Contains(body, `id="ol-lookup-btn"`) {
+		t.Errorf("Lookup button missing when external calls are allowed")
+	}
+}
+
+func TestBookNewFormHidesLookupWhenOffline(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "staff_new_off", "staff")
+
+	actor, err := dm.GetUserByUsername("staff_new_off")
+	if err != nil {
+		t.Fatalf("GetUserByUsername: %v", err)
+	}
+	if err := dm.SetSetting("offline_mode", "true", actor.ID); err != nil {
+		t.Fatalf("SetSetting offline_mode: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", "/books/new", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Body.String(), `id="ol-lookup-btn"`) {
+		t.Errorf("Lookup button rendered when offline_mode is on")
+	}
+}
+
+func TestBookEditFormHidesLookupWhenOffline(t *testing.T) {
+	router, dm := setupTestRouter(t)
+	sess, _ := loginAs(t, dm, "admin_edit_off", "admin")
+
+	actor, err := dm.GetUserByUsername("admin_edit_off")
+	if err != nil {
+		t.Fatalf("GetUserByUsername: %v", err)
+	}
+	if err := dm.SetSetting("offline_mode", "true", actor.ID); err != nil {
+		t.Fatalf("SetSetting offline_mode: %v", err)
+	}
+
+	req, _ := http.NewRequest("GET", "/books/1/edit", nil)
+	req.AddCookie(sess)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+	if strings.Contains(rr.Body.String(), `id="ol-lookup-btn"`) {
+		t.Errorf("Lookup button rendered when offline_mode is on")
+	}
 }
 
 func TestOpenLibraryLookupHappy(t *testing.T) {

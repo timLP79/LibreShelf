@@ -162,31 +162,33 @@ func HandleOpenLibraryLookup(c *gin.Context) {
 
 func HandleBookNew(c *gin.Context) {
 	renderTemplate(c, "book_form", gin.H{
-		"Title":          "Add Book",
-		"FormTitle":      "Add Book",
-		"FormSubtitle":   "Add a new book to the catalog",
-		"FormAction":     "/books",
-		"SubmitLabel":    "Create Book",
-		"AuthorsText":    "",
-		"ShowAddAnother": true,
-		"Success":        readAndClearFlash(c, flashKindSuccess),
-		"SuccessDetail":  readAndClearFlashDetail(c),
-		"Error":          readAndClearFlash(c, flashKindError),
+		"Title":           "Add Book",
+		"FormTitle":       "Add Book",
+		"FormSubtitle":    "Add a new book to the catalog",
+		"FormAction":      "/books",
+		"SubmitLabel":     "Create Book",
+		"AuthorsText":     "",
+		"ShowAddAnother":  true,
+		"ExternalAllowed": IsExternalAllowed(getDB(c)),
+		"Success":         readAndClearFlash(c, flashKindSuccess),
+		"SuccessDetail":   readAndClearFlashDetail(c),
+		"Error":           readAndClearFlash(c, flashKindError),
 	})
 }
 
 func renderBookCreateForm(c *gin.Context, book *Book, authorsText, errMsg string) {
 	c.Status(http.StatusBadRequest)
 	renderTemplate(c, "book_form", gin.H{
-		"Title":          "Add Book",
-		"FormTitle":      "Add Book",
-		"FormSubtitle":   "Add a new book to the catalog",
-		"FormAction":     "/books",
-		"SubmitLabel":    "Create Book",
-		"Book":           book,
-		"AuthorsText":    authorsText,
-		"ShowAddAnother": true,
-		"Error":          errMsg,
+		"Title":           "Add Book",
+		"FormTitle":       "Add Book",
+		"FormSubtitle":    "Add a new book to the catalog",
+		"FormAction":      "/books",
+		"SubmitLabel":     "Create Book",
+		"Book":            book,
+		"AuthorsText":     authorsText,
+		"ShowAddAnother":  true,
+		"ExternalAllowed": IsExternalAllowed(getDB(c)),
+		"Error":           errMsg,
 	})
 }
 
@@ -364,30 +366,32 @@ func HandleBookEdit(c *gin.Context) {
 	}
 
 	renderTemplate(c, "book_form", gin.H{
-		"Title":          "Edit Book",
-		"FormTitle":      "Edit Book",
-		"FormSubtitle":   book.Title,
-		"FormAction":     fmt.Sprintf("/books/%d/edit", id),
-		"SubmitLabel":    "Save Changes",
-		"Book":           book,
-		"AuthorsText":    book.Authors,
-		"ShowAddAnother": false,
-		"Error":          readAndClearFlash(c, flashKindError),
+		"Title":           "Edit Book",
+		"FormTitle":       "Edit Book",
+		"FormSubtitle":    book.Title,
+		"FormAction":      fmt.Sprintf("/books/%d/edit", id),
+		"SubmitLabel":     "Save Changes",
+		"Book":            book,
+		"AuthorsText":     book.Authors,
+		"ShowAddAnother":  false,
+		"ExternalAllowed": IsExternalAllowed(dm),
+		"Error":           readAndClearFlash(c, flashKindError),
 	})
 }
 
 func renderBookEditForm(c *gin.Context, id int, book *Book, authorsText, errMsg string) {
 	c.Status(http.StatusBadRequest)
 	renderTemplate(c, "book_form", gin.H{
-		"Title":          "Edit Book",
-		"FormTitle":      "Edit Book",
-		"FormSubtitle":   book.Title,
-		"FormAction":     fmt.Sprintf("/books/%d/edit", id),
-		"SubmitLabel":    "Save Changes",
-		"Book":           book,
-		"AuthorsText":    authorsText,
-		"ShowAddAnother": false,
-		"Error":          errMsg,
+		"Title":           "Edit Book",
+		"FormTitle":       "Edit Book",
+		"FormSubtitle":    book.Title,
+		"FormAction":      fmt.Sprintf("/books/%d/edit", id),
+		"SubmitLabel":     "Save Changes",
+		"Book":            book,
+		"AuthorsText":     authorsText,
+		"ShowAddAnother":  false,
+		"ExternalAllowed": IsExternalAllowed(getDB(c)),
+		"Error":           errMsg,
 	})
 }
 

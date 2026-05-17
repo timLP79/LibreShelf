@@ -314,6 +314,23 @@ function initBookForm() {
     }
 
     if (lookupBtn && isbnField) {
+        function applyOfflineHint() {
+            lookupBtn.disabled = true;
+            setStatus("Browser is offline. Lookup unavailable.", "error");
+            var el = document.getElementById("ol-lookup-status");
+            if (el) el.dataset.offlineHint = "1";
+        }
+        function clearOfflineHint() {
+            lookupBtn.disabled = false;
+            var el = document.getElementById("ol-lookup-status");
+            // Only clear if the current status was our offline hint;
+            // don't wipe a real lookup result the user is reading.
+            if (el && el.dataset.offlineHint === "1") el.remove();
+        }
+        if (!navigator.onLine) applyOfflineHint();
+        window.addEventListener("offline", applyOfflineHint);
+        window.addEventListener("online", clearOfflineHint);
+
         lookupBtn.addEventListener("click", function () {
             var isbn = isbnField.value.replace(/[\s-]/g, "");
             if (!isbn) {
